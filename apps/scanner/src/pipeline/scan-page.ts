@@ -1,4 +1,9 @@
-import type { InsecureReference, LinkInfo, SeoSnapshot } from '@whc/dom-checks';
+import {
+  unnamedControlSelectors,
+  type InsecureReference,
+  type LinkInfo,
+  type SeoSnapshot,
+} from '@whc/dom-checks';
 import { EGRESS_REASON_HEADER } from '@whc/shared';
 import { parseSetCookie, type CookieFacts } from '../audits/security';
 import type { Page } from 'playwright';
@@ -183,10 +188,7 @@ export async function scanPage(params: {
     // 1) accessibility
     const axe = await runAxe(page);
     // Elements axe already reported as unnamed controls are not reported again by the UI checks.
-    const skipSelectors = axe.violations
-      .filter((rule) => ['button-name', 'link-name', 'input-button-name'].includes(rule.id))
-      .flatMap((rule) => rule.nodes.map((node) => axeSelector(node.target)))
-      .filter((s): s is string => Boolean(s));
+    const skipSelectors = unnamedControlSelectors(axe);
     const axeSelectors = [
       ...new Set(
         [...axe.violations, ...axe.incomplete]

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./scan-page": "./src/pipeline/scan-page.ts",
+    "./dom": "./src/checks/dom.ts"
   },
   "scripts": {
     "predev": "npm run build -w @whc/dom-checks",

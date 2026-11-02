@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./checks": "./src/checks.ts",
     "./bundle": "./dist/dom-checks.js"
   },
   "scripts": {

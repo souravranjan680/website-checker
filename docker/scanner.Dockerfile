@@ -15,6 +15,7 @@ COPY apps/egress-proxy/package.json apps/egress-proxy/
 COPY apps/scanner/package.json apps/scanner/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/extension/package.json apps/extension/
 RUN npm ci --no-fund --no-audit -w @whc/scanner -w @whc/db -w @whc/shared -w @whc/dom-checks
 COPY tsconfig.base.json ./
 COPY packages/shared packages/shared
@@ -36,6 +37,7 @@ COPY apps/egress-proxy/package.json apps/egress-proxy/
 COPY apps/scanner/package.json apps/scanner/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/extension/package.json apps/extension/
 RUN npm ci --no-fund --no-audit --omit=dev -w @whc/scanner -w @whc/db -w @whc/shared
 
 # ---- Stage 3: runtime --------------------------------------------------------------

@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- Chrome extension fixture: problems on the page itself, plus an embedded frame from
+     another origin (localhost vs 127.0.0.1) that the extension must skip gracefully. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: extension page</title>
+  </head>
+  <body>
+    <main>
+      <h1>Extension fixture</h1>
+      <img src="/a11y/photo.svg" width="120" height="80" />
+      <button type="button" class="icon"></button>
+      <img src="/extension/missing.png" alt="Missing picture" width="40" height="40" />
+      <p style="height: 1600px">Long content so highlighting has to scroll.</p>
+      <a href="/clean/" id="far-link"><img src="/a11y/photo.svg" width="30" height="20" /></a>
+      <iframe
+        title="Embedded page from another site"
+        src="http://localhost:__PORT__/clean/"
+        width="300"
+        height="150"
+      ></iframe>
+    </main>
+  </body>
+</html>

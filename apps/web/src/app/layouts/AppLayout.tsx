@@ -80,7 +80,7 @@ export function AppLayout() {
         <header className="flex h-14 items-center justify-between gap-4 border-b px-4 md:px-6">
           <MobileNav />
           <span className="hidden text-sm text-muted-foreground md:block">
-            Phase 6 · advanced audits
+            Phase 7 · Chrome extension
           </span>
           <div className="flex items-center gap-2">
             <NotificationBell />

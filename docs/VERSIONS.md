@@ -74,6 +74,13 @@ Exact versions installed and tested together in Phase 2 (2026-11-02).
 | pngjs | 7.0.0 (+ @types/pngjs 6.0.5) | Read/write PNG for comparisons |
 | @anthropic-ai/sdk | 1.3.0 | API only. Structured outputs via `messages.parse` + `zodOutputFormat` (works with Zod 4) |
 
+### Added in Phase 7 (Chrome extension)
+
+| Package | Version | Notes |
+|---|---|---|
+| @types/chrome | 0.3.7 (pinned) | Types for the `chrome.*` extension APIs (dev only) |
+| react, react-dom, vite, tailwindcss, axe-core | same versions as the dashboard and scanner | Reused, no new frameworks. The ZIP is written with Node's `zlib` (no archive library) |
+
 ## Deliberate choices
 
 - **TypeScript 6.0, not 7.0.** TypeScript 7 (the new native compiler) is the

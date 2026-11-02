@@ -26,3 +26,8 @@ test-results/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Chrome extension: test build and packaged ZIPs
+dist-test/
+dist-keyed/
+apps/extension/release/

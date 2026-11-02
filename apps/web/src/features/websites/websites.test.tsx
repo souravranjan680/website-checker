@@ -20,6 +20,18 @@ async function fillWebsite(url: string) {
 }
 
 describe('AddWebsitePage', () => {
+  it('pre-fills the address from the Chrome extension hand-off and still asks for authorization', async () => {
+    const calls = mockApi({ ...signedIn, 'GET /api/projects': page([editableProject]) });
+    renderApp('/websites/new?baseUrl=https%3A%2F%2Fshop.example.com%2Fcart');
+    expect(await screen.findByLabelText('Website address')).toHaveValue(
+      'https://shop.example.com/cart',
+    );
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Shop' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add website' }));
+    expect(await screen.findByText(/Confirm that you own this website/)).toBeInTheDocument();
+    expect(calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+
   it('rejects unsafe URLs and a missing authorization confirmation in the browser', async () => {
     const calls = mockApi({ ...signedIn, 'GET /api/projects': page([editableProject]) });
     renderApp('/websites/new');

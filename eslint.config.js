@@ -10,6 +10,9 @@ export default defineConfig(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/dist-test/**',
+      '**/dist-keyed/**',
+      'apps/extension/release/**',
       '**/coverage/**',
       'packages/db/src/generated/**',
       'packages/db/prisma/migrations/**',

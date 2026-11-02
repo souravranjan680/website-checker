@@ -16,6 +16,7 @@ COPY apps/egress-proxy/package.json apps/egress-proxy/
 COPY apps/scanner/package.json apps/scanner/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/extension/package.json apps/extension/
 RUN npm ci --no-fund --no-audit -w @whc/api -w @whc/db -w @whc/shared
 
 COPY tsconfig.base.json ./
@@ -39,6 +40,7 @@ COPY apps/egress-proxy/package.json apps/egress-proxy/
 COPY apps/scanner/package.json apps/scanner/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/extension/package.json apps/extension/
 # Known limitation (trimmed in Phase 8): npm ci installs the production dependencies of
 # ALL workspaces in the lockfile, plus @prisma/client's peer dependencies (Prisma CLI,
 # TypeScript), so this layer is larger than the API strictly needs (~370 MB).

@@ -21,6 +21,7 @@ bug reports and scan history.
 | [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md) | **How the dashboard, history, reports, issue tracking and exports work** |
 | [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md) | **Lighthouse, SEO, security, visual regression, bug reports, AI, notifications, storage cleanup** |
 | [docs/14-scanner-reliability.md](docs/14-scanner-reliability.md) | **Re-checking failed resources and links (no false "broken"), console error classification** |
+| [docs/15-phase-7-chrome-extension.md](docs/15-phase-7-chrome-extension.md) | **Chrome extension: install, load, permissions, privacy, tests** |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Exact versions and why |
 
 ---
@@ -29,8 +30,8 @@ bug reports and scan history.
 
 React 19 · Vite 8 · Tailwind CSS 4 · shadcn/ui · React Router 8 · TanStack Query ·
 Node.js 24 · Express 5 · TypeScript 6 · PostgreSQL 17 · Prisma 7 · Redis 7 ·
-BullMQ 6 · Playwright 1.64 · axe-core 4.14 · Zod 4 · Vitest · Docker Compose.
-*(Planned: Lighthouse, Claude API, Chrome Extension MV3.)*
+BullMQ 6 · Playwright 1.64 · axe-core 4.14 · Lighthouse 13 · Claude API (optional) ·
+Zod 4 · Vitest · Docker Compose · Chrome Extension (Manifest V3).
 
 ## Project structure
 
@@ -40,11 +41,13 @@ apps/
   web/            React dashboard           (src/app, src/features, src/components/ui)
   scanner/        BullMQ worker: Playwright, axe-core, crawler, screenshots
   egress-proxy/   SSRF guard: every scanner request goes through it
+  extension/      Chrome extension (MV3): checks the current page locally
 packages/
   shared/         Code used everywhere      (Zod schemas, URL/IP safety, constants)
   db/             Prisma schema, migrations, typed client, relationship tests
-  dom-checks/     UI checks that run inside web pages (scanner + future extension)
-tests/fixtures/   Small websites with deliberate defects (scanner tests)
+  dom-checks/     Checks that run inside web pages + shared axe config and issue
+                  wording (used by the scanner AND the Chrome extension)
+tests/fixtures/   Small websites with deliberate defects (scanner + extension tests)
 docker/           Dockerfiles, nginx config, Postgres init script
 docs/             Design and explanation documents
 docker-compose.yml
@@ -207,6 +210,22 @@ Only scan websites you own or are allowed to test. A good public practice target
 the W3C's deliberately inaccessible demo: `https://www.w3.org/WAI/demos/bad/before/home.html`
 (set "Only include paths" to `/WAI/demos/bad/*` to stay inside the demo).
 
+## Chrome extension (check the page you are viewing)
+
+A toolbar button that checks the current page locally in your browser: accessibility
+(axe-core) and UI problems, highlight on the page, copy as Markdown, open in the
+dashboard. **Results are local checks, not saved scans.** Only check websites you own or
+are authorized to test.
+
+```powershell
+npm run extension:build      # builds apps\extension\dist
+npm run extension:package    # optional: ZIP in apps\extension\release\
+```
+
+Then in Chrome: `chrome://extensions` → turn on **Developer mode** → **Load unpacked** →
+choose `C:\Users\Lenovo\Desktop\website\apps\extension\dist` → pin **UI Health Checker**.
+Details, permissions and privacy: [docs/15-phase-7-chrome-extension.md](docs/15-phase-7-chrome-extension.md).
+
 ## Health checks
 
 | Endpoint | Meaning |
@@ -291,11 +310,15 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 
 ---
 
-## Known limitations (after Phase 6)
+## Known limitations (after Phase 7)
 
 - **Not yet built:** scheduled scans and weekly summary e-mails, automatic Jira ticket
-  creation, interactive API docs (Phase 8); Chrome extension (Phase 7). Details of every
+  creation, interactive API docs, personal API tokens (Phase 8). Details of every
   Phase 6 limit: [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md#14-known-limitations).
+- **Chrome extension:** local checks of one page, not saved. It cannot see console errors,
+  failed requests, broken links or embedded frames, and cannot start server scans (no API
+  tokens yet). Not published to the Chrome Web Store. See
+  [docs/15-phase-7-chrome-extension.md](docs/15-phase-7-chrome-extension.md#9-limitations).
 - **AI explanations need an Anthropic API key** (`ANTHROPIC_API_KEY` in `.env`); without it
   they say "not set up" and everything else works. Not yet verified against the live API.
 - **Failed resources and links are re-checked once**; only confirmed failures become issues.
@@ -313,8 +336,9 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
   viewport audit arrives with Lighthouse).
 - **UI checks are heuristics** (tuned to avoid false positives); mark wrong ones as
   "False positive" and the decision is remembered.
-- Broken-link checks use HEAD requests and only report 404/410, server errors and
-  unreachable domains (servers that reject HEAD or bots are not reported). Max 150 per scan.
+- Broken-link checks use HEAD, confirmed with GET, and only report 404/410, repeated server
+  errors and domains that do not exist (servers that reject HEAD or bots are not reported;
+  unreachable links are listed as "could not be verified"). Max 150 per scan.
 - Domain verification is generated but not checked yet; `REQUIRE_DOMAIN_VERIFICATION`
   only limits unverified sites to single-page scans.
 - Notifications go to the user who started a scan; e-mail uses the SMTP settings (Mailpit
@@ -324,7 +348,7 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
   500 issues and 15 screenshots.
 - No interactive API docs (Swagger/OpenAPI) yet; endpoints are specified in
   [docs/04-api.md](docs/04-api.md), [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md) and [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md). Planned for Phase 8.
-- Personal API tokens (for the Chrome extension) arrive in Phase 7.
+- Personal API tokens (so the Chrome extension could start scans) are deferred to Phase 8.
 - Trade-offs: registering with an existing email says so (normal sign-up UX, but it
   reveals that the email has an account; rate-limited); the per-email login limit
   could let someone temporarily lock an account (5 tries/minute).

@@ -9,3 +9,6 @@ packages/db/src/generated
 storage
 docs
 tests
+**/dist-test
+**/dist-keyed
+**/release

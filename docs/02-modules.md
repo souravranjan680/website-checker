@@ -479,6 +479,17 @@ own browser, without the server.
 browser* (including logged-in state). That is useful, but its results are not
 stored as official scans in v1.
 
+**As built (Phase 7):**
+- No content script is declared; the checks are injected on demand with
+  `chrome.scripting`.
+- The axe configuration and issue wording are shared with the scanner through
+  `@whc/dom-checks`.
+- The hand-off opens the existing `/websites/new?baseUrl=…` form; there is no
+  `/scans/new` route.
+- Personal API tokens are deferred to Phase 8.
+
+See [15-phase-7-chrome-extension.md](15-phase-7-chrome-extension.md).
+
 ---
 
 ## M-Testing · Fixture websites with deliberate bugs

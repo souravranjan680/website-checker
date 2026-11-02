@@ -1,30 +1,26 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Box, DomFinding } from '@whc/dom-checks';
-import type { AxeOutput, AxeRuleResult } from './checks/axe';
-import { axeSelector } from './checks/axe';
+import {
+  axeFindings,
+  domFindingPresentation,
+  truncate,
+  UI_CHECK_TEXT,
+  uiRuleId,
+  type AxeOutput,
+  type Box,
+  type DomFinding,
+  type Severity,
+  type UiCheckType,
+} from '@whc/dom-checks';
 import type { PageNetworkLog } from './checks/collectors';
 import type { ConsoleGroup, ConsoleKind } from './checks/console-classify';
 import { pathOf } from './crawler/urls';
 
-export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+// Presentation (severities, titles, fixes, WCAG references) is shared with the
+// Chrome extension and lives in @whc/dom-checks; re-exported for scanner modules.
+export { SEVERITY_RANK, wcagFromTags } from '@whc/dom-checks';
+export type { Severity, UiCheckType } from '@whc/dom-checks';
 export type Category =
   'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
-export type UiCheckType =
-  | DomFinding['check']
-  | 'BROKEN_LINK'
-  | 'FAILED_STYLESHEET'
-  | 'FAILED_SCRIPT'
-  | 'CONSOLE_ERROR'
-  | 'JS_ERROR'
-  | 'FAILED_REQUEST';
-
-export const SEVERITY_RANK: Record<Severity, number> = {
-  CRITICAL: 5,
-  HIGH: 4,
-  MEDIUM: 3,
-  LOW: 2,
-  INFO: 1,
-};
 
 /** An issue found during a scan, before it is saved. */
 export interface IssueDraft {
@@ -102,153 +98,47 @@ export function fingerprint(parts: {
     .digest('hex');
 }
 
-const truncate = (text: string | null | undefined, max: number) =>
-  text ? (text.length > max ? `${text.slice(0, max - 1)}…` : text) : null;
-
 // ------------------------------------------------------------------ axe-core
-
-const IMPACT_TO_SEVERITY: Record<string, Severity> = {
-  critical: 'CRITICAL',
-  serious: 'HIGH',
-  moderate: 'MEDIUM',
-  minor: 'LOW',
-};
-
-/** "wcag111" → "1.1.1"; "wcag2aa"/"wcag21aa" → level "AA". */
-export function wcagFromTags(tags: string[]): { criteria: string[]; level: string | null } {
-  const criteria = tags
-    .map((tag) => /^wcag(\d)(\d)(\d{1,2})$/.exec(tag))
-    .filter((m): m is RegExpExecArray => m !== null)
-    .map((m) => `${m[1]}.${m[2]}.${m[3]}`);
-  const level = tags.some((t) => /^wcag2\d?a$/.test(t))
-    ? 'A'
-    : tags.some((t) => /^wcag2\d?aa$/.test(t))
-      ? 'AA'
-      : tags.some((t) => /^wcag2\d?aaa$/.test(t))
-        ? 'AAA'
-        : null;
-  return { criteria, level };
-}
-
-const MAX_NODES_PER_RULE = 25;
 
 export function axeToDrafts(
   axe: AxeOutput,
   ctx: IssueContext,
   boxes: Map<string, Box | null>,
 ): IssueDraft[] {
-  const drafts: IssueDraft[] = [];
-  const convert = (rule: AxeRuleResult, detection: 'AUTOMATED' | 'NEEDS_REVIEW') => {
-    const { criteria, level } = wcagFromTags(rule.tags);
-    const nodes = rule.nodes.slice(0, detection === 'AUTOMATED' ? MAX_NODES_PER_RULE : 10);
-    for (const node of nodes) {
-      const selector = axeSelector(node.target);
-      const impact = node.impact ?? rule.impact ?? null;
-      drafts.push({
-        id: randomUUID(),
-        category: 'ACCESSIBILITY',
-        severity:
-          detection === 'NEEDS_REVIEW' ? 'INFO' : (IMPACT_TO_SEVERITY[impact ?? ''] ?? 'MEDIUM'),
-        ruleId: rule.id,
-        title: detection === 'NEEDS_REVIEW' ? `Needs review: ${rule.help}` : rule.help,
-        description: rule.description,
-        pageUrl: ctx.pageUrl,
-        viewport: ctx.viewport,
-        selector,
-        htmlSnippet: truncate(node.html, 2000),
-        boundingBox: selector ? (boxes.get(selector) ?? null) : null,
-        suggestedFix: [node.failureSummary, `Guidance: ${rule.helpUrl}`]
-          .filter(Boolean)
-          .join('\n\n'),
-        details: rule.nodes.length > nodes.length ? { totalElements: rule.nodes.length } : null,
-        fingerprint: fingerprint({
-          ...ctx,
-          category: 'ACCESSIBILITY',
-          ruleId: rule.id,
-          target: selector ?? node.html,
-        }),
-        accessibility: {
-          axeRuleId: rule.id,
-          impact,
-          wcagCriteria: criteria,
-          wcagLevel: level,
-          tags: rule.tags,
-          helpUrl: rule.helpUrl,
-          detection,
-          failureSummary: truncate(node.failureSummary, 2000),
-        },
-      });
-    }
-  };
-  for (const rule of axe.violations) convert(rule, 'AUTOMATED');
-  for (const rule of axe.incomplete) convert(rule, 'NEEDS_REVIEW');
-  return drafts;
+  return axeFindings(axe).map((finding) => ({
+    id: randomUUID(),
+    category: 'ACCESSIBILITY',
+    severity: finding.severity,
+    ruleId: finding.ruleId,
+    title: finding.title,
+    description: finding.description,
+    pageUrl: ctx.pageUrl,
+    viewport: ctx.viewport,
+    selector: finding.selector,
+    htmlSnippet: finding.html,
+    boundingBox: finding.selector ? (boxes.get(finding.selector) ?? null) : null,
+    suggestedFix: finding.suggestedFix,
+    details: finding.totalElements ? { totalElements: finding.totalElements } : null,
+    fingerprint: fingerprint({
+      ...ctx,
+      category: 'ACCESSIBILITY',
+      ruleId: finding.ruleId,
+      target: finding.selector ?? finding.html ?? '',
+    }),
+    accessibility: {
+      axeRuleId: finding.ruleId,
+      impact: finding.impact,
+      wcagCriteria: finding.wcagCriteria,
+      wcagLevel: finding.wcagLevel,
+      tags: finding.tags,
+      helpUrl: finding.helpUrl,
+      detection: finding.detection,
+      failureSummary: finding.failureSummary,
+    },
+  }));
 }
 
 // ------------------------------------------------------------- UI checks
-
-const UI_TEXT: Record<UiCheckType, { title: string; fix: string }> = {
-  BROKEN_IMAGE: {
-    title: 'Broken image',
-    fix: 'Check that the image URL is correct and the file exists on the server. Remove the image if it is no longer needed.',
-  },
-  HORIZONTAL_SCROLL: {
-    title: 'Page scrolls sideways',
-    fix: 'Find the element that is wider than the screen (see the related "content wider than the screen" issues) and give it max-width: 100%, flexible widths, or wrapping.',
-  },
-  CONTENT_OVERFLOW: {
-    title: 'Content wider than the screen',
-    fix: 'Avoid fixed widths larger than the screen. Use max-width: 100%, relative units, flex-wrap, or a responsive layout for small screens.',
-  },
-  OUT_OF_VIEWPORT: {
-    title: 'Content cut off at the screen edge',
-    fix: 'Keep the element inside the screen width (max-width: 100%, responsive layout). Hidden overflow can hide important content.',
-  },
-  TEXT_CLIPPING: {
-    title: 'Text is cut off',
-    fix: 'Let the container grow with its text (avoid fixed heights/widths), allow wrapping, or use text-overflow: ellipsis with the full text available (e.g. in a title).',
-  },
-  OVERLAPPING_ELEMENTS: {
-    title: 'Control is covered by another element',
-    fix: 'Adjust positioning or z-index so the control is not covered, and check the layout at this screen size.',
-  },
-  EMPTY_BUTTON: {
-    title: 'Button without text or label',
-    fix: 'Add visible text, or an aria-label describing the action (e.g. aria-label="Close").',
-  },
-  EMPTY_LINK: {
-    title: 'Link without text or label',
-    fix: 'Add link text, or an aria-label / alt text on the image inside the link describing where it goes.',
-  },
-  IMAGE_SIZING: {
-    title: 'Stretched (distorted) image',
-    fix: 'Keep the original aspect ratio: set only width or height, or use object-fit: cover / contain.',
-  },
-  BROKEN_LINK: {
-    title: 'Broken link',
-    fix: 'Update the link to a working address or remove it. Internal broken links usually mean a page was moved or deleted.',
-  },
-  FAILED_STYLESHEET: {
-    title: 'Stylesheet failed to load',
-    fix: 'Check the stylesheet URL and that the file is deployed. Missing CSS can break the whole layout.',
-  },
-  FAILED_SCRIPT: {
-    title: 'Script failed to load',
-    fix: 'Check the script URL and that the file is deployed. Missing JavaScript can break interactive features.',
-  },
-  CONSOLE_ERROR: {
-    title: 'Console error',
-    fix: 'Open the browser developer tools on this page, reproduce the message and fix its cause.',
-  },
-  JS_ERROR: {
-    title: 'Uncaught JavaScript error',
-    fix: 'An exception was thrown and not handled. Open developer tools, reproduce it and fix or catch the error.',
-  },
-  FAILED_REQUEST: {
-    title: 'Failed network request',
-    fix: 'Check the request URL and the server response. Repeated failures can mean missing files or a broken API.',
-  },
-};
 
 export function uiDraft(
   check: UiCheckType,
@@ -266,20 +156,20 @@ export function uiDraft(
     target: string;
   },
 ): IssueDraft {
-  const ruleId = `ui/${check.toLowerCase().replace(/_/g, '-')}`;
+  const ruleId = uiRuleId(check);
   return {
     id: randomUUID(),
     category,
     severity: values.severity,
     ruleId,
-    title: UI_TEXT[check].title,
+    title: UI_CHECK_TEXT[check].title,
     description: values.description,
     pageUrl: ctx.pageUrl,
     viewport: ctx.viewport,
     selector: values.selector ?? null,
     htmlSnippet: truncate(values.html, 2000),
     boundingBox: values.box ?? null,
-    suggestedFix: UI_TEXT[check].fix,
+    suggestedFix: UI_CHECK_TEXT[check].fix,
     details: values.measurements ?? null,
     fingerprint: fingerprint({ ...ctx, category, ruleId, target: values.target }),
     uiHealth: {
@@ -296,21 +186,22 @@ export function domToDrafts(
   ctx: IssueContext,
   category: Category,
 ): IssueDraft[] {
-  return findings.map((finding) =>
-    uiDraft(finding.check, ctx, category, {
-      severity: finding.severity,
-      description: finding.message,
-      selector: finding.selector,
-      html: finding.html,
-      box: finding.box,
+  return findings.map((finding) => {
+    const shown = domFindingPresentation(finding); // same wording as the Chrome extension
+    return uiDraft(finding.check, ctx, category, {
+      severity: shown.severity,
+      description: shown.description,
+      selector: shown.selector,
+      html: shown.html,
+      box: shown.box,
       resourceUrl: typeof finding.measurements?.src === 'string' ? finding.measurements.src : null,
       measurements: finding.measurements,
       target:
         finding.check === 'BROKEN_IMAGE'
           ? String(finding.measurements?.src ?? finding.selector)
           : finding.selector,
-    }),
-  );
+    });
+  });
 }
 
 const CONSOLE_TITLES: Record<ConsoleKind, string> = {
@@ -378,7 +269,7 @@ export function consoleToDrafts(groups: ConsoleGroup[], ctx: IssueContext): Issu
     });
     draft.title =
       exception && classification.kind === 'APPLICATION'
-        ? UI_TEXT.JS_ERROR.title
+        ? UI_CHECK_TEXT.JS_ERROR.title
         : CONSOLE_TITLES[classification.kind];
     if (classification.kind === 'INTEGRATION_CONFIG') {
       draft.suggestedFix =

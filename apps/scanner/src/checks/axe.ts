@@ -1,40 +1,15 @@
+import { AXE_OPTIONS, type AxeOutput } from '@whc/dom-checks';
 import axe from 'axe-core';
 import type { Page } from 'playwright';
 
-/** Subset of axe-core's result shape that we use. */
-export interface AxeNode {
-  target: unknown[];
-  html: string;
-  impact?: string | null;
-  failureSummary?: string;
-}
-
-export interface AxeRuleResult {
-  id: string;
-  impact?: string | null;
-  tags: string[];
-  description: string;
-  help: string;
-  helpUrl: string;
-  nodes: AxeNode[];
-}
-
-export interface AxeOutput {
-  violations: AxeRuleResult[];
-  incomplete: AxeRuleResult[];
-  axeVersion: string;
-}
-
-/** WCAG 2.0/2.1/2.2 level A and AA rules plus axe's best practices (e.g. heading order). */
-export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
-
-const AXE_OPTIONS = {
-  runOnly: { type: 'tag', values: AXE_TAGS },
-  resultTypes: ['violations', 'incomplete'],
-  elementRef: false,
-  ancestry: false,
-  xpath: false,
-};
+// The rule set (AXE_OPTIONS) is shared with the Chrome extension: @whc/dom-checks.
+export {
+  AXE_TAGS,
+  axeSelector,
+  type AxeNode,
+  type AxeOutput,
+  type AxeRuleResult,
+} from '@whc/dom-checks';
 
 /**
  * Runs axe-core inside the page. axe walks the live DOM and the accessibility
@@ -50,15 +25,6 @@ export async function runAxe(page: Page): Promise<AxeOutput> {
     `axe.run(document, ${JSON.stringify(AXE_OPTIONS)}).then((r) => ({ violations: r.violations, incomplete: r.incomplete, axeVersion: r.testEngine.version }))`,
   )) as AxeOutput;
   return result;
-}
-
-/** axe targets are CSS selectors; nested arrays mean "inside an iframe/shadow root". */
-export function axeSelector(target: unknown[]): string | null {
-  const first = target[0];
-  if (typeof first === 'string') return first;
-  if (Array.isArray(first))
-    return first.filter((part) => typeof part === 'string').join(' >>> ') || null;
-  return null;
 }
 
 /** Page-coordinate boxes for a list of selectors (null if not found). */

@@ -45,6 +45,8 @@ export function AddWebsitePage() {
             <WebsiteForm
               projects={editable}
               defaultProjectId={params.get('projectId') ?? undefined}
+              // Only a suggestion: the form validates it and still asks for authorization.
+              defaultBaseUrl={params.get('baseUrl')?.slice(0, 2048) ?? undefined}
               submitLabel="Add website"
               onCancel={() => navigate(-1)}
               onSubmit={async ({ urlChanged: _ignored, ...values }) => {
@@ -67,7 +69,7 @@ export function AddWebsitePage() {
       <PageHeader
         back={{ to: '/websites', label: 'Websites' }}
         title="Add website"
-        description="Register a website to scan. Nothing is scanned yet; scanning arrives in Phase 4."
+        description="Register a website to scan. Only add websites you own or are authorized to test."
       />
       {body}
     </div>

@@ -100,6 +100,7 @@ export function WebsiteForm({
   projects,
   website,
   defaultProjectId,
+  defaultBaseUrl,
   submitLabel,
   onSubmit,
   onCancel,
@@ -107,6 +108,8 @@ export function WebsiteForm({
   projects: ProjectSummaryDto[];
   website?: WebsiteDto;
   defaultProjectId?: string;
+  /** Pre-filled address, e.g. from the Chrome extension's "Open in dashboard". */
+  defaultBaseUrl?: string;
   submitLabel: string;
   onSubmit: (values: WebsiteSubmitValues) => Promise<void>;
   onCancel: () => void;
@@ -128,7 +131,7 @@ export function WebsiteForm({
       projectId:
         website?.projectId ?? defaultProjectId ?? (projects.length === 1 ? projects[0]!.id : ''),
       name: website?.name ?? '',
-      baseUrl: website?.baseUrl ?? '',
+      baseUrl: website?.baseUrl ?? defaultBaseUrl ?? '',
       maxDepth: settings.maxDepth,
       maxPages: settings.maxPages,
       responsivePageLimit: settings.responsivePageLimit,

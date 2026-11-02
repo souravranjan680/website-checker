@@ -15,7 +15,8 @@
     "apps/egress-proxy",
     "apps/scanner",
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "apps/extension"
   ],
   "scripts": {
     "dev": "concurrently --names proxy,scanner,api,web --prefix-colors magenta,yellow,blue,green \"npm run dev -w @whc/egress-proxy\" \"npm run dev -w @whc/scanner\" \"npm run dev -w @whc/api\" \"npm run dev -w @whc/web\"",
@@ -35,7 +36,9 @@
     "db:status": "npm run status -w @whc/db --",
     "db:studio": "npm run studio -w @whc/db --",
     "db:reset": "npm run reset -w @whc/db --",
-    "admin:promote": "npm run admin:promote -w @whc/api --"
+    "admin:promote": "npm run admin:promote -w @whc/api --",
+    "extension:build": "npm run build -w @whc/extension",
+    "extension:package": "npm run package -w @whc/extension"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
