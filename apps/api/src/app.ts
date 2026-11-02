@@ -1,27 +1,49 @@
 import { randomUUID } from 'node:crypto';
+import type { PrismaClient } from '@whc/db';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { AppConfig } from './config/env';
+import type { ResolveHostname } from './lib/hostname-guard';
+import { createJwtService } from './lib/jwt';
 import type { Logger } from './lib/logger';
+import type { Mailer } from './lib/mailer';
+import { clientIp, createRateLimiter, type RateLimitStore } from './lib/rate-limit';
+import { createRequireAuth, requireAdmin } from './middleware/auth';
+import { CSRF_HEADER, requireCsrfHeader } from './middleware/csrf';
 import { errorHandler } from './middleware/error-handler';
 import { notFoundHandler } from './middleware/not-found';
+import { createActivityRouter } from './modules/activity/activity.routes';
+import { createAdminRouter } from './modules/admin/admin.routes';
+import { createAuthRouter } from './modules/auth/auth.routes';
+import { createAuthService } from './modules/auth/auth.service';
 import { createHealthRouter } from './modules/health/health.routes';
 import type { HealthService } from './modules/health/health.service';
+import { createProjectsRouter } from './modules/projects/projects.routes';
+import { createProjectsService } from './modules/projects/projects.service';
+import { createWebsitesRouter } from './modules/websites/websites.routes';
+import { createWebsitesService } from './modules/websites/websites.service';
 
 export interface AppDependencies {
-  config: Pick<AppConfig, 'corsOrigins'>;
+  config: AppConfig;
   logger: Logger;
+  prisma: PrismaClient;
   healthService: HealthService;
+  rateLimitStore: RateLimitStore;
+  mailer: Mailer;
+  resolveHostname: ResolveHostname;
 }
 
 /**
  * Builds the Express application. It does not open ports or connect to databases
- * itself; those are passed in, which lets tests run the app with fake dependencies.
+ * itself; those are passed in, which lets tests run the app with a test database,
+ * an in-memory rate limiter and a fake mailer.
  * Middleware runs top to bottom for every request.
  */
-export function createApp({ config, logger, healthService }: AppDependencies): Express {
+export function createApp(deps: AppDependencies): Express {
+  const { config, logger, prisma } = deps;
   const app = express();
 
   // Behind nginx/Docker: trust the first proxy so req.ip is the real client IP.
@@ -47,15 +69,51 @@ export function createApp({ config, logger, healthService }: AppDependencies): E
   app.use(helmet());
 
   // 3. Only our own frontends may call the API from a browser, with cookies.
-  app.use(cors({ origin: config.corsOrigins, credentials: true }));
+  app.use(
+    cors({
+      origin: config.corsOrigins,
+      credentials: true,
+      allowedHeaders: ['Content-Type', 'Authorization', CSRF_HEADER],
+    }),
+  );
 
-  // 4. Parse JSON request bodies (size-limited).
+  // 4. Parse JSON bodies (size-limited) and cookies.
   app.use(express.json({ limit: '1mb' }));
+  app.use(cookieParser());
 
-  // 5. Feature routes. Phase 3 adds /api/auth, /api/projects, /api/websites, ...
-  app.use('/api/health', createHealthRouter(healthService));
+  // 5. CSRF check on every state-changing request, then a general rate limit.
+  app.use('/api', requireCsrfHeader);
+  const rateLimit = createRateLimiter({
+    store: deps.rateLimitStore,
+    enabled: config.rateLimitEnabled,
+    logger,
+  });
+  app.use(
+    '/api',
+    rateLimit({
+      name: 'global',
+      windowMs: 15 * 60_000,
+      max: 1000,
+      keys: (req) => [`ip:${clientIp(req)}`],
+    }),
+  );
 
-  // 6. Nothing matched → 404; any error → standard JSON error.
+  // 6. Services (business logic) and the authentication gate.
+  const jwt = createJwtService(config.auth.jwtSecret, config.auth.accessTokenTtlSeconds);
+  const requireAuth = createRequireAuth({ prisma, jwt });
+  const auth = createAuthService({ prisma, jwt, mailer: deps.mailer, config, logger });
+  const projects = createProjectsService({ prisma });
+  const websites = createWebsitesService({ prisma, resolveHostname: deps.resolveHostname });
+
+  // 7. Routes. Public: health + auth. Everything else requires a signed-in user.
+  app.use('/api/health', createHealthRouter(deps.healthService));
+  app.use('/api/auth', createAuthRouter({ auth, config, requireAuth, rateLimit }));
+  app.use('/api/projects', requireAuth, createProjectsRouter({ projects }));
+  app.use('/api/websites', requireAuth, createWebsitesRouter({ websites }));
+  app.use('/api/activity', requireAuth, createActivityRouter({ prisma }));
+  app.use('/api/admin', requireAuth, requireAdmin, createAdminRouter({ prisma }));
+
+  // 8. Nothing matched → 404; any error → standard JSON error.
   app.use(notFoundHandler);
   app.use(errorHandler);
 

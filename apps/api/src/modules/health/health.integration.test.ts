@@ -1,20 +1,25 @@
 /**
- * Integration test: uses the REAL PostgreSQL and Redis from .env.
+ * Integration test: uses the REAL PostgreSQL and Redis.
  * Start them first:  npm run services:up
  */
 import { once } from 'node:events';
-import { createPrismaClient } from '@whc/db';
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
+import {
+  createFakeMailer,
+  createTestPrisma,
+  fakeResolveHostname,
+  testConfig,
+} from '../../../test/helpers';
 import { createApp } from '../../app';
-import { loadConfig } from '../../config/env';
 import { createLogger } from '../../lib/logger';
+import { createMemoryRateLimitStore } from '../../lib/rate-limit';
 import { createRedisClient } from '../../lib/redis';
 import { createHealthService } from './health.service';
 
-const config = loadConfig();
+const config = testConfig();
 const logger = createLogger({ level: 'silent', pretty: false });
-const prisma = createPrismaClient(config.databaseUrl);
+const prisma = createTestPrisma();
 const redis = createRedisClient(config.redisUrl, logger);
 
 afterAll(async () => {
@@ -28,12 +33,16 @@ describe('health check against real services', () => {
     const app = createApp({
       config,
       logger,
+      prisma,
       healthService: createHealthService({
         probes: { database: () => prisma.$queryRaw`SELECT 1`, redis: () => redis.ping() },
         version: 'test',
         environment: 'test',
         exposeErrors: true,
       }),
+      rateLimitStore: createMemoryRateLimitStore(),
+      mailer: createFakeMailer(),
+      resolveHostname: fakeResolveHostname,
     });
 
     const res = await request(app).get('/api/health');

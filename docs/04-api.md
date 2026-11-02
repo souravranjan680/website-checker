@@ -1,7 +1,16 @@
 # 04 · REST API Specification
 
 Base URL: `/api`. Interactive docs (Swagger UI, generated from the Zod schemas)
-at **`/api/docs`**, raw spec at `/api/openapi.json` (Phase 3).
+at **`/api/docs`**, raw spec at `/api/openapi.json` (planned for Phase 5).
+
+> **Implemented so far (Phase 3):** health, all `/api/auth/*` endpoints,
+> projects + members, websites (+ `/scans` history), `/api/activity`,
+> `/api/admin/users`. Cookie names are `whc_access` (path `/api`) and
+> `whc_refresh` (path `/api/auth`). Health endpoints return their report directly
+> (no `{ data }` wrapper). Deleting a project takes `{ "confirmName": "<name>" }`
+> in the request body. Not yet implemented: API tokens (Phase 7),
+> `/api/websites/:id/verify` and `/schedule` (Phase 4/6), scans, reports, AI,
+> visual, bug reports, dashboard, notifications.
 
 ## 1. Conventions
 

@@ -45,7 +45,7 @@ export default defineConfig(
   },
   {
     // The test-database reset truncates tables whose names come from Postgres itself.
-    files: ['packages/db/test/**'],
+    files: ['packages/db/test/**', 'apps/api/test/**'],
     rules: { 'no-restricted-properties': 'off' },
   },
 );

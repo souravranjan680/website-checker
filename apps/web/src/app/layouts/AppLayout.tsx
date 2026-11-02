@@ -1,21 +1,34 @@
 import {
   Activity,
   Bug,
+  ChevronsUpDown,
   FolderKanban,
   Globe,
   History,
   Images,
   LayoutDashboard,
+  LogOut,
   Monitor,
   Moon,
   ScanSearch,
   Settings,
+  ShieldCheck,
   Sun,
   type LucideIcon,
 } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/features/auth/auth-context';
 import { cn } from '@/lib/utils';
 import { useTheme, type Theme } from '../theme';
 
@@ -28,25 +41,31 @@ interface NavItem {
 
 // Sections not built yet are shown disabled with the phase that delivers them.
 const NAV_ITEMS: NavItem[] = [
-  { label: 'System status', icon: Activity, to: '/' },
   { label: 'Dashboard', icon: LayoutDashboard, phase: 5 },
-  { label: 'Projects', icon: FolderKanban, phase: 5 },
-  { label: 'Websites', icon: Globe, phase: 5 },
-  { label: 'Scan Center', icon: ScanSearch, phase: 5 },
+  { label: 'Projects', icon: FolderKanban, to: '/projects' },
+  { label: 'Websites', icon: Globe, to: '/websites' },
+  { label: 'Scan Center', icon: ScanSearch, phase: 4 },
   { label: 'History', icon: History, phase: 5 },
   { label: 'Visual regression', icon: Images, phase: 6 },
   { label: 'Bug reports', icon: Bug, phase: 6 },
   { label: 'Settings', icon: Settings, phase: 5 },
+  { label: 'System status', icon: Activity, to: '/status' },
 ];
 
 export function AppLayout() {
   return (
     <div className="flex min-h-svh bg-background">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2"
+      >
+        Skip to content
+      </a>
       <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
-        <div className="flex h-14 items-center gap-2 border-b px-4 font-semibold">
+        <Link to="/projects" className="flex h-14 items-center gap-2 border-b px-4 font-semibold">
           <img src="/favicon.svg" alt="" className="size-6" />
           Health Checker
-        </div>
+        </Link>
         <nav aria-label="Main" className="flex flex-col gap-0.5 p-2">
           {NAV_ITEMS.map((item) => (
             <SidebarLink key={item.label} item={item} />
@@ -56,11 +75,29 @@ export function AppLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between gap-4 border-b px-4 md:px-6">
-          <span className="font-semibold md:hidden">Health Checker</span>
+          <nav aria-label="Main (mobile)" className="flex gap-1 md:hidden">
+            {NAV_ITEMS.filter((item) => item.to).map((item) => (
+              <NavLink
+                key={item.label}
+                to={item.to!}
+                className={({ isActive }) =>
+                  cn(
+                    'rounded-md px-2 py-1 text-sm',
+                    isActive ? 'bg-muted font-medium' : 'text-muted-foreground',
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
           <span className="hidden text-sm text-muted-foreground md:block">
-            Phase 2 · project setup
+            Phase 3 · accounts, projects & websites
           </span>
-          <ThemeSwitcher />
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher />
+            <UserMenu />
+          </div>
         </header>
         <main id="main" className="flex-1 p-4 md:p-6">
           <Outlet />
@@ -94,7 +131,6 @@ function SidebarLink({ item }: { item: NavItem }) {
   return (
     <NavLink
       to={item.to}
-      end
       className={({ isActive }) =>
         cn(
           base,
@@ -105,6 +141,51 @@ function SidebarLink({ item }: { item: NavItem }) {
     >
       {content}
     </NavLink>
+  );
+}
+
+function UserMenu() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  if (!user) return null;
+
+  const signOut = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate('/login', { replace: true });
+      toast.success('Signed out.');
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="gap-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+            {user.name.charAt(0).toUpperCase()}
+          </span>
+          <span className="hidden max-w-32 truncate sm:inline">{user.name}</span>
+          <ChevronsUpDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+          <span className="sr-only">Account menu</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="font-normal">
+          <p className="truncate text-sm font-medium">{user.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+          {user.role === 'ADMIN' ? (
+            <Badge variant="secondary" className="mt-1">
+              <ShieldCheck aria-hidden="true" /> Administrator
+            </Badge>
+          ) : null}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void signOut()}>
+          <LogOut aria-hidden="true" /> Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -120,7 +201,7 @@ function ThemeSwitcher() {
     <div
       role="group"
       aria-label="Theme"
-      className="flex items-center gap-0.5 rounded-md border p-0.5"
+      className="hidden items-center gap-0.5 rounded-md border p-0.5 sm:flex"
     >
       {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
         <Button

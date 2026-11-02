@@ -1,23 +1,74 @@
-import { createBrowserRouter, isRouteErrorResponse, Link, useRouteError } from 'react-router';
+import {
+  createBrowserRouter,
+  isRouteErrorResponse,
+  Link,
+  Navigate,
+  useRouteError,
+  type RouteObject,
+} from 'react-router';
 import { Button } from '@/components/ui/button';
+import { AuthLayout } from '@/features/auth/AuthLayout';
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
+import { LoginPage } from '@/features/auth/LoginPage';
+import { RegisterPage } from '@/features/auth/RegisterPage';
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage';
+import { GuestOnly, RequireAuth } from '@/features/auth/route-guards';
+import { ProjectDetailsPage } from '@/features/projects/ProjectDetailsPage';
+import { ProjectsPage } from '@/features/projects/ProjectsPage';
 import { SystemStatusPage } from '@/features/system/SystemStatusPage';
+import { AddWebsitePage } from '@/features/websites/AddWebsitePage';
+import { EditWebsitePage } from '@/features/websites/EditWebsitePage';
+import { WebsiteDetailsPage } from '@/features/websites/WebsiteDetailsPage';
+import { WebsitesPage } from '@/features/websites/WebsitesPage';
 import { AppLayout } from './layouts/AppLayout';
 
 /**
- * All routes live here. Phase 5 adds the 21 product pages
- * (dashboard, websites, reports, ...) as children of AppLayout.
+ * All routes. Public pages use AuthLayout; everything inside RequireAuth needs a
+ * signed-in user. (The API checks permissions again on every request.)
  */
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   {
-    path: '/',
-    element: <AppLayout />,
     errorElement: <RouteErrorPage />,
     children: [
-      { index: true, element: <SystemStatusPage /> },
-      { path: '*', element: <NotFoundPage /> },
+      {
+        element: <AuthLayout />,
+        children: [
+          {
+            element: <GuestOnly />,
+            children: [
+              { path: '/login', element: <LoginPage /> },
+              { path: '/register', element: <RegisterPage /> },
+              { path: '/forgot-password', element: <ForgotPasswordPage /> },
+            ],
+          },
+          { path: '/reset-password', element: <ResetPasswordPage /> },
+        ],
+      },
+      {
+        element: <RequireAuth />,
+        children: [
+          {
+            path: '/',
+            element: <AppLayout />,
+            children: [
+              { index: true, element: <Navigate to="/projects" replace /> },
+              { path: 'projects', element: <ProjectsPage /> },
+              { path: 'projects/:projectId', element: <ProjectDetailsPage /> },
+              { path: 'websites', element: <WebsitesPage /> },
+              { path: 'websites/new', element: <AddWebsitePage /> },
+              { path: 'websites/:websiteId', element: <WebsiteDetailsPage /> },
+              { path: 'websites/:websiteId/edit', element: <EditWebsitePage /> },
+              { path: 'status', element: <SystemStatusPage /> },
+              { path: '*', element: <NotFoundPage /> },
+            ],
+          },
+        ],
+      },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);
 
 function NotFoundPage() {
   return (
@@ -28,7 +79,7 @@ function NotFoundPage() {
         This page doesn&apos;t exist yet, or the link is wrong.
       </p>
       <Button asChild>
-        <Link to="/">Go to system status</Link>
+        <Link to="/projects">Go to projects</Link>
       </Button>
     </div>
   );

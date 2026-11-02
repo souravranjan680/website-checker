@@ -14,6 +14,7 @@ Phase 1 (architecture & planning). Read in this order:
 | [07-user-workflow.md](07-user-workflow.md) | User journeys, scan state machine, page map, layout |
 | [08-roadmap.md](08-roadmap.md) | Phases 2–8 with "done when" criteria and risks |
 | [09-phase-2-setup.md](09-phase-2-setup.md) | Phase 2 explained: monorepo, config files, dependencies, database, health checks, debugging |
+| [10-phase-3-auth.md](10-phase-3-auth.md) | Phase 3 explained: authentication flow, JWT, roles, projects, websites, tests, debugging |
 | [VERSIONS.md](VERSIONS.md) | Exact package and image versions, and why |
 
 Diagrams use Mermaid; they render on GitHub and in VS Code (with a Mermaid

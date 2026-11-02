@@ -4,14 +4,16 @@ A web application that scans websites for accessibility (WCAG), UI, responsive,
 performance, SEO and basic security problems, with screenshots, AI explanations,
 bug reports and scan history.
 
-> **Status: Phase 2 of 8 complete (project setup).** The monorepo, database,
-> API skeleton, web shell and Docker stack run and are tested. Scanning, logins and
-> the product pages arrive in Phases 3–7; see [docs/08-roadmap.md](docs/08-roadmap.md).
+> **Status: Phase 3 of 8 complete.** Accounts (register, sign in, sessions,
+> password reset), role-based access, projects with members and websites with
+> URL-safety checks all work end to end and are tested. Scanning arrives in Phase 4;
+> see [docs/08-roadmap.md](docs/08-roadmap.md).
 
 | Doc | |
 |---|---|
 | [docs/README.md](docs/README.md) | Design documents (architecture, database, API, security, ...) |
-| [docs/09-phase-2-setup.md](docs/09-phase-2-setup.md) | **How this setup works**: config files, dependencies, database, health checks, debugging |
+| [docs/09-phase-2-setup.md](docs/09-phase-2-setup.md) | How the project setup works: config files, dependencies, database, health checks |
+| [docs/10-phase-3-auth.md](docs/10-phase-3-auth.md) | **How sign-in, JWT, roles, projects and websites work**, plus debugging |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Exact versions and why |
 
 ---
@@ -61,16 +63,32 @@ cd website-checker
 # 2. Create your local settings file (never committed)
 Copy-Item .env.example .env
 
-# 3. Install all dependencies for every package (+ generates the Prisma client)
+# 3. Put a random secret in .env for signing login tokens (JWT_ACCESS_SECRET).
+#    The API refuses the example value in production (Docker) mode.
+$secret = node -e "process.stdout.write(require('crypto').randomBytes(48).toString('base64'))"
+(Get-Content .env) -replace '^JWT_ACCESS_SECRET=.*', "JWT_ACCESS_SECRET=$secret" | Set-Content .env
+
+# 4. Install all dependencies for every package (+ generates the Prisma client)
 npm install
 npm run db:generate
 
-# 4. Start PostgreSQL, Redis and Mailpit in Docker, wait until healthy
+# 5. Start PostgreSQL, Redis and Mailpit in Docker, wait until healthy
 docker compose up -d --wait postgres redis mailpit
 
-# 5. Create the database tables
+# 6. Create the database tables
 npm run db:deploy
 ```
+
+## Your first account (and making yourself admin)
+
+There are **no built-in or demo accounts**. Open the app, click **Create one**
+on the sign-in page and register. To make your account a global administrator:
+
+```powershell
+npm run admin:promote -- you@example.com
+```
+Then sign out and back in. (Admins can see every project and use the
+`/api/admin/users` endpoints.)
 
 ## Run the app: option A, development (recommended while coding)
 
@@ -84,10 +102,13 @@ npm run dev
 
 | Open | What |
 |---|---|
-| http://localhost:5173 | Web app (System Status page) |
+| http://localhost:5173 | Web app → sign in / create an account |
+| http://localhost:5173/status | System Status page (after signing in) |
 | http://localhost:5173/api/health | Health check (through the Vite proxy) |
-| http://localhost:4000/api/health | Health check (API directly) |
-| http://localhost:8025 | Mailpit inbox (used from Phase 3) |
+| http://localhost:8025 | Mailpit inbox: password-reset emails land here |
+
+> Use `localhost` (not `127.0.0.1`) in the browser: the login cookies belong to
+> the address you signed in on.
 
 Stop: press **Ctrl + C** in the `npm run dev` terminal, then `npm run services:down`.
 
@@ -136,6 +157,7 @@ docker compose down -v            # ⚠ also DELETES the database and Redis data
 | `npm run db:generate` | Regenerate the typed Prisma client |
 | `npm run db:studio` | Browse the database in your browser |
 | `npm run db:reset` | ⚠ Drop and recreate the dev database |
+| `npm run admin:promote -- <email>` | Make a registered user a global admin |
 
 Run one workspace's script: `npm run test -w @whc/api` (or `@whc/web`, `@whc/db`, `@whc/shared`).
 
@@ -151,6 +173,29 @@ Invoke-RestMethod http://localhost:4000/api/health | ConvertTo-Json -Depth 5
 docker compose ps        # Docker's own health status per container
 ```
 
+## Verify Phase 3 by hand (PowerShell)
+
+With `npm run dev` running, this signs up, creates a project and adds a website
+through the real API, then shows that a second user can't see it:
+
+```powershell
+$api = 'http://localhost:5173/api'; $h = @{ 'X-Requested-With' = 'whc-web' }
+$me = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+Invoke-RestMethod "$api/auth/register" -Method Post -Headers $h -WebSession $me -ContentType 'application/json' `
+  -Body '{"name":"Me","email":"me@example.com","password":"my long passphrase"}'
+$project = (Invoke-RestMethod "$api/projects" -Method Post -Headers $h -WebSession $me -ContentType 'application/json' `
+  -Body '{"name":"My sites"}').data
+Invoke-RestMethod "$api/websites" -Method Post -Headers $h -WebSession $me -ContentType 'application/json' `
+  -Body (@{ projectId = $project.id; name = 'Example'; baseUrl = 'example.com'; authorizationConfirmed = $true } | ConvertTo-Json)
+
+# A different user gets 404 for my project:
+$other = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+Invoke-RestMethod "$api/auth/register" -Method Post -Headers $h -WebSession $other -ContentType 'application/json' `
+  -Body '{"name":"Other","email":"other@example.com","password":"another long passphrase"}'
+Invoke-RestMethod "$api/projects/$($project.id)" -WebSession $other   # → error 404 NOT_FOUND
+```
+(Run it once; a second run gets "email already exists", which is also correct.)
+
 ## Configuration
 
 All settings live in `.env` (template: [.env.example](.env.example), with
@@ -161,6 +206,12 @@ comments for every variable). Important ones:
 | `DATABASE_URL` / `DATABASE_URL_TEST` | local Docker Postgres | App / automated tests |
 | `REDIS_URL` | `redis://localhost:6379` | Health check, later queue |
 | `CORS_ORIGINS` | `:5173`, `:8081` | Which web origins may call the API |
+| `JWT_ACCESS_SECRET` | example value | Signs login tokens. **Set a random value** (see setup step 3) |
+| `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL_DAYS` | `15m` / `7` | Token lifetime / maximum session length |
+| `COOKIE_SECURE` | `false` | `true` behind HTTPS in production |
+| `APP_URL` | `http://localhost:5173` | Used in password-reset links |
+| `RATE_LIMIT_ENABLED` | `true` | Login/registration/reset limits (Redis) |
+| `SMTP_HOST` / `SMTP_PORT` | Mailpit | Outgoing email |
 | `WEB_PORT` | `8081` | Docker web port (8080 was taken on this PC) |
 | `CLAUDE_MODEL` | `claude-sonnet-5-5` | AI model (Phase 6), change any time |
 | `ANTHROPIC_API_KEY` | empty | AI features are off until set |
@@ -187,10 +238,21 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 
 ---
 
-## Known limitations (Phase 2)
+## Known limitations (after Phase 3)
 
-- Only the System Status page exists; other sidebar items show the phase that delivers them.
-- No authentication yet (Phase 3). The API currently exposes only health endpoints.
+- **No scanning yet** (Phase 4). Websites show an honest "No scans yet" state; scan
+  counts are real zeros. Domain *verification* is generated but not checked yet
+  (it needs the scanner's safe network path).
+- No profile/settings screens yet (Phase 5). The API already supports changing
+  your name and password (`PATCH /api/auth/me`, `POST /api/auth/change-password`), and
+  these are tested. Admin user management is API + `admin:promote` only.
+- No interactive API docs (Swagger/OpenAPI) yet; endpoints are specified in
+  [docs/04-api.md](docs/04-api.md). Planned for Phase 5.
+- Personal API tokens (for the Chrome extension) arrive in Phase 7.
+- Trade-offs: registering with an existing email says so (normal sign-up UX, but it
+  reveals that the email has an account; rate-limited); the per-email login limit
+  could let someone temporarily lock an account (5 tries/minute).
+- Web tests mock the network; full browser end-to-end tests come with Playwright Test.
 - The API Docker image is ~730 MB: `npm ci` installs every workspace's production
   dependencies plus Prisma's peer dependencies. It works; slimming it is planned
   for Phase 8.

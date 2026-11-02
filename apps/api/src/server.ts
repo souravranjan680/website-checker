@@ -2,7 +2,10 @@ import { createPrismaClient } from '@whc/db';
 import packageJson from '../package.json' with { type: 'json' };
 import { createApp } from './app';
 import { loadConfig } from './config/env';
+import { systemResolveHostname } from './lib/hostname-guard';
 import { createLogger } from './lib/logger';
+import { createSmtpMailer } from './lib/mailer';
+import { createRedisRateLimitStore } from './lib/rate-limit';
 import { createRedisClient } from './lib/redis';
 import { createHealthService } from './modules/health/health.service';
 
@@ -24,7 +27,21 @@ const healthService = createHealthService({
   exposeErrors: config.nodeEnv !== 'production',
 });
 
-const app = createApp({ config, logger, healthService });
+const app = createApp({
+  config,
+  logger,
+  prisma,
+  healthService,
+  rateLimitStore: createRedisRateLimitStore(redis),
+  mailer: createSmtpMailer(config.mail),
+  resolveHostname: systemResolveHostname,
+});
+
+if (config.nodeEnv === 'production' && !config.auth.cookieSecure) {
+  logger.warn(
+    'COOKIE_SECURE=false in production: only acceptable for local http://localhost testing',
+  );
+}
 
 const server = app.listen(config.port, (error?: Error) => {
   if (error) {

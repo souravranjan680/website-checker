@@ -30,7 +30,8 @@
     "db:deploy": "npm run deploy -w @whc/db --",
     "db:status": "npm run status -w @whc/db --",
     "db:studio": "npm run studio -w @whc/db --",
-    "db:reset": "npm run reset -w @whc/db --"
+    "db:reset": "npm run reset -w @whc/db --",
+    "admin:promote": "npm run admin:promote -w @whc/api --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

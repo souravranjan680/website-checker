@@ -107,7 +107,9 @@ proxy refuses to start with it when `NODE_ENV=production`.
 
 ## 4. Authentication & sessions
 
-- **Passwords:** argon2id (memory-hard), never logged, never returned.
+- **Passwords:** argon2id (memory-hard; Node.js 24 built-in `crypto.argon2`, OWASP
+  parameters), never logged, never returned. *(Implemented in Phase 3; see
+  [10-phase-3-auth.md](10-phase-3-auth.md).)*
 - **Access token:** JWT (HS256, secret ≥ 32 random bytes from env), 15 min,
   in an `HttpOnly; Secure; SameSite=Lax` cookie, so page JavaScript (or an XSS
   bug) can't read it.

@@ -84,10 +84,24 @@ services:
       DATABASE_URL: *database-url
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
+      # Auth: the API refuses to start in production with the example secret.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-7}
+      # Local Docker serves plain http://localhost, so Secure cookies must be off here.
+      # Behind real HTTPS, set DOCKER_COOKIE_SECURE=true.
+      COOKIE_SECURE: ${DOCKER_COOKIE_SECURE:-false}
+      APP_URL: ${DOCKER_APP_URL:-http://localhost:8081}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: ${MAIL_FROM:-Website Health Checker <no-reply@whc.local>}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     # No published port: the browser reaches the API through the web container (/api).
     depends_on:
+      mailpit:
+        condition: service_started
       migrate:
         condition: service_completed_successfully
       postgres:

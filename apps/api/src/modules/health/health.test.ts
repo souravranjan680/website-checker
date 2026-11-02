@@ -1,23 +1,29 @@
+import type { PrismaClient } from '@whc/db';
 import { healthReportSchema } from '@whc/shared';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
+import { createFakeMailer, fakeResolveHostname, testConfig } from '../../../test/helpers';
 import { createApp } from '../../app';
 import { createLogger } from '../../lib/logger';
+import { createMemoryRateLimitStore } from '../../lib/rate-limit';
 import { createHealthService, type HealthProbe } from './health.service';
 
-// Builds the app with fake probes: no database or Redis needed for these tests.
+// Builds the app with fake probes: no database or Redis is touched by these tests.
 function buildApp(database: HealthProbe, redis: HealthProbe, exposeErrors = true) {
-  const healthService = createHealthService({
-    probes: { database, redis },
-    version: '0.0.0-test',
-    environment: 'test',
-    exposeErrors,
-    timeoutMs: 100,
-  });
   return createApp({
-    config: { corsOrigins: [] },
+    config: testConfig(),
     logger: createLogger({ level: 'silent', pretty: false }),
-    healthService,
+    prisma: {} as PrismaClient, // health routes never use it
+    healthService: createHealthService({
+      probes: { database, redis },
+      version: '0.0.0-test',
+      environment: 'test',
+      exposeErrors,
+      timeoutMs: 100,
+    }),
+    rateLimitStore: createMemoryRateLimitStore(),
+    mailer: createFakeMailer(),
+    resolveHostname: fakeResolveHostname,
   });
 }
 
