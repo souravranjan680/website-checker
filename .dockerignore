@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+packages/db/src/generated
+.git
+.env
+.env.*
+storage
+docs
+tests

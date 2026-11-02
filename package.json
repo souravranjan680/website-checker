@@ -1,0 +1,52 @@
+{
+  "name": "website-health-checker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Website Accessibility & UI Health Checker",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/db",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors blue,green \"npm run dev -w @whc/api\" \"npm run dev -w @whc/web\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check": "npm run db:validate && npm run typecheck && npm run lint && npm run test",
+    "services:up": "docker compose up -d postgres redis mailpit",
+    "services:down": "docker compose stop postgres redis mailpit",
+    "db:generate": "npm run generate -w @whc/db --",
+    "db:validate": "npm run validate -w @whc/db --",
+    "db:migrate": "npm run migrate -w @whc/db --",
+    "db:deploy": "npm run deploy -w @whc/db --",
+    "db:status": "npm run status -w @whc/db --",
+    "db:studio": "npm run studio -w @whc/db --",
+    "db:reset": "npm run reset -w @whc/db --"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true,
+    "esbuild@0.28.2": true
+  }
+}

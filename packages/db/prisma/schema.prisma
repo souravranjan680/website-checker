@@ -1,17 +1,22 @@
 // =============================================================================
-// DRAFT schema (Phase 1 design review).
-// In Phase 2 this moves to packages/db/prisma/schema.prisma and gets a migration.
-// Syntax targets Prisma 6; small generator/datasource changes may be needed for
-// the exact version pinned in Phase 2.
+// Database schema: the single source of truth for every table.
+//
+// After changing this file:
+//   npm run db:migrate -- --name describe_your_change   (creates + applies SQL)
+//   npm run db:generate                                  (refreshes the TS client)
+//
+// Design notes: docs/03-database.md
 // =============================================================================
 
+// Generates a fully typed TypeScript client into src/generated/prisma.
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
+// Prisma 7: the connection URL lives in prisma.config.ts, not here.
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ----------------------------------------------------------------------------

@@ -241,37 +241,15 @@ carry over to future scans automatically.
 | Auth | **JWT in HttpOnly cookies + rotating refresh tokens**, **argon2id** hashing | Stateless short-lived access token, revocable sessions, modern password hashing. | Sessions in Redis: also fine; JWT was requested. |
 | Email | **Nodemailer** (SMTP) + **Mailpit** container in dev | Reset emails really get sent in dev, and you can read them at `localhost:8025`. | |
 | Logging | **pino** + request IDs | Fast structured JSON logs; one request ID across API and worker logs. | winston. |
-| AI | **Claude API** via `@anthropic-ai/sdk`, server-side only, model `claude-opus-5-5` by default (configurable with `CLAUDE_MODEL`), structured JSON output | Reliable structured explanations; the key never reaches the browser. | |
+| AI | **Claude API** via `@anthropic-ai/sdk`, server-side only, model `claude-sonnet-5-5` by default to keep costs manageable (configurable with `CLAUDE_MODEL`), structured JSON output | Reliable structured explanations; the key never reaches the browser. | |
 | Tests | **Vitest** (unit/integration, web + api), **Supertest** (HTTP), **Playwright Test** (scanner + E2E), **Testing Library** (components) | Vitest shares Vite config; Playwright Test runs real browsers. | Jest: slower with ESM + TS. |
 | Monorepo | **npm workspaces** | Already installed (npm 11), no extra tool to learn. | pnpm/Turborepo: faster, but one more tool; can switch later. |
 | Containers | **Docker Compose** | One command starts Postgres, Redis, Mailpit, API, worker, proxy, web. | |
 
-### Target versions
+### Versions
 
-The exact versions are pinned in `package-lock.json` during Phase 2, after
-checking that they work together on this machine (Node **24 LTS** is
-installed). Target majors:
-
-| Package | Target |
-|---|---|
-| Node.js | 24 LTS (Docker images pinned to the same major) |
-| TypeScript | 5.x |
-| React / React DOM | 19.x |
-| Vite | latest stable major that supports the React and Tailwind plugins |
-| Tailwind CSS | 4.x (shadcn/ui supports v4) |
-| React Router | 7.x |
-| TanStack Query | 5.x |
-| Recharts | 3.x |
-| Express | 5.x |
-| Prisma / @prisma/client | latest stable 6.x or 7.x (decided in Phase 2; the draft schema validates on 6.x) |
-| PostgreSQL | 16 or 17 (Docker image) |
-| Redis | 7.x (Docker image) |
-| BullMQ | 5.x |
-| Playwright | latest 1.x; Docker image `mcr.microsoft.com/playwright` with the **same** version |
-| axe-core | 4.x |
-| Lighthouse | latest major (ESM-only Node API) |
-| @anthropic-ai/sdk | latest |
-| Vitest | latest major |
-
-A `docs/VERSIONS.md` file with the exact resolved versions is generated in
-Phase 2.
+Exact versions installed and tested together in Phase 2 are listed in
+**[VERSIONS.md](VERSIONS.md)**: Node 24, TypeScript 6.0, React 19.3, Vite 8,
+React Router 8, Tailwind 4, Express 5, Prisma 7.10, PostgreSQL 17, Redis 7.4,
+Vitest 5. Packages for later phases (Playwright, axe-core, Lighthouse, BullMQ,
+@anthropic-ai/sdk, Recharts) are pinned when their phase starts.

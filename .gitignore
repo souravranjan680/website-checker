@@ -1,13 +1,27 @@
+# Dependencies & build output
 node_modules/
 dist/
 build/
 coverage/
+*.tsbuildinfo
+
+# Prisma generated client (re-created by `npm run db:generate`)
+packages/db/src/generated/
+
+# Secrets: only .env.example is committed
 .env
 .env.*
 !.env.example
-*.log
-.DS_Store
-Thumbs.db
+
+# Runtime data
 storage/
+*.log
+
+# Test artifacts
 playwright-report/
 test-results/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/

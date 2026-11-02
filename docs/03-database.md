@@ -1,8 +1,11 @@
 # 03 · Database Design
 
-The full draft Prisma schema is in **[schema.draft.prisma](schema.draft.prisma)**.
-It passes `prisma validate`. In Phase 2 it moves to
-`packages/db/prisma/schema.prisma` and becomes the first migration.
+The Prisma schema is in
+**[packages/db/prisma/schema.prisma](../packages/db/prisma/schema.prisma)**. It was
+applied as migration `20261102115607_init` (24 tables, 46 foreign keys, 68 indexes,
+20 enums), and its relationships are verified by
+[packages/db/test/relations.test.ts](../packages/db/test/relations.test.ts).
+Plain-language walkthrough: [09-phase-2-setup.md §5](09-phase-2-setup.md#5-how-the-database-works-in-this-project).
 
 ## 1. ER diagram
 

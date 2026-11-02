@@ -1,0 +1,28 @@
+{
+  // Shared TypeScript settings. Every workspace's tsconfig.json "extends" this file.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    // "Bundler" resolution lets us write `import x from './file'` without `.js` endings.
+    // Vite (web), tsx (dev) and tsup (API build) all understand this style.
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    // Prisma's generated client imports its own files as "./x.ts".
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+
+    // Type-safety: strict mode catches null/undefined mistakes at compile time.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "skipLibCheck": true,
+    // We only type-check with tsc; bundlers produce the JavaScript.
+    "noEmit": true
+  }
+}

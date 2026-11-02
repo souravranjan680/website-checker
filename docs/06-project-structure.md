@@ -82,8 +82,8 @@ website-health-checker/
 │  ├─ dom-checks/                  pure in-browser functions (no imports): empty buttons,
 │  │                               overflow, overlap, clipping, selector generator...
 │  │                               bundled into the scanner AND the extension
-│  └─ config/                      tsconfig.base.json, eslint config, prettier config
 │
+├─ tsconfig.base.json  eslint.config.js  .prettierrc.json   shared tool config (root)
 ├─ tests/
 │  ├─ fixtures/sites/              intentionally broken websites (see 02-modules.md)
 │  └─ e2e/                         Playwright Test: full user journeys through the web app
@@ -92,10 +92,8 @@ website-health-checker/
 │  ├─ api.Dockerfile  scanner.Dockerfile  web.Dockerfile  egress-proxy.Dockerfile
 │  └─ nginx.conf                   serves web build, proxies /api to the API
 ├─ docs/                           these documents (+ VERSIONS.md, DEPLOYMENT.md later)
-├─ docker-compose.yml              full stack
-├─ docker-compose.dev.yml          only Postgres, Redis, Mailpit, fixtures (apps run locally with hot reload)
+├─ docker-compose.yml              all services; dev mode starts only postgres/redis/mailpit
 ├─ package.json                    workspaces + root scripts
-├─ tsconfig.base.json
 ├─ .env.example
 ├─ .gitignore
 └─ README.md
@@ -109,15 +107,9 @@ website-health-checker/
 | New **`packages/dom-checks/`** | The same in-page check code runs in the scanner (via `page.evaluate`) and in the extension's content script. Written once, tested once. |
 | New **`apps/egress-proxy/`** | The SSRF choke point deserves its own small, separately tested service and container. |
 | Routes / controller / service split in the API | Controllers deal with HTTP only; services hold logic and permission checks, so they can be unit-tested without HTTP. |
+| *(Phase 2)* No `packages/config`; one `docker-compose.yml` | Simpler for now: shared tool config lives at the root, and dev mode starts a subset of services (`docker compose up -d postgres redis mailpit`) instead of a second compose file. |
 
-## Root scripts (planned)
+## Root scripts
 
-| Command | Does |
-|---|---|
-| `npm run dev` | Start web, api, scanner, proxy with hot reload (needs `docker compose -f docker-compose.dev.yml up -d` first) |
-| `npm run build` | Type-check and build every workspace |
-| `npm run test` | All unit + integration tests |
-| `npm run test:e2e` | Playwright end-to-end tests |
-| `npm run lint` / `npm run typecheck` | Static checks |
-| `npm run db:migrate` / `db:seed` / `db:studio` | Prisma helpers |
-| `docker compose up --build` | Everything in containers |
+The current list is in the [README](../README.md#everyday-commands).
+`test:e2e` and `db:seed` are added in later phases.

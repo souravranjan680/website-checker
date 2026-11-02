@@ -1,0 +1,5 @@
+# Store text files with LF line endings in Git (Docker/Linux containers need LF).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

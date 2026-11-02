@@ -372,7 +372,7 @@ issue.
 4. The frontend renders it as **text and code blocks only** (no raw HTML).
 
 **Configuration:** `ANTHROPIC_API_KEY`, `CLAUDE_MODEL` (default
-`claude-opus-5-5`), per-user rate limit. `GET /api/ai/status` tells the UI
+`claude-sonnet-5-5`; any Claude model ID works), per-user rate limit. `GET /api/ai/status` tells the UI
 whether AI is configured.
 
 **Graceful failure:** no key → buttons show "AI not configured (ask an admin)"
