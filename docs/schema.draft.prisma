@@ -1,0 +1,755 @@
+// =============================================================================
+// DRAFT schema (Phase 1 design review).
+// In Phase 2 this moves to packages/db/prisma/schema.prisma and gets a migration.
+// Syntax targets Prisma 6; small generator/datasource changes may be needed for
+// the exact version pinned in Phase 2.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum ProjectRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+}
+
+enum ScanMode {
+  SINGLE_PAGE
+  URL_LIST
+  CRAWL
+}
+
+enum ScanTrigger {
+  MANUAL
+  RESCAN
+  SCHEDULED
+  API
+}
+
+enum ScanStatus {
+  QUEUED
+  RUNNING
+  CANCELLING
+  CANCELLED
+  COMPLETED
+  PARTIAL // finished, but some pages or stages failed
+  FAILED
+}
+
+enum PageStatus {
+  PENDING
+  SCANNING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+enum IssueCategory {
+  ACCESSIBILITY
+  UI_HEALTH
+  RESPONSIVE
+  PERFORMANCE
+  SEO
+  SECURITY
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+  FALSE_POSITIVE
+}
+
+enum DetectionType {
+  AUTOMATED // axe "violations": confirmed failures
+  NEEDS_REVIEW // axe "incomplete": a human must decide
+}
+
+enum UiCheckType {
+  BROKEN_IMAGE
+  BROKEN_LINK
+  HORIZONTAL_SCROLL
+  CONTENT_OVERFLOW
+  OVERLAPPING_ELEMENTS
+  TEXT_CLIPPING
+  OUT_OF_VIEWPORT
+  FAILED_STYLESHEET
+  FAILED_SCRIPT
+  CONSOLE_ERROR
+  JS_ERROR
+  FAILED_REQUEST
+  EMPTY_BUTTON
+  EMPTY_LINK
+  BROKEN_NAVIGATION
+  IMAGE_SIZING
+}
+
+enum SeoCheckType {
+  MISSING_TITLE
+  DUPLICATE_TITLE
+  MISSING_META_DESCRIPTION
+  DUPLICATE_META_DESCRIPTION
+  MISSING_H1
+  MULTIPLE_H1
+  MISSING_CANONICAL
+  MISSING_OPEN_GRAPH
+  BROKEN_INTERNAL_LINK
+  MISSING_IMAGE_ALT
+  MISSING_SITEMAP
+  MISSING_ROBOTS_TXT
+}
+
+enum SecurityCheckType {
+  NO_HTTPS
+  HTTP_NOT_REDIRECTED
+  MIXED_CONTENT
+  MISSING_CSP
+  MISSING_X_CONTENT_TYPE_OPTIONS
+  MISSING_REFERRER_POLICY
+  MISSING_FRAME_PROTECTION
+  MISSING_HSTS
+  INSECURE_COOKIE
+}
+
+enum FormFactor {
+  DESKTOP
+  MOBILE
+}
+
+enum ScreenshotKind {
+  PAGE_FULL
+  VIEWPORT
+  ISSUE_CROP
+  BASELINE
+  VISUAL_CURRENT
+  VISUAL_DIFF
+}
+
+enum Priority {
+  P1
+  P2
+  P3
+  P4
+}
+
+enum BugReportStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum AiInsightKind {
+  EXPLANATION
+  FIX
+  BUG_REPORT
+}
+
+enum NotificationType {
+  SCAN_COMPLETED
+  SCAN_FAILED
+  REGRESSION_DETECTED
+  SYSTEM
+}
+
+// ----------------------------------------------------------------------------
+// Users & authentication
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique // stored lower-cased by the API
+  passwordHash String
+  name         String
+  role         UserRole  @default(USER)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  apiTokens           ApiToken[]
+  memberships         ProjectMember[]
+  createdProjects     Project[]          @relation("ProjectCreatedBy")
+  createdWebsites     Website[]          @relation("WebsiteCreatedBy")
+  triggeredScans      Scan[]             @relation("ScanTriggeredBy")
+  visualBaselines     VisualBaseline[]
+  bugReports          BugReport[]
+  aiInsights          AiInsight[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+}
+
+/// One row per login session. Only a SHA-256 hash of the token is stored.
+model RefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  tokenHash    String    @unique
+  familyId     String // all rotations of one login share a family (reuse detection)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  userAgent    String?
+  ipAddress    String?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Personal access tokens (used by the Chrome extension and CI scripts).
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  prefix     String // first characters, shown in the UI so users can tell tokens apart
+  tokenHash  String    @unique
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ----------------------------------------------------------------------------
+// Projects & websites
+// ----------------------------------------------------------------------------
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy    User?           @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members      ProjectMember[]
+  websites     Website[]
+  bugReports   BugReport[]
+  activityLogs ActivityLog[]
+
+  @@index([createdById])
+}
+
+/// Role-based access control is enforced per project through this table.
+model ProjectMember {
+  projectId String
+  userId    String
+  role      ProjectRole @default(VIEWER)
+  createdAt DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model Website {
+  id                       String             @id @default(cuid())
+  projectId                String
+  name                     String
+  baseUrl                  String // normalized, e.g. https://example.com/
+  hostname                 String
+  maxDepth                 Int                @default(2)
+  maxPages                 Int                @default(20)
+  includePatterns          String[]           @default([])
+  excludePatterns          String[]           @default([])
+  respectRobotsTxt         Boolean            @default(true)
+  responsivePageLimit      Int                @default(3)
+  lighthousePageLimit      Int                @default(1)
+  verificationStatus       VerificationStatus @default(UNVERIFIED)
+  verificationToken        String?            @unique
+  verifiedAt               DateTime?
+  authorizationConfirmedAt DateTime // "I own or am authorized to test this site"
+  createdById              String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User?            @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  schedule        ScanSchedule?
+  scans           Scan[]
+  trackedIssues   TrackedIssue[]
+  visualBaselines VisualBaseline[]
+  bugReports      BugReport[]
+
+  @@unique([projectId, baseUrl])
+  @@index([hostname])
+}
+
+model ScanSchedule {
+  id             String    @id @default(cuid())
+  websiteId      String    @unique
+  cronExpression String
+  timezone       String    @default("UTC")
+  isEnabled      Boolean   @default(true)
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+// ----------------------------------------------------------------------------
+// Scans
+// ----------------------------------------------------------------------------
+
+model Scan {
+  id                 String      @id @default(cuid())
+  websiteId          String
+  triggeredById      String?
+  trigger            ScanTrigger @default(MANUAL)
+  mode               ScanMode    @default(CRAWL)
+  status             ScanStatus  @default(QUEUED)
+  config             Json // snapshot of website settings + overrides at scan time
+  jobId              String? // BullMQ job id
+  progress           Int         @default(0) // 0..100
+  currentStep        String?
+  pagesDiscovered    Int         @default(0)
+  pagesScanned       Int         @default(0)
+  pagesFailed        Int         @default(0)
+  errorMessage       String?
+  // Scores are written once when the scan finishes (null = not measured).
+  accessibilityScore Int?
+  uiHealthScore      Int?
+  performanceScore   Int?
+  seoScore           Int?
+  bestPracticesScore Int?
+  securityScore      Int?
+  // Denormalized counts so list pages and the dashboard stay fast.
+  totalIssues        Int         @default(0)
+  criticalCount      Int         @default(0)
+  highCount          Int         @default(0)
+  mediumCount        Int         @default(0)
+  lowCount           Int         @default(0)
+  infoCount          Int         @default(0)
+  manualChecklist    Json? // state of the manual accessibility checklist
+  previousScanId     String? // the scan this one is compared against
+  queuedAt           DateTime    @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  durationMs         Int?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  website            Website             @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  triggeredBy        User?               @relation("ScanTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  previousScan       Scan?               @relation("ScanComparison", fields: [previousScanId], references: [id], onDelete: SetNull)
+  nextScans          Scan[]              @relation("ScanComparison")
+  pages              ScanPage[]
+  issues             Issue[]
+  performanceResults PerformanceResult[]
+  screenshots        Screenshot[]
+  visualComparisons  VisualComparison[]
+  firstSeenTracked   TrackedIssue[]      @relation("TrackedFirstSeen")
+  lastSeenTracked    TrackedIssue[]      @relation("TrackedLastSeen")
+  resolvedTracked    TrackedIssue[]      @relation("TrackedResolvedIn")
+
+  @@index([websiteId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([triggeredById])
+}
+
+model ScanPage {
+  id              String     @id @default(cuid())
+  scanId          String
+  url             String
+  normalizedUrl   String
+  depth           Int        @default(0)
+  status          PageStatus @default(PENDING)
+  httpStatus      Int?
+  contentType     String?
+  title           String?
+  metaDescription String?
+  canonicalUrl    String?
+  language        String?
+  h1Count         Int?
+  loadTimeMs      Int?
+  responseHeaders Json?
+  consoleErrors   Json?
+  failedRequests  Json?
+  pageErrors      Json? // uncaught JavaScript exceptions
+  errorMessage    String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  scan               Scan                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  issues             Issue[]
+  performanceResults PerformanceResult[]
+  screenshots        Screenshot[]
+
+  @@unique([scanId, normalizedUrl])
+  @@index([scanId, status])
+}
+
+// ----------------------------------------------------------------------------
+// Issues: one base table + one detail table per category
+// ----------------------------------------------------------------------------
+
+/// Every finding of every category. Category-specific fields live in the
+/// 1:1 detail tables below (AccessibilityIssue, UIHealthIssue, ...).
+model Issue {
+  id             String        @id @default(cuid())
+  scanId         String
+  scanPageId     String? // null for site-level findings (e.g. missing sitemap.xml)
+  trackedIssueId String?
+  category       IssueCategory
+  severity       Severity
+  ruleId         String // e.g. "image-alt", "ui/horizontal-scroll", "sec/missing-csp"
+  title          String
+  description    String
+  pageUrl        String?
+  viewport       String? // e.g. "390x844"
+  selector       String?
+  htmlSnippet    String? // truncated; always rendered as text, never as HTML
+  boundingBox    Json? // { x, y, width, height } in page coordinates
+  suggestedFix   String?
+  details        Json?
+  fingerprint    String // stable id of "the same problem" across scans
+  screenshotId   String?
+  createdAt      DateTime      @default(now())
+
+  scan          Scan                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanPage      ScanPage?           @relation(fields: [scanPageId], references: [id], onDelete: Cascade)
+  trackedIssue  TrackedIssue?       @relation(fields: [trackedIssueId], references: [id], onDelete: SetNull)
+  screenshot    Screenshot?         @relation(fields: [screenshotId], references: [id], onDelete: SetNull)
+  accessibility AccessibilityIssue?
+  uiHealth      UIHealthIssue?
+  seo           SEOIssue?
+  security      SecurityIssue?
+  bugReports    BugReport[]
+  aiInsights    AiInsight[]
+
+  @@unique([scanId, fingerprint])
+  @@index([scanId, category, severity])
+  @@index([scanPageId])
+  @@index([trackedIssueId])
+}
+
+model AccessibilityIssue {
+  issueId        String        @id
+  axeRuleId      String
+  impact         String? // axe impact: critical | serious | moderate | minor
+  wcagCriteria   String[]      @default([]) // e.g. ["1.1.1"]
+  wcagLevel      String? // A | AA | AAA
+  tags           String[]      @default([])
+  helpUrl        String?
+  detection      DetectionType @default(AUTOMATED)
+  failureSummary String?
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([axeRuleId])
+}
+
+model UIHealthIssue {
+  issueId      String      @id
+  checkType    UiCheckType
+  resourceUrl  String?
+  statusCode   Int?
+  measurements Json? // e.g. { scrollWidth: 1450, viewportWidth: 390 }
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([checkType])
+}
+
+model SEOIssue {
+  issueId   String       @id
+  checkType SeoCheckType
+  expected  String?
+  actual    String?
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([checkType])
+}
+
+model SecurityIssue {
+  issueId          String            @id
+  checkType        SecurityCheckType
+  headerName       String?
+  observedValue    String?
+  recommendedValue String?
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([checkType])
+}
+
+/// One problem across many scans of a website (same fingerprint).
+/// Powers "new / resolved / recurring" and keeps user decisions such as
+/// "ignore" or "false positive" from one scan to the next.
+model TrackedIssue {
+  id               String        @id @default(cuid())
+  websiteId        String
+  fingerprint      String
+  category         IssueCategory
+  ruleId           String
+  title            String
+  severity         Severity
+  status           IssueStatus   @default(OPEN)
+  occurrenceCount  Int           @default(1)
+  firstSeenScanId  String?
+  lastSeenScanId   String?
+  resolvedInScanId String?
+  firstSeenAt      DateTime      @default(now())
+  lastSeenAt       DateTime      @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  website        Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  firstSeenScan  Scan?   @relation("TrackedFirstSeen", fields: [firstSeenScanId], references: [id], onDelete: SetNull)
+  lastSeenScan   Scan?   @relation("TrackedLastSeen", fields: [lastSeenScanId], references: [id], onDelete: SetNull)
+  resolvedInScan Scan?   @relation("TrackedResolvedIn", fields: [resolvedInScanId], references: [id], onDelete: SetNull)
+  issues         Issue[]
+
+  @@unique([websiteId, fingerprint])
+  @@index([websiteId, status])
+}
+
+// ----------------------------------------------------------------------------
+// Performance
+// ----------------------------------------------------------------------------
+
+model PerformanceResult {
+  id                 String     @id @default(cuid())
+  scanId             String
+  scanPageId         String
+  formFactor         FormFactor @default(MOBILE)
+  performanceScore   Int?
+  accessibilityScore Int?
+  bestPracticesScore Int?
+  seoScore           Int?
+  fcpMs              Float?
+  lcpMs              Float?
+  cls                Float?
+  inpMs              Float? // null in navigation mode; see docs/02-modules.md
+  tbtMs              Float?
+  speedIndexMs       Float?
+  opportunities      Json? // render-blocking, unused CSS/JS, image size, ...
+  diagnostics        Json?
+  lighthouseVersion  String?
+  rawReportKey       String? // full Lighthouse JSON in file storage
+  createdAt          DateTime   @default(now())
+
+  scan     Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanPage ScanPage @relation(fields: [scanPageId], references: [id], onDelete: Cascade)
+
+  @@unique([scanPageId, formFactor])
+  @@index([scanId])
+}
+
+// ----------------------------------------------------------------------------
+// Screenshots & visual regression
+// ----------------------------------------------------------------------------
+
+/// Metadata only. The PNG lives in file storage under `storageKey`.
+model Screenshot {
+  id         String         @id @default(cuid())
+  scanId     String? // null for baseline copies, so deleting old scans never deletes baselines
+  scanPageId String?
+  kind       ScreenshotKind
+  viewport   String?
+  width      Int
+  height     Int
+  storageKey String         @unique
+  mimeType   String         @default("image/png")
+  sizeBytes  Int
+  createdAt  DateTime       @default(now())
+
+  scan                 Scan?              @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanPage             ScanPage?          @relation(fields: [scanPageId], references: [id], onDelete: Cascade)
+  issues               Issue[]
+  bugReports           BugReport[]
+  baseline             VisualBaseline?    @relation("BaselineScreenshot")
+  comparisonsAsCurrent VisualComparison[] @relation("ComparisonCurrent")
+  comparisonsAsDiff    VisualComparison[] @relation("ComparisonDiff")
+
+  @@index([scanId])
+  @@index([scanPageId])
+}
+
+model VisualBaseline {
+  id            String   @id @default(cuid())
+  websiteId     String
+  pageUrl       String
+  viewport      String
+  screenshotId  String   @unique
+  ignoreRegions Json     @default("[]") // [{ x, y, width, height }] or CSS selectors
+  failPercent   Float    @default(0.5) // comparisons above this % are "changed"
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  website     Website            @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  screenshot  Screenshot         @relation("BaselineScreenshot", fields: [screenshotId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  comparisons VisualComparison[]
+
+  @@unique([websiteId, pageUrl, viewport])
+}
+
+model VisualComparison {
+  id                  String   @id @default(cuid())
+  baselineId          String
+  scanId              String?
+  currentScreenshotId String
+  diffScreenshotId    String?
+  diffPixels          Int
+  totalPixels         Int
+  diffPercent         Float
+  passed              Boolean
+  createdAt           DateTime @default(now())
+
+  baseline          VisualBaseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
+  scan              Scan?          @relation(fields: [scanId], references: [id], onDelete: SetNull)
+  currentScreenshot Screenshot     @relation("ComparisonCurrent", fields: [currentScreenshotId], references: [id], onDelete: Cascade)
+  diffScreenshot    Screenshot?    @relation("ComparisonDiff", fields: [diffScreenshotId], references: [id], onDelete: SetNull)
+
+  @@index([baselineId, createdAt(sort: Desc)])
+}
+
+// ----------------------------------------------------------------------------
+// Bug reports, AI, notifications, audit log
+// ----------------------------------------------------------------------------
+
+/// Fields are copied from the issue at creation time, so the report stays
+/// readable even after the original scan is deleted.
+model BugReport {
+  id               String          @id @default(cuid())
+  projectId        String
+  websiteId        String?
+  issueId          String?
+  createdById      String?
+  title            String
+  description      String
+  severity         Severity
+  priority         Priority        @default(P3)
+  status           BugReportStatus @default(OPEN)
+  affectedUrl      String
+  browser          String
+  viewport         String
+  stepsToReproduce String[]        @default([])
+  expectedBehavior String
+  actualBehavior   String
+  selector         String?
+  htmlSnippet      String?
+  suggestedFix     String?
+  screenshotId     String?
+  aiGenerated      Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  website    Website?    @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  issue      Issue?      @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  createdBy  User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  screenshot Screenshot? @relation(fields: [screenshotId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([issueId])
+}
+
+/// Cached Claude responses: one per issue and kind, so repeat views cost nothing.
+model AiInsight {
+  id           String        @id @default(cuid())
+  issueId      String
+  kind         AiInsightKind
+  model        String
+  content      Json
+  inputTokens  Int?
+  outputTokens Int?
+  createdById  String?
+  createdAt    DateTime      @default(now())
+
+  issue     Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([issueId, kind])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+/// Append-only audit trail. Survives user/project deletion (SetNull).
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  projectId  String?
+  action     String // e.g. "website.created", "scan.cancelled"
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
