@@ -2,7 +2,7 @@ import type { IssueDto } from '@whc/shared';
 import { ChevronRight, ExternalLink, History } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { SeverityBadge } from '@/components/common/StatusBadges';
+import { FindingLevelBadge, SeverityBadge } from '@/components/common/StatusBadges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { errorMessage } from '@/lib/form-errors';
@@ -84,6 +84,23 @@ export function IssueList({
                     </Row>
                   ) : null}
                   {issue.viewport ? <Row label="Screen size">{issue.viewport}</Row> : null}
+                  {issue.seo?.expected ? <Row label="Expected">{issue.seo.expected}</Row> : null}
+                  {issue.seo?.actual ? <Row label="Found">{issue.seo.actual}</Row> : null}
+                  {issue.security ? (
+                    <Row label="Level">
+                      <FindingLevelBadge level={issue.security.findingLevel} />
+                    </Row>
+                  ) : null}
+                  {issue.security?.observedValue ? (
+                    <Row label="Observed">
+                      <span className="break-all">{issue.security.observedValue}</span>
+                    </Row>
+                  ) : null}
+                  {issue.security?.recommendedValue ? (
+                    <Row label="Recommended">
+                      <span className="break-all">{issue.security.recommendedValue}</span>
+                    </Row>
+                  ) : null}
                   {issue.uiHealth?.resourceUrl ? (
                     <Row label="Resource">
                       <span className="break-all">{issue.uiHealth.resourceUrl}</span>

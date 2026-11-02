@@ -154,7 +154,12 @@ export function createDashboardService({ prisma }: { prisma: PrismaClient }) {
       const [latestScores, perfAvg, openPerWebsite] = await Promise.all([
         prisma.scan.findMany({
           where: { id: { in: latestIds } },
-          select: { accessibilityScore: true, uiHealthScore: true },
+          select: {
+            accessibilityScore: true,
+            uiHealthScore: true,
+            seoScore: true,
+            securityScore: true,
+          },
         }),
         prisma.performanceResult.aggregate({
           where: { scanId: { in: latestIds } },
@@ -183,6 +188,9 @@ export function createDashboardService({ prisma }: { prisma: PrismaClient }) {
         scores: {
           accessibility: average(latestScores.map((s) => s.accessibilityScore)),
           uiHealth: average(latestScores.map((s) => s.uiHealthScore)),
+          // Null when no latest scan has these audits (scanned before Phase 6), not 0.
+          seo: average(latestScores.map((s) => s.seoScore)),
+          security: average(latestScores.map((s) => s.securityScore)),
           performance:
             perfAvg._avg.performanceScore === null
               ? null

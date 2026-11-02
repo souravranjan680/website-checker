@@ -5,7 +5,9 @@ import { loadConfig } from './config/env';
 import { systemResolveHostname } from './lib/hostname-guard';
 import { createLogger } from './lib/logger';
 import { createSmtpMailer } from './lib/mailer';
-import { createBullPdfRenderer } from './lib/pdf-renderer';
+import { createClaudeProvider } from './lib/ai-provider';
+import { createBullExportJobs } from './lib/export-jobs';
+import { startNotificationEmailWorker } from './lib/notification-email';
 import { createRedisRateLimitStore } from './lib/rate-limit';
 import { createRedisClient } from './lib/redis';
 import { createRedisScanEventHub } from './lib/scan-events';
@@ -33,10 +35,33 @@ const healthService = createHealthService({
 const scanQueue = createBullScanQueue(config.redisUrl, config.scans.queuePrefix);
 const scanEvents = createRedisScanEventHub(config.redisUrl, redis, logger);
 // PDF reports are rendered by the scanner worker (it already has a browser).
-const pdfRenderer = createBullPdfRenderer({
+const exportJobs = createBullExportJobs({
   redisUrl: config.redisUrl,
   prefix: config.scans.queuePrefix,
   storageDir: config.scans.storageDir,
+  logger,
+});
+
+// The key is read here once and handed to the provider; it is not part of AppConfig,
+// never logged and never sent to the browser.
+const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+const aiProvider = anthropicKey
+  ? createClaudeProvider({
+      apiKey: anthropicKey,
+      model: config.claudeModel,
+      maxOutputTokens: config.ai.maxOutputTokens,
+      logger,
+    })
+  : null;
+
+const mailer = createSmtpMailer(config.mail);
+// Sends the e-mails queued by the scanner for notifications (see lib/notification-email.ts).
+const notificationWorker = startNotificationEmailWorker({
+  redisUrl: config.redisUrl,
+  prefix: config.scans.queuePrefix,
+  prisma,
+  mailer,
+  appUrl: config.appUrl,
   logger,
 });
 
@@ -46,11 +71,12 @@ const app = createApp({
   prisma,
   healthService,
   rateLimitStore: createRedisRateLimitStore(redis),
-  mailer: createSmtpMailer(config.mail),
+  mailer,
   resolveHostname: systemResolveHostname,
   scanQueue,
   scanEvents,
-  pdfRenderer,
+  exportJobs,
+  aiProvider,
 });
 
 if (config.nodeEnv === 'production' && !config.auth.cookieSecure) {
@@ -85,7 +111,8 @@ async function shutdown(signal: string): Promise<void> {
     prisma.$disconnect(),
     scanQueue.close(),
     scanEvents.close(),
-    pdfRenderer.close(),
+    exportJobs.close(),
+    notificationWorker.close(),
   ]);
   await redis.quit().catch(() => {});
   process.exit(0);

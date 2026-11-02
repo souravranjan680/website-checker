@@ -72,6 +72,13 @@ export function testScannerConfig(
     maxDurationMs: 120_000,
     maxLinkChecks: 50,
     maxIssueScreenshots: 20,
+    // Lighthouse adds ~10-20 s per page; only the performance test turns it on.
+    lighthouseEnabled: false,
+    maxLighthousePages: 1,
+    lighthouseTimeoutMs: 90_000,
+    // Visual snapshots add a few seconds per page; tests that need them turn them on.
+    visualPages: 0,
+    retentionDays: 0,
     headless: true,
     ...overrides,
   };

@@ -1,10 +1,28 @@
-import type { PrismaClient } from '@whc/db';
+import { readFile } from 'node:fs/promises';
+import type { Prisma, PrismaClient } from '@whc/db';
 import type { Redis } from 'ioredis';
 import { request, type APIRequestContext, type Browser, type BrowserContext } from 'playwright';
 import { launchScanBrowser, newScanContext, SCANNER_UA_SUFFIX } from '../browser';
 import { BLOCKED_RESPONSE_HEADER, SCAN_VIEWPORTS, type ViewportSpec } from '../browser-types';
 import { runDomChecksInPage } from '../checks/dom';
 import type { ScannerConfig } from '../config';
+import { duplicateSeoDrafts, pageSeoDrafts, siteSeoDrafts, type SeoPageInput } from '../audits/seo';
+import {
+  computeSecurityScore,
+  cookieSecurityDrafts,
+  headerSecurityDrafts,
+  mixedContentDrafts,
+  transportSecurityDrafts,
+  type SecurityPageInput,
+} from '../audits/security';
+import {
+  freePort,
+  isTransientLighthouseError,
+  performanceDrafts,
+  runLighthouse,
+} from '../audits/lighthouse';
+import { captureVisual, compareImages, parseIgnoreSettings } from '../audits/visual';
+import { collectSiteSecurityFacts, collectSiteSeoFacts, fetchSiteFile } from '../audits/site-files';
 import { ALLOW_ALL, parseRobotsTxt, type RobotsRules } from '../crawler/robots';
 import {
   compilePatterns,
@@ -15,12 +33,13 @@ import {
   pathOf,
 } from '../crawler/urls';
 import { computeScore, trackIssues } from '../finalize';
+import { notifyScanFinished, type EmailJobQueue } from '../notifications';
 import { domToDrafts, uiDraft, type IssueDraft } from '../issues';
 import type { Logger } from '../logger';
 import { saveIssues, saveScreenshot } from '../persistence';
 import { createProgressReporter, type ProgressReporter } from '../progress';
 import { captureHighlightedIssue, captureViewport } from '../screenshots';
-import type { FileStorage } from '../storage';
+import { resolveKey, type FileStorage } from '../storage';
 import { scanPage } from './scan-page';
 
 export interface ScanDeps {
@@ -30,6 +49,8 @@ export interface ScanDeps {
   logger: Logger;
   publisher: Redis;
   domBundle: string;
+  /** Where e-mail jobs for notifications go (null = in-app notifications only). */
+  emailQueue?: EmailJobQueue | null;
 }
 
 export type ScanOutcome = 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
@@ -108,9 +129,13 @@ export async function runScan(
   }, config.maxDurationMs);
 
   let browser: Browser | null = null;
+  let lighthouseBrowser: Browser | null = null;
   let api: APIRequestContext | null = null;
   // Cancelling closes the browser at once, which aborts any page load in progress.
-  const onAbort = () => void browser?.close().catch(() => {});
+  const onAbort = () => {
+    void browser?.close().catch(() => {});
+    void lighthouseBrowser?.close().catch(() => {});
+  };
   options.signal.addEventListener('abort', onAbort);
   const checkpoint = () => {
     if (options.signal.aborted) throw new ScanCancelled();
@@ -131,6 +156,11 @@ export async function runScan(
 
   try {
     browser = await launchScanBrowser(config); // may throw → retried by BullMQ
+    // Recorded for bug reports ("Browser: Chromium 140.0...").
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { browserVersion: `Chromium ${browser.version()}` },
+    });
     checkpoint();
     const desktop = SCAN_VIEWPORTS[0]!;
     const context = await newScanContext(browser, desktop);
@@ -143,10 +173,14 @@ export async function runScan(
     });
 
     // ------------------------------------------------------------ robots.txt
+    // Always read for the SEO audit; its rules only limit crawling when the website says so.
+    const robotsFile = await fetchSiteFile(api, new URL('/robots.txt', startUrl).toString(), log);
     let robots: RobotsRules = ALLOW_ALL;
-    if (website.respectRobotsTxt && mode === 'CRAWL') {
-      robots = await loadRobots(api, startUrl, log);
+    if (website.respectRobotsTxt && mode === 'CRAWL' && robotsFile.text) {
+      robots = parseRobotsTxt(robotsFile.text);
     }
+    const seoPages: SeoPageInput[] = [];
+    const securityPages: SecurityPageInput[] = [];
     const include = compilePatterns(website.includePatterns);
     const exclude = compilePatterns(website.excludePatterns);
 
@@ -207,9 +241,29 @@ export async function runScan(
           consoleErrors: result.network.consoleErrors,
           failedRequests: result.network.failedRequests as unknown as object[],
           pageErrors: result.network.pageErrors,
+          seoData: result.meta ? (result.meta.seo as unknown as object) : undefined,
           errorMessage: result.errorMessage,
         },
       });
+      if (result.outcome === 'DONE' && result.meta) {
+        seoPages.push({
+          scanPageId: scanPageRow.id,
+          url: result.finalUrl,
+          title: result.meta.title,
+          metaDescription: result.meta.metaDescription,
+          canonical: result.meta.canonical,
+          h1Count: result.meta.h1Count,
+          xRobotsTag: result.responseHeaders?.['x-robots-tag'] ?? null,
+          seo: result.meta.seo,
+        });
+        securityPages.push({
+          scanPageId: scanPageRow.id,
+          url: result.finalUrl,
+          headers: result.responseHeaders ?? {},
+          cookies: result.cookies,
+          insecureReferences: result.insecureReferences,
+        });
+      }
       pages.push({
         id: scanPageRow.id,
         url: result.finalUrl,
@@ -320,6 +374,49 @@ export async function runScan(
       }
     }
 
+    // ------------------------------------------------ visual regression
+    // Stable PNG snapshots (desktop + mobile) of the first pages and of every page
+    // that has a baseline. Baselines only change by explicit user action (API), never here.
+    const baselines = await prisma.visualBaseline.findMany({
+      where: { websiteId: website.id },
+      include: { screenshot: { select: { storageKey: true } } },
+    });
+    const visualTargets = scannedPages.filter(
+      (p, index) =>
+        index < config.visualPages || baselines.some((b) => b.pageUrl === p.normalizedUrl),
+    );
+    if (visualTargets.length > 0 && !timeLimitReached) {
+      await progress.update({
+        step: 'Capturing visual snapshots',
+        currentUrl: null,
+        progress: 79,
+        issuesFound,
+      });
+      for (const viewport of VISUAL_VIEWPORTS) {
+        checkpoint();
+        const visualContext = await newScanContext(browser, viewport);
+        try {
+          for (const target of visualTargets) {
+            checkpoint();
+            if (timeLimitReached) break;
+            await captureAndCompare({
+              context: visualContext,
+              target,
+              viewport,
+              baseline: baselines.find(
+                (b) => b.pageUrl === target.normalizedUrl && b.viewport === viewport.label,
+              ),
+              scanId,
+              deps,
+              log,
+            });
+          }
+        } finally {
+          await visualContext.close().catch(() => {});
+        }
+      }
+    }
+
     // -------------------------------------------------------- broken links
     checkpoint();
     if (scannedPages.length > 0 && !timeLimitReached) {
@@ -343,6 +440,120 @@ export async function runScan(
       });
     }
     checkpoint();
+
+    // ---------------------------------------------------------- Lighthouse
+    const lighthousePages = config.lighthouseEnabled
+      ? scannedPages.slice(0, Math.min(website.lighthousePageLimit, config.maxLighthousePages))
+      : [];
+    if (lighthousePages.length > 0 && !timeLimitReached) {
+      // A separate Chromium (same proxy and lockdown flags) that Lighthouse controls
+      // through a local DevTools port. One page at a time: parallel runs skew timings.
+      const port = await freePort();
+      lighthouseBrowser = await launchScanBrowser(config, {
+        extraArgs: [`--remote-debugging-port=${port}`],
+      });
+      try {
+        for (const [index, target] of lighthousePages.entries()) {
+          checkpoint();
+          if (timeLimitReached) break;
+          await progress.update({
+            step: `Measuring performance (Lighthouse) ${index + 1} of ${lighthousePages.length}`,
+            currentUrl: target.url,
+            progress: 82 + (index / lighthousePages.length) * 4,
+            issuesFound,
+          });
+          let { result, rawJson } = await runLighthouse(target.url, port, {
+            timeoutMs: config.lighthouseTimeoutMs,
+          });
+          // A dropped connection (common on busy public sites) gets one more try.
+          if (isTransientLighthouseError(result.error)) {
+            log.info(
+              { url: target.url, error: result.error },
+              'Lighthouse network error, retrying once',
+            );
+            await new Promise((resolve) => setTimeout(resolve, 3_000));
+            checkpoint();
+            ({ result, rawJson } = await runLighthouse(target.url, port, {
+              timeoutMs: config.lighthouseTimeoutMs,
+            }));
+          }
+          checkpoint();
+          let rawReportKey: string | null = null;
+          if (rawJson) {
+            rawReportKey = `scans/${scanId}/lighthouse/${target.id}-mobile.json`;
+            await deps.storage.put(rawReportKey, Buffer.from(rawJson));
+          }
+          if (!result.ok) log.warn({ url: target.url, error: result.error }, 'Lighthouse failed');
+          await prisma.performanceResult.create({
+            data: {
+              scanId,
+              scanPageId: target.id,
+              formFactor: 'MOBILE',
+              performanceScore: result.scores.performance,
+              accessibilityScore: result.scores.accessibility,
+              bestPracticesScore: result.scores.bestPractices,
+              seoScore: result.scores.seo,
+              fcpMs: result.metrics.fcpMs,
+              lcpMs: result.metrics.lcpMs,
+              cls: result.metrics.cls,
+              inpMs: null,
+              tbtMs: result.metrics.tbtMs,
+              speedIndexMs: result.metrics.speedIndexMs,
+              opportunities: result.opportunities as unknown as object[],
+              diagnostics: { ...result.diagnostics, error: result.error } as unknown as object,
+              lighthouseVersion: result.lighthouseVersion,
+              rawReportKey,
+            },
+          });
+          await storeIssues(target.id, performanceDrafts(website.id, target.url, result));
+        }
+      } finally {
+        await lighthouseBrowser.close().catch(() => {});
+        lighthouseBrowser = null;
+      }
+    }
+
+    // ----------------------------------------------------------------- SEO
+    // Runs on facts already collected; only robots.txt and the sitemap are fetched.
+    const siteChecks: Record<string, unknown> = {};
+    if (scannedPages.length > 0) {
+      await progress.update({ step: 'Checking SEO', currentUrl: null, progress: 86, issuesFound });
+      const duplicates = duplicateSeoDrafts(website.id, seoPages);
+      for (const page of seoPages) {
+        await storeIssues(page.scanPageId, [
+          ...pageSeoDrafts(website.id, page, siteHostname),
+          ...(duplicates.get(page.scanPageId) ?? []),
+        ]);
+      }
+      const seoFacts = await collectSiteSeoFacts(api, startUrl, robotsFile, log);
+      siteChecks.seo = seoFacts;
+      await storeIssues(null, siteSeoDrafts(website.id, startUrl, seoFacts));
+      checkpoint();
+
+      // ------------------------------------------------------------ security
+      // Passive only: headers and cookie flags we already received, the page's own
+      // HTML, one TLS handshake and one http:// request, both through the egress proxy.
+      await progress.update({ step: 'Checking security configuration', progress: 89, issuesFound });
+      const securityFacts = await collectSiteSecurityFacts({
+        api,
+        proxyUrl: config.egressProxyUrl,
+        firstPageUrl: securityPages[0]?.url ?? startUrl,
+        log,
+      });
+      siteChecks.security = securityFacts;
+      const securityDrafts = [
+        ...transportSecurityDrafts(website.id, startUrl, securityFacts),
+        ...headerSecurityDrafts(website.id, startUrl, securityPages, securityFacts.servedOverHttps),
+        ...cookieSecurityDrafts(website.id, startUrl, securityPages, securityFacts.servedOverHttps),
+        ...mixedContentDrafts(website.id, securityPages),
+      ];
+      for (const { scanPageId, draft } of securityDrafts) await storeIssues(scanPageId, [draft]);
+      checkpoint();
+    }
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { siteChecks: siteChecks as object },
+    });
 
     // -------------------------------------------------------------- finalize
     await progress.update(
@@ -368,8 +579,9 @@ export async function runScan(
       outcome = 'COMPLETED';
     }
 
+    let tracking: Awaited<ReturnType<typeof trackIssues>> | null = null;
     if (outcome !== 'FAILED') {
-      await trackIssues(
+      tracking = await trackIssues(
         prisma,
         { id: scanId, websiteId: website.id },
         {
@@ -396,6 +608,17 @@ export async function runScan(
     );
     await progress.finished(outcome);
     log.info({ outcome, pages: pages.length, issues: issuesFound }, 'scan finished');
+    // After finishScan, so previousScanId and the counts are final.
+    await notifyScanFinished(
+      { prisma, emailQueue: deps.emailQueue ?? null, logger: log },
+      {
+        scanId,
+        status: outcome,
+        regressions: tracking
+          ? { newIssues: tracking.newCount, reopenedIssues: tracking.reopenedCount }
+          : null,
+      },
+    ).catch((err: unknown) => log.warn({ err }, 'could not create notifications'));
     return outcome;
   } catch (error) {
     if (error instanceof ScanCancelled || options.signal.aborted) {
@@ -425,6 +648,7 @@ export async function runScan(
     options.signal.removeEventListener('abort', onAbort);
     await api?.dispose().catch(() => {});
     await browser?.close().catch(() => {});
+    await lighthouseBrowser?.close().catch(() => {});
   }
 }
 
@@ -448,6 +672,7 @@ async function finishScan(
       pageUrl: true,
       viewport: true,
       accessibility: { select: { detection: true } },
+      security: { select: { checkType: true } },
     },
   });
   const count = (severity: string) => issues.filter((i) => i.severity === severity).length;
@@ -455,6 +680,8 @@ async function finishScan(
     (i) => i.category === 'ACCESSIBILITY' && i.accessibility?.detection !== 'NEEDS_REVIEW',
   );
   const ui = issues.filter((i) => i.category === 'UI_HEALTH' || i.category === 'RESPONSIVE');
+  const seo = issues.filter((i) => i.category === 'SEO');
+  const security = issues.filter((i) => i.security).map((i) => i.security!);
   const previous = await prisma.scan.findFirst({
     where: {
       websiteId,
@@ -464,6 +691,11 @@ async function finishScan(
     },
     orderBy: { createdAt: 'desc' },
     select: { id: true },
+  });
+  // Lighthouse performance: average over pages where it produced a score.
+  const perf = await prisma.performanceResult.aggregate({
+    where: { scanId, performanceScore: { not: null } },
+    _avg: { performanceScore: true },
   });
   const finishedAt = new Date();
   await prisma.scan.update({
@@ -483,6 +715,14 @@ async function finishScan(
       infoCount: count('INFO'),
       accessibilityScore: status === 'CANCELLED' ? null : computeScore(a11y, scannedPageCount),
       uiHealthScore: status === 'CANCELLED' ? null : computeScore(ui, scannedPageCount),
+      seoScore: status === 'CANCELLED' ? null : computeScore(seo, scannedPageCount),
+      performanceScore:
+        status === 'CANCELLED' || perf._avg.performanceScore === null
+          ? null
+          : Math.round(perf._avg.performanceScore),
+      // Null when the audit did not run (no page could be scanned), never a made-up 100.
+      securityScore:
+        status === 'CANCELLED' || scannedPageCount === 0 ? null : computeSecurityScore(security),
       previousScanId: previous?.id ?? null,
       finishedAt,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
@@ -490,22 +730,93 @@ async function finishScan(
   });
 }
 
-async function loadRobots(
-  api: APIRequestContext,
-  startUrl: string,
-  log: Logger,
-): Promise<RobotsRules> {
+const VISUAL_VIEWPORTS = SCAN_VIEWPORTS.filter(
+  (v) => v.label === '1920x1080' || v.label === '390x844',
+);
+
+/** Takes one visual snapshot and, when a baseline exists, compares and stores the result. */
+async function captureAndCompare(args: {
+  context: BrowserContext;
+  target: ScannedPage;
+  viewport: ViewportSpec;
+  baseline:
+    | {
+        id: string;
+        failPercent: number;
+        ignoreRegions: unknown;
+        screenshot: { storageKey: string };
+      }
+    | undefined;
+  scanId: string;
+  deps: ScanDeps;
+  log: Logger;
+}): Promise<void> {
+  const { context, target, viewport, baseline, scanId, deps, log } = args;
+  const page = await context.newPage();
   try {
-    const response = await api.get(new URL('/robots.txt', startUrl).toString(), {
-      maxRedirects: 3,
-      timeout: 10_000,
+    await page.goto(target.url, { waitUntil: 'load', timeout: deps.config.navTimeoutMs });
+    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
+    const ignore = parseIgnoreSettings(baseline?.ignoreRegions);
+    const capture = await captureVisual(page, ignore.selectors);
+    const currentId = await saveScreenshot(deps.prisma, deps.storage, {
+      scanId,
+      scanPageId: target.id,
+      kind: 'VISUAL_CURRENT',
+      viewport: viewport.label,
+      key: `scans/${scanId}/visual/${target.id}-${viewport.label}.png`,
+      buffer: capture.buffer,
+      width: capture.width,
+      height: capture.height,
     });
-    const text = response.ok() ? await response.text() : '';
-    await response.dispose();
-    return text ? parseRobotsTxt(text.slice(0, 500_000)) : ALLOW_ALL;
+    if (!baseline) return;
+
+    const baselinePng = await readFile(
+      resolveKey(deps.storage.root, baseline.screenshot.storageKey),
+    );
+    const result = compareImages(baselinePng, capture.buffer, {
+      failPercent: baseline.failPercent,
+      ignoreRegions: [...ignore.rects, ...capture.ignoredRegions],
+    });
+    const diffId = await saveScreenshot(deps.prisma, deps.storage, {
+      scanId,
+      scanPageId: target.id,
+      kind: 'VISUAL_DIFF',
+      viewport: viewport.label,
+      key: `scans/${scanId}/visual/${target.id}-${viewport.label}-diff.png`,
+      buffer: result.diffPng,
+      width: Math.max(result.size.baseline.width, result.size.current.width),
+      height: Math.max(result.size.baseline.height, result.size.current.height),
+    });
+    await deps.prisma.visualComparison.create({
+      data: {
+        baselineId: baseline.id,
+        scanId,
+        currentScreenshotId: currentId,
+        diffScreenshotId: diffId,
+        diffPixels: result.diffPixels,
+        totalPixels: result.totalPixels,
+        diffPercent: result.diffPercent,
+        passed: result.passed,
+        status: result.status,
+        details: {
+          rawDiffPixels: result.rawDiffPixels,
+          regions: result.regions,
+          size: result.size,
+          failPercent: baseline.failPercent,
+          truncated: capture.truncated,
+          ignoredRegions: ignore.rects.length + capture.ignoredRegions.length,
+          ignoredSelectors: ignore.selectors,
+        } as unknown as Prisma.InputJsonObject,
+      },
+    });
   } catch (error) {
-    log.info({ err: (error as Error).message }, 'robots.txt not available; crawling without it');
-    return ALLOW_ALL;
+    // A failed snapshot must not fail the scan; it is simply missing from the report.
+    log.warn(
+      { url: target.url, viewport: viewport.label, err: (error as Error).message },
+      'visual snapshot failed',
+    );
+  } finally {
+    await page.close().catch(() => {});
   }
 }
 

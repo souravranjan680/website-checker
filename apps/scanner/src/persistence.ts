@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@whc/db';
+import type { Prisma, PrismaClient, SecurityCheckType, SeoCheckType } from '@whc/db';
 import type { IssueDraft } from './issues';
 import type { FileStorage } from './storage';
 
@@ -9,7 +9,7 @@ export async function saveScreenshot(
   values: {
     scanId: string;
     scanPageId: string | null;
-    kind: 'PAGE_FULL' | 'VIEWPORT' | 'ISSUE_CROP';
+    kind: 'PAGE_FULL' | 'VIEWPORT' | 'ISSUE_CROP' | 'VISUAL_CURRENT' | 'VISUAL_DIFF';
     viewport: string;
     key: string;
     buffer: Buffer;
@@ -25,7 +25,7 @@ export async function saveScreenshot(
       kind: values.kind,
       viewport: values.viewport,
       storageKey: values.key,
-      mimeType: 'image/jpeg',
+      mimeType: values.key.endsWith('.png') ? 'image/png' : 'image/jpeg',
       width: values.width,
       height: values.height,
       sizeBytes: values.buffer.length,
@@ -94,6 +94,28 @@ export async function saveIssues(
           resourceUrl: d.uiHealth!.resourceUrl ?? null,
           statusCode: d.uiHealth!.statusCode ?? null,
           measurements: json(d.uiHealth!.measurements),
+        })),
+    }),
+    prisma.sEOIssue.createMany({
+      data: drafts
+        .filter((d) => d.seo)
+        .map((d) => ({
+          issueId: d.id,
+          checkType: d.seo!.checkType as SeoCheckType,
+          expected: d.seo!.expected,
+          actual: d.seo!.actual,
+        })),
+    }),
+    prisma.securityIssue.createMany({
+      data: drafts
+        .filter((d) => d.security)
+        .map((d) => ({
+          issueId: d.id,
+          checkType: d.security!.checkType as SecurityCheckType,
+          findingLevel: d.security!.findingLevel,
+          headerName: d.security!.headerName,
+          observedValue: d.security!.observedValue,
+          recommendedValue: d.security!.recommendedValue,
         })),
     }),
   ]);

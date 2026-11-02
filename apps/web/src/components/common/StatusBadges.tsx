@@ -78,6 +78,31 @@ const STATUS: Record<
   },
 };
 
+const LEVEL: Record<string, { label: string; icon: LucideIcon; className: string }> = {
+  CONFIRMED: {
+    label: 'Confirmed',
+    icon: XCircle,
+    className: 'border-red-600/40 text-red-700 dark:text-red-400',
+  },
+  WARNING: {
+    label: 'Warning',
+    icon: AlertTriangle,
+    className: 'border-amber-600/40 text-amber-700 dark:text-amber-400',
+  },
+  OBSERVATION: { label: 'Observation', icon: Info, className: 'text-muted-foreground' },
+};
+
+/** How sure a security finding is. "Confirmed" = observed configuration, not an exploit. */
+export function FindingLevelBadge({ level }: { level: string }) {
+  const info = LEVEL[level] ?? LEVEL.OBSERVATION!;
+  return (
+    <Badge variant="outline" className={cn('font-normal', info.className)}>
+      <info.icon aria-hidden="true" />
+      {info.label}
+    </Badge>
+  );
+}
+
 export function ScanStatusBadge({ status }: { status: string }) {
   const info = STATUS[status] ?? STATUS.QUEUED!;
   return (

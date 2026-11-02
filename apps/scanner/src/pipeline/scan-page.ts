@@ -1,4 +1,5 @@
-import type { LinkInfo } from '@whc/dom-checks';
+import type { InsecureReference, LinkInfo, SeoSnapshot } from '@whc/dom-checks';
+import { parseSetCookie, type CookieFacts } from '../audits/security';
 import type { Page } from 'playwright';
 import { BLOCKED_RESPONSE_HEADER, type ViewportSpec } from '../browser-types';
 import { axeSelector, boxesFor, runAxe } from '../checks/axe';
@@ -28,8 +29,13 @@ export interface PageScanResult {
     canonical: string | null;
     lang: string | null;
     h1Count: number;
+    seo: SeoSnapshot;
   } | null;
   responseHeaders: Record<string, string> | null;
+  /** Set-Cookie attributes of the main document (names and flags only, never values). */
+  cookies: CookieFacts[];
+  /** http:// references on an https page (mixed content), from the DOM. */
+  insecureReferences: InsecureReference[];
   network: PageNetworkLog;
   links: LinkInfo[];
   drafts: IssueDraft[];
@@ -84,6 +90,8 @@ export async function scanPage(params: {
     errorMessage: null,
     meta: null,
     responseHeaders: null,
+    cookies: [],
+    insecureReferences: [],
     network: log,
     links: [],
     drafts: [],
@@ -110,7 +118,16 @@ export async function scanPage(params: {
     result.finalUrl = page.url();
     result.httpStatus = response.status();
     result.contentType = headers['content-type'] ?? null;
-    result.responseHeaders = headers;
+    // Never store cookie values (they can be session tokens); the flags are kept below.
+    result.responseHeaders = Object.fromEntries(
+      Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'set-cookie'),
+    );
+    // headersArray keeps each Set-Cookie separate; only the name and flags are kept.
+    result.cookies = (await response.headersArray())
+      .filter((h) => h.name.toLowerCase() === 'set-cookie')
+      .map((h) => parseSetCookie(h.value))
+      .filter((c): c is CookieFacts => c !== null)
+      .slice(0, 50);
 
     if (headers[BLOCKED_RESPONSE_HEADER] === '1') {
       result.errorMessage =
@@ -177,7 +194,9 @@ export async function scanPage(params: {
       canonical: dom.snapshot.canonical,
       lang: dom.snapshot.lang,
       h1Count: dom.snapshot.h1Count,
+      seo: dom.snapshot.seo,
     };
+    result.insecureReferences = dom.snapshot.insecureReferences;
     const brokenImageSrcs = new Set(
       dom.findings
         .filter((f) => f.check === 'BROKEN_IMAGE')

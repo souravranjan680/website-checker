@@ -1,12 +1,24 @@
 import type { IssueHistoryDto } from '@whc/shared';
-import { CheckCircle2, ExternalLink, Eye, RotateCcw, ShieldOff, SquareDashed } from 'lucide-react';
+import {
+  Bug,
+  CheckCircle2,
+  ExternalLink,
+  Eye,
+  RotateCcw,
+  ShieldOff,
+  SquareDashed,
+} from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
 import { canEdit } from '@/components/common/RoleBadge';
-import { ScanStatusBadge, SeverityBadge } from '@/components/common/StatusBadges';
+import {
+  FindingLevelBadge,
+  ScanStatusBadge,
+  SeverityBadge,
+} from '@/components/common/StatusBadges';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -26,6 +38,8 @@ import { ApiError } from '@/lib/api-client';
 import { errorMessage } from '@/lib/form-errors';
 import { formatDateTime } from '@/lib/format';
 import { CATEGORY_LABEL, TRACKED_LABEL } from '@/lib/labels';
+import { AiExplanationCard } from '@/features/ai/AiExplanationCard';
+import { useCreateBugReport } from '@/features/bug-reports/api';
 import { useIssue } from './api';
 
 /** /issues/:issueId : everything about one detected problem, and its life across scans. */
@@ -103,34 +117,37 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
           </>
         }
         actions={
-          editable && tracking ? (
-            tracking.status === 'OPEN' || tracking.status === 'RESOLVED' ? (
-              <>
+          <>
+            {editable ? <CreateBugReportButton issueId={issue.id} /> : null}
+            {editable && tracking ? (
+              tracking.status === 'OPEN' || tracking.status === 'RESOLVED' ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirm('IGNORED')}
+                    disabled={update.isPending}
+                  >
+                    <Eye aria-hidden="true" /> Ignore
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirm('FALSE_POSITIVE')}
+                    disabled={update.isPending}
+                  >
+                    <ShieldOff aria-hidden="true" /> False positive
+                  </Button>
+                </>
+              ) : (
                 <Button
                   variant="outline"
-                  onClick={() => setConfirm('IGNORED')}
+                  onClick={() => void apply('OPEN')}
                   disabled={update.isPending}
                 >
-                  <Eye aria-hidden="true" /> Ignore
+                  <RotateCcw aria-hidden="true" /> Reopen
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setConfirm('FALSE_POSITIVE')}
-                  disabled={update.isPending}
-                >
-                  <ShieldOff aria-hidden="true" /> False positive
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="outline"
-                onClick={() => void apply('OPEN')}
-                disabled={update.isPending}
-              >
-                <RotateCcw aria-hidden="true" /> Reopen
-              </Button>
-            )
-          ) : null
+              )
+            ) : null}
+          </>
         }
       />
 
@@ -164,6 +181,8 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
             </CardContent>
           </Card>
 
+          <AiExplanationCard issueId={issue.id} />
+
           <Card>
             <CardHeader>
               <CardTitle>Where</CardTitle>
@@ -185,6 +204,23 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
                   )}
                 </Row>
                 {issue.viewport ? <Row label="Screen size">{issue.viewport}</Row> : null}
+                {issue.seo?.expected ? <Row label="Expected">{issue.seo.expected}</Row> : null}
+                {issue.seo?.actual ? <Row label="Found">{issue.seo.actual}</Row> : null}
+                {issue.security ? (
+                  <Row label="Level">
+                    <FindingLevelBadge level={issue.security.findingLevel} />
+                  </Row>
+                ) : null}
+                {issue.security?.observedValue ? (
+                  <Row label="Observed">
+                    <span className="break-all">{issue.security.observedValue}</span>
+                  </Row>
+                ) : null}
+                {issue.security?.recommendedValue ? (
+                  <Row label="Recommended">
+                    <span className="break-all">{issue.security.recommendedValue}</span>
+                  </Row>
+                ) : null}
                 <Row label="Rule">
                   <code className="text-xs">{issue.ruleId}</code>
                 </Row>
@@ -384,5 +420,25 @@ function CodeBlock({ label, children }: { label: string; children: string }) {
         {children}
       </pre>
     </div>
+  );
+}
+
+/** Builds a bug report from this issue (or opens the existing open one). */
+function CreateBugReportButton({ issueId }: { issueId: string }) {
+  const create = useCreateBugReport();
+  const navigate = useNavigate();
+  const onClick = async () => {
+    try {
+      const { report, created } = await create.mutateAsync(issueId);
+      toast.success(created ? 'Bug report created.' : 'This issue already has an open bug report.');
+      navigate(`/bug-reports/${report.id}`);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+  return (
+    <Button onClick={() => void onClick()} disabled={create.isPending}>
+      <Bug aria-hidden="true" /> {create.isPending ? 'Creating…' : 'Create bug report'}
+    </Button>
   );
 }

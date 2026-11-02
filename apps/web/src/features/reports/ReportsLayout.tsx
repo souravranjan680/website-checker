@@ -13,9 +13,10 @@ export const REPORT_TABS = [
   { path: 'accessibility', label: 'Accessibility', category: 'ACCESSIBILITY' },
   { path: 'ui-health', label: 'UI health', category: 'UI_HEALTH' },
   { path: 'responsive', label: 'Responsive', category: 'RESPONSIVE' },
-  { path: 'performance', label: 'Performance' },
-  { path: 'seo', label: 'SEO' },
-  { path: 'security', label: 'Security' },
+  { path: 'performance', label: 'Performance', category: 'PERFORMANCE' },
+  { path: 'seo', label: 'SEO', category: 'SEO' },
+  { path: 'security', label: 'Security', category: 'SECURITY' },
+  { path: 'visual', label: 'Visual' },
 ] as const;
 
 /** /scans/:scanId/reports/* : header, report tabs and export; the report itself is the <Outlet>. */

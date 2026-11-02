@@ -132,6 +132,12 @@ enum SeoCheckType {
   MISSING_IMAGE_ALT
   MISSING_SITEMAP
   MISSING_ROBOTS_TXT
+  NOINDEX
+  TITLE_LENGTH
+  META_DESCRIPTION_LENGTH
+  INVALID_CANONICAL
+  SKIPPED_HEADING_LEVEL
+  ROBOTS_BLOCKS_ALL
 }
 
 enum SecurityCheckType {
@@ -144,6 +150,33 @@ enum SecurityCheckType {
   MISSING_FRAME_PROTECTION
   MISSING_HSTS
   INSECURE_COOKIE
+  INVALID_CERTIFICATE
+  CERTIFICATE_EXPIRING
+  INSECURE_FORM
+  WEAK_CSP
+  VERSION_DISCLOSURE
+}
+
+/// How sure we are, for security findings (passive checks only, never exploits):
+/// OBSERVATION = worth knowing, often fine; WARNING = a recommended protection is missing;
+/// CONFIRMED = an insecure configuration we directly observed (not a tested exploit).
+enum NotificationEmailStatus {
+  NOT_REQUESTED
+  PENDING
+  SENT
+  FAILED
+}
+
+enum VisualComparisonStatus {
+  UNCHANGED
+  MINOR
+  CHANGED
+}
+
+enum SecurityFindingLevel {
+  OBSERVATION
+  WARNING
+  CONFIRMED
 }
 
 enum FormFactor {
@@ -191,25 +224,25 @@ enum NotificationType {
 // ----------------------------------------------------------------------------
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique // stored lower-cased by the API
-  passwordHash String
-  name         String
-  role         UserRole  @default(USER)
-  isActive     Boolean   @default(true)
-  lastLoginAt  DateTime?
+  id                      String    @id @default(cuid())
+  email                   String    @unique // stored lower-cased by the API
+  passwordHash            String
+  name                    String
+  role                    UserRole  @default(USER)
+  isActive                Boolean   @default(true)
+  lastLoginAt             DateTime?
   /// Which notifications the user wants (merged with defaults by the API).
-  notificationPreferences Json @default("{}")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  notificationPreferences Json      @default("{}")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
   apiTokens           ApiToken[]
   memberships         ProjectMember[]
-  createdProjects     Project[]          @relation("ProjectCreatedBy")
-  createdWebsites     Website[]          @relation("WebsiteCreatedBy")
-  triggeredScans      Scan[]             @relation("ScanTriggeredBy")
+  createdProjects     Project[]            @relation("ProjectCreatedBy")
+  createdWebsites     Website[]            @relation("WebsiteCreatedBy")
+  triggeredScans      Scan[]               @relation("ScanTriggeredBy")
   visualBaselines     VisualBaseline[]
   bugReports          BugReport[]
   aiInsights          AiInsight[]
@@ -219,15 +252,15 @@ model User {
 
 /// One row per login session. Only a SHA-256 hash of the token is stored.
 model RefreshToken {
-  id           String    @id @default(cuid())
-  userId       String
-  tokenHash    String    @unique
-  familyId     String // all rotations of one login share a family (reuse detection)
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  userAgent    String?
-  ipAddress    String?
-  createdAt    DateTime  @default(now())
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  familyId  String // all rotations of one login share a family (reuse detection)
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -381,6 +414,8 @@ model Scan {
   lowCount           Int         @default(0)
   infoCount          Int         @default(0)
   manualChecklist    Json? // state of the manual accessibility checklist
+  siteChecks         Json? // site-level audit facts: robots.txt, sitemap, TLS, HTTP redirect (Phase 6)
+  browserVersion     String? // e.g. "Chromium 140.0.7339.16", for bug reports (Phase 6)
   previousScanId     String? // the scan this one is compared against
   queuedAt           DateTime    @default(now())
   startedAt          DateTime?
@@ -427,6 +462,7 @@ model ScanPage {
   consoleErrors   Json?
   failedRequests  Json?
   pageErrors      Json? // uncaught JavaScript exceptions
+  seoData         Json? // meta robots, Open Graph, heading outline, images without alt (Phase 6)
   errorMessage    String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -524,8 +560,9 @@ model SEOIssue {
 }
 
 model SecurityIssue {
-  issueId          String            @id
+  issueId          String               @id
   checkType        SecurityCheckType
+  findingLevel     SecurityFindingLevel @default(WARNING)
   headerName       String?
   observedValue    String?
   recommendedValue String?
@@ -652,7 +689,7 @@ model VisualBaseline {
 }
 
 model VisualComparison {
-  id                  String   @id @default(cuid())
+  id                  String                 @id @default(cuid())
   baselineId          String
   scanId              String?
   currentScreenshotId String
@@ -661,7 +698,12 @@ model VisualComparison {
   totalPixels         Int
   diffPercent         Float
   passed              Boolean
-  createdAt           DateTime @default(now())
+  /// UNCHANGED = identical; MINOR = small differences under the baseline's threshold;
+  /// CHANGED = above the threshold (or the page size changed).
+  status              VisualComparisonStatus @default(UNCHANGED)
+  /// Changed regions (bounding boxes), size change and comparison settings.
+  details             Json?
+  createdAt           DateTime               @default(now())
 
   baseline          VisualBaseline @relation(fields: [baselineId], references: [id], onDelete: Cascade)
   scan              Scan?          @relation(fields: [scanId], references: [id], onDelete: SetNull)
@@ -731,18 +773,26 @@ model AiInsight {
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  userId    String
-  type      NotificationType
-  title     String
-  message   String
-  link      String?
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  id          String                  @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  link        String?
+  readAt      DateTime?
+  /// The real email outcome. The UI only says "sent" when this is SENT.
+  emailStatus NotificationEmailStatus @default(NOT_REQUESTED)
+  emailedAt   DateTime?
+  /// Short reason when sending failed (never contains credentials).
+  emailError  String?
+  /// e.g. { scanId, websiteId, newIssues, visualChanges }
+  metadata    Json?
+  createdAt   DateTime                @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 /// Append-only audit trail. Survives user/project deletion (SetNull).

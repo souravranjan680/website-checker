@@ -1,9 +1,10 @@
 import type { PrismaClient } from '@whc/db';
 import { FINISHED_SCAN_STATUSES, SCAN_QUEUE_NAME, scanChannels } from '@whc/shared';
-import { UnrecoverableError, Worker, type Job } from 'bullmq';
+import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import type { ScannerConfig } from './config';
 import type { Logger } from './logger';
+import { NOTIFICATION_QUEUE_NAME, notifyScanFinished } from './notifications';
 import { resetScanResults } from './persistence';
 import { runScan, type ScanDeps, type ScanOutcome } from './pipeline/run-scan';
 import type { FileStorage } from './storage';
@@ -56,6 +57,19 @@ export function createScanWorker(deps: WorkerDeps) {
     }
   });
 
+  // Notification e-mails are sent by the API (it can reach SMTP); we only queue them.
+  const emailQueue = new Queue(NOTIFICATION_QUEUE_NAME, {
+    connection: { url: config.redisUrl, maxRetriesPerRequest: null },
+    prefix: deps.queuePrefix ?? 'whc',
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 30_000 },
+      removeOnComplete: { age: 86_400 },
+      removeOnFail: { age: 7 * 86_400 },
+    },
+  });
+  emailQueue.on('error', (err) => logger.warn({ err }, 'notification queue error'));
+
   const scanDeps: ScanDeps = {
     prisma,
     storage: deps.storage,
@@ -63,6 +77,7 @@ export function createScanWorker(deps: WorkerDeps) {
     logger,
     publisher,
     domBundle: deps.domBundle,
+    emailQueue,
   };
 
   async function process(job: Job<ScanJobData>): Promise<ScanOutcome | 'SKIPPED'> {
@@ -122,6 +137,10 @@ export function createScanWorker(deps: WorkerDeps) {
           })
           .catch(() => {});
         await publishFinished(publisher, scanId, 'FAILED');
+        await notifyScanFinished(
+          { prisma, emailQueue, logger },
+          { scanId, status: 'FAILED', regressions: null },
+        ).catch((err: unknown) => logger.warn({ err, scanId }, 'could not create notifications'));
       } else {
         await prisma.scan
           .update({
@@ -156,7 +175,7 @@ export function createScanWorker(deps: WorkerDeps) {
     async close(): Promise<void> {
       for (const controller of active.values()) controller.abort();
       await worker.close();
-      await Promise.allSettled([subscriber.quit(), publisher.quit()]);
+      await Promise.allSettled([subscriber.quit(), publisher.quit(), emailQueue.close()]);
     },
   };
 }

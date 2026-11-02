@@ -2,6 +2,8 @@
  * Shared test helpers: a real app wired to the TEST database, plus fakes for the
  * things we don't want in tests (real email, real DNS, shared rate-limit counters).
  */
+import { copyFile, mkdir, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { createPrismaClient, type PrismaClient } from '@whc/db';
 import type { UserDto } from '@whc/shared';
 import request from 'supertest';
@@ -12,7 +14,8 @@ import type { ResolveHostname } from '../src/lib/hostname-guard';
 import { createLogger } from '../src/lib/logger';
 import type { MailMessage, Mailer } from '../src/lib/mailer';
 import { createMemoryRateLimitStore } from '../src/lib/rate-limit';
-import type { PdfRenderer } from '../src/lib/pdf-renderer';
+import type { AiProvider } from '../src/lib/ai-provider';
+import type { ExportJobs } from '../src/lib/export-jobs';
 import type { ScanEventHub } from '../src/lib/scan-events';
 import type { ScanQueue } from '../src/lib/scan-queue';
 import type { ScanEvent } from '@whc/shared';
@@ -129,17 +132,30 @@ export function createFakeScanEvents(): FakeScanEvents {
   return hub;
 }
 
-/** Stand-in for the scanner's PDF worker: returns a tiny fixed PDF and records calls. */
-export interface FakePdfRenderer extends PdfRenderer {
+/**
+ * Stand-in for the scanner's export worker: returns a tiny fixed PDF, and copies
+ * baseline files inside the test storage folder (what the real worker does).
+ */
+export interface FakeExportJobs extends ExportJobs {
   calls: { scanId: string; category?: string }[];
+  copies: { fromKey: string; toKey: string }[];
 }
 
-export function createFakePdfRenderer(): FakePdfRenderer {
-  const renderer: FakePdfRenderer = {
+export function createFakeExportJobs(storageDir = testConfig().scans.storageDir): FakeExportJobs {
+  const renderer: FakeExportJobs = {
     calls: [],
+    copies: [],
     async render(scanId, category) {
       renderer.calls.push({ scanId, category });
       return Buffer.from('%PDF-1.4\n% fake test pdf\n%%EOF\n');
+    },
+    async copyBaseline(fromKey, toKey) {
+      renderer.copies.push({ fromKey, toKey });
+      const from = path.join(storageDir, fromKey);
+      const to = path.join(storageDir, toKey);
+      await mkdir(path.dirname(to), { recursive: true });
+      await copyFile(from, to);
+      return { sizeBytes: (await stat(to)).size };
     },
     async close() {},
   };
@@ -153,18 +169,19 @@ export interface TestContext {
   config: AppConfig;
   queue: FakeScanQueue;
   events: FakeScanEvents;
-  pdf: FakePdfRenderer;
+  pdf: FakeExportJobs;
 }
 
 export function createTestContext(
   prisma: PrismaClient,
   configOverrides: Record<string, string> = {},
+  options: { aiProvider?: AiProvider } = {},
 ): TestContext {
   const config = testConfig(configOverrides);
   const mailer = createFakeMailer();
   const queue = createFakeScanQueue();
   const events = createFakeScanEvents();
-  const pdf = createFakePdfRenderer();
+  const pdf = createFakeExportJobs(config.scans.storageDir);
   const app = createApp({
     config,
     logger: createLogger({ level: 'silent', pretty: false }),
@@ -180,7 +197,8 @@ export function createTestContext(
     resolveHostname: fakeResolveHostname,
     scanQueue: queue,
     scanEvents: events,
-    pdfRenderer: pdf,
+    exportJobs: pdf,
+    aiProvider: options.aiProvider ?? null,
   });
   return { app, prisma, mailer, config, queue, events, pdf };
 }

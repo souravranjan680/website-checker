@@ -6,7 +6,8 @@ import type { PageNetworkLog } from './checks/collectors';
 import { pathOf } from './crawler/urls';
 
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
-export type Category = 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE';
+export type Category =
+  'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
 export type UiCheckType =
   | DomFinding['check']
   | 'BROKEN_LINK'
@@ -56,6 +57,14 @@ export interface IssueDraft {
     resourceUrl?: string | null;
     statusCode?: number | null;
     measurements?: Record<string, unknown>;
+  };
+  seo?: { checkType: string; expected: string | null; actual: string | null };
+  security?: {
+    checkType: string;
+    findingLevel: 'OBSERVATION' | 'WARNING' | 'CONFIRMED';
+    headerName: string | null;
+    observedValue: string | null;
+    recommendedValue: string | null;
   };
 }
 

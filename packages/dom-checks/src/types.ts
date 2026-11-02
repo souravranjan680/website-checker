@@ -33,12 +33,37 @@ export interface LinkInfo {
   html: string;
 }
 
+export interface SeoSnapshot {
+  /** <meta name="robots"> content, e.g. "noindex, nofollow". */
+  metaRobots: string | null;
+  ogTitle: string | null;
+  ogDescription: string | null;
+  ogImage: string | null;
+  /** Headings in document order (max 100), for the outline check. */
+  headings: { level: number; text: string }[];
+  imagesTotal: number;
+  /** <img> without an alt attribute that are not hidden from assistive tech. */
+  imagesWithoutAlt: number;
+}
+
+export interface InsecureReference {
+  /** "active" can change the page (scripts, styles, frames, forms); "passive" is media. */
+  kind: 'active' | 'passive' | 'form';
+  tag: string;
+  url: string;
+  selector: string;
+}
+
 export interface PageSnapshot {
   title: string;
   lang: string | null;
   metaDescription: string | null;
   canonical: string | null;
   h1Count: number;
+  /** On-page SEO facts (desktop pass only; empty defaults in layout mode). */
+  seo: SeoSnapshot;
+  /** Plain-http references on an https page (mixed content). Empty on http pages. */
+  insecureReferences: InsecureReference[];
   viewportWidth: number;
   viewportHeight: number;
   documentWidth: number;

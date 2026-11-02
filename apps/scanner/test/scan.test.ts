@@ -2,7 +2,7 @@
  * End-to-end scanner tests: a REAL Chromium scans the fixture websites through a
  * REAL egress proxy, and results are saved in the test database.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { PrismaClient } from '@whc/db';
 import type { Redis } from 'ioredis';
@@ -268,6 +268,238 @@ describe('clean fixture', () => {
     const row = await prisma.scan.findUniqueOrThrow({ where: { id: result.scanId } });
     expect(row.accessibilityScore).toBe(100);
   });
+});
+
+describe('SEO fixture', () => {
+  it('finds on-page and cross-page SEO problems, reads robots.txt and the sitemap', async () => {
+    const result = await scan(fixtures.url('/seo/'), { maxPages: 3, responsivePageLimit: 0 });
+    expect(result.outcome).toBe('COMPLETED');
+    const issues = await prisma.issue.findMany({
+      where: { scanId: result.scanId, category: 'SEO' },
+      include: { seo: true },
+    });
+    const byPage = (suffix: string) =>
+      issues
+        .filter((i) => i.pageUrl?.endsWith(suffix))
+        .map((i) => i.seo!.checkType)
+        .sort();
+
+    // The well-formed home page has no SEO issues.
+    expect(byPage('/seo/')).toEqual([]);
+    // Both duplicate pages: same title, noindex, no h1, skipped level, foreign canonical, no description/OG, image without alt.
+    const expected = [
+      'DUPLICATE_TITLE',
+      'INVALID_CANONICAL',
+      'MISSING_H1',
+      'MISSING_IMAGE_ALT',
+      'MISSING_META_DESCRIPTION',
+      'MISSING_OPEN_GRAPH',
+      'NOINDEX',
+      'SKIPPED_HEADING_LEVEL',
+    ];
+    expect(byPage('/seo/dup-a.html')).toEqual(expected);
+    expect(byPage('/seo/dup-b.html')).toEqual(expected);
+    expect(issues.every((i) => i.suggestedFix && i.seo)).toBe(true);
+
+    // robots.txt exists and lists a valid sitemap: no site-level issues, facts stored.
+    expect(issues.filter((i) => i.scanPageId === null)).toEqual([]);
+    const row = await prisma.scan.findUniqueOrThrow({ where: { id: result.scanId } });
+    expect(row.siteChecks).toMatchObject({
+      seo: {
+        robotsTxt: { status: 200, found: true, blocksAll: false },
+        sitemap: { status: 200, found: true, validXml: true, source: 'robots.txt' },
+      },
+    });
+    expect(row.seoScore).toBeGreaterThan(0);
+    expect(row.seoScore).toBeLessThan(100);
+    const page = await prisma.scanPage.findFirstOrThrow({
+      where: { scanId: result.scanId, url: { endsWith: '/seo/dup-a.html' } },
+    });
+    expect(page.seoData).toMatchObject({ metaRobots: 'noindex', imagesWithoutAlt: 1 });
+  });
+});
+
+describe('security fixture (passive configuration audit)', () => {
+  it('reports header, cookie, version and HTTPS findings with levels, and never stores cookie values', async () => {
+    const result = await scan(fixtures.url('/security/'), { maxPages: 1, responsivePageLimit: 0 });
+    expect(result.outcome).toBe('COMPLETED');
+    const issues = await prisma.issue.findMany({
+      where: { scanId: result.scanId, category: 'SECURITY' },
+      include: { security: true },
+    });
+    const found = issues.map((i) => `${i.security!.checkType}:${i.security!.findingLevel}`).sort();
+    expect(found).toEqual([
+      'INSECURE_COOKIE:OBSERVATION', // session: no HttpOnly / SameSite (site is http, so Secure is not asked)
+      'INSECURE_COOKIE:OBSERVATION', // theme: no HttpOnly
+      'MISSING_CSP:WARNING',
+      'MISSING_FRAME_PROTECTION:WARNING',
+      'MISSING_REFERRER_POLICY:OBSERVATION',
+      'MISSING_X_CONTENT_TYPE_OPTIONS:WARNING',
+      // The fixture is plain http and nothing answers https on the fixture host.
+      'NO_HTTPS:CONFIRMED',
+      'VERSION_DISCLOSURE:OBSERVATION',
+    ]);
+    const row = await prisma.scan.findUniqueOrThrow({ where: { id: result.scanId } });
+    // 100 - CSP 15 - frame 10 - nosniff 5 - cookie 5 - referrer 3 - version 2 - no https 40
+    expect(row.securityScore).toBe(20);
+    expect(row.siteChecks).toMatchObject({
+      security: { servedOverHttps: false, tls: { checked: false }, httpRedirect: null },
+    });
+
+    // The cookie VALUE appears nowhere: not in issues, page headers or site checks.
+    const pages = await prisma.scanPage.findMany({ where: { scanId: result.scanId } });
+    const everything = JSON.stringify({ issues, pages, row });
+    expect(everything).not.toContain('SECRET-SESSION-VALUE-123');
+    expect(everything).toContain('"session"');
+    expect(pages[0]!.responseHeaders).not.toHaveProperty('set-cookie');
+  });
+});
+
+describe('performance fixture (real Lighthouse through the egress proxy)', () => {
+  it('stores Lighthouse scores, metrics, the raw report and performance issues', async () => {
+    const ids = await createScanFor(prisma, fixtures.url('/perf/'), {
+      maxPages: 1,
+      responsivePageLimit: 0,
+    });
+    const scanDeps = createTestDeps(
+      testScannerConfig(proxy.url, { lighthouseEnabled: true }),
+      prisma,
+      publisher,
+    );
+    const outcome = await runScan(ids.scanId, scanDeps, { signal: new AbortController().signal });
+    expect(outcome).toBe('COMPLETED');
+
+    const results = await prisma.performanceResult.findMany({ where: { scanId: ids.scanId } });
+    expect(results).toHaveLength(1);
+    const r = results[0]!;
+    expect(r.formFactor).toBe('MOBILE');
+    for (const value of [
+      r.performanceScore,
+      r.accessibilityScore,
+      r.bestPracticesScore,
+      r.seoScore,
+    ]) {
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThanOrEqual(100);
+    }
+    expect(r.lcpMs).toBeGreaterThan(0);
+    expect(r.fcpMs).toBeGreaterThan(0);
+    expect(r.cls).not.toBeNull();
+    expect(r.inpMs).toBeNull();
+    expect(r.lighthouseVersion).toBe('13.5.0');
+    // The render-blocking script is found (as a Lighthouse 13 insight).
+    const opportunities = r.opportunities as { id: string }[];
+    expect(opportunities.map((o) => o.id)).toContain('render-blocking-insight');
+    // Raw JSON is stored for download, without the embedded screenshots.
+    const raw = JSON.parse(
+      readFileSync(path.join(scanDeps.storage.root, r.rawReportKey!), 'utf8'),
+    ) as { audits: Record<string, unknown>; lighthouseVersion: string };
+    expect(raw.lighthouseVersion).toBe('13.5.0');
+    expect(raw.audits['final-screenshot']).toBeUndefined();
+
+    const scan = await prisma.scan.findUniqueOrThrow({ where: { id: ids.scanId } });
+    expect(scan.performanceScore).toBe(r.performanceScore);
+    const perfIssues = await prisma.issue.findMany({
+      where: { scanId: ids.scanId, category: 'PERFORMANCE' },
+    });
+    expect(perfIssues.map((i) => i.ruleId)).toContain('perf/render-blocking-insight');
+  }, 180_000);
+});
+
+describe('visual regression (real browser snapshots)', () => {
+  it('captures PNG snapshots, compares only against an explicit baseline and never replaces it', async () => {
+    fixtures.setVisualChanged(false);
+    // One config (one storage folder) for all three scans, like a real deployment.
+    const visualConfig = testScannerConfig(proxy.url, { visualPages: 1 });
+    const visualDeps = () => createTestDeps(visualConfig, prisma, publisher);
+    const run = async (websiteId?: string) => {
+      const ids = await createScanFor(
+        prisma,
+        fixtures.url('/visual/'),
+        { maxPages: 1, responsivePageLimit: 0 },
+        websiteId,
+      );
+      const scanDeps = visualDeps();
+      const outcome = await runScan(ids.scanId, scanDeps, { signal: new AbortController().signal });
+      return { ...ids, outcome, storage: scanDeps.storage };
+    };
+
+    // 1) First scan: snapshots for desktop and mobile, no baseline yet so no comparison.
+    const first = await run();
+    expect(first.outcome).toBe('COMPLETED');
+    const shots = await prisma.screenshot.findMany({
+      where: { scanId: first.scanId, kind: 'VISUAL_CURRENT' },
+      orderBy: { viewport: 'asc' },
+    });
+    expect(shots.map((s) => [s.viewport, s.mimeType])).toEqual([
+      ['1920x1080', 'image/png'],
+      ['390x844', 'image/png'],
+    ]);
+    expect(await prisma.visualComparison.count({ where: { scanId: first.scanId } })).toBe(0);
+
+    // 2) The user explicitly makes the desktop snapshot the baseline (what the API does):
+    //    a copy of the file, owned by the website, ignoring the changing clock text.
+    const desktopShot = shots[0]!;
+    const baselineKey = `baselines/${first.websiteId}/test-desktop.png`;
+    await first.storage.put(
+      baselineKey,
+      readFileSync(path.join(first.storage.root, desktopShot.storageKey)),
+    );
+    const baselineShot = await prisma.screenshot.create({
+      data: {
+        kind: 'BASELINE',
+        viewport: '1920x1080',
+        width: desktopShot.width,
+        height: desktopShot.height,
+        storageKey: baselineKey,
+        mimeType: 'image/png',
+        sizeBytes: desktopShot.sizeBytes,
+      },
+    });
+    const page = await prisma.scanPage.findFirstOrThrow({ where: { scanId: first.scanId } });
+    const baseline = await prisma.visualBaseline.create({
+      data: {
+        websiteId: first.websiteId,
+        pageUrl: page.normalizedUrl,
+        viewport: '1920x1080',
+        screenshotId: baselineShot.id,
+        ignoreRegions: [{ selector: '.clock' }],
+      },
+    });
+
+    // 3) Rescan, nothing changed: not CHANGED (the clock is masked).
+    const second = await run(first.websiteId);
+    const same = await prisma.visualComparison.findFirstOrThrow({
+      where: { scanId: second.scanId },
+    });
+    expect(['UNCHANGED', 'MINOR']).toContain(same.status);
+    expect(same.passed).toBe(true);
+    expect(same.diffPercent).toBeLessThan(0.5);
+
+    // 4) A real change (a big banner): CHANGED, with a region and a diff image.
+    fixtures.setVisualChanged(true);
+    const third = await run(first.websiteId);
+    const changed = await prisma.visualComparison.findFirstOrThrow({
+      where: { scanId: third.scanId },
+      include: { diffScreenshot: true },
+    });
+    expect(changed.status).toBe('CHANGED');
+    expect(changed.passed).toBe(false);
+    expect(changed.diffPercent).toBeGreaterThan(0.5);
+    const details = changed.details as { regions: { y: number; height: number }[] };
+    expect(details.regions.length).toBeGreaterThan(0);
+    expect(details.regions[0]!.y).toBeLessThan(400); // the banner sits under the 300px hero
+    expect(changed.diffScreenshot?.kind).toBe('VISUAL_DIFF');
+    expect(existsSync(path.join(third.storage.root, changed.diffScreenshot!.storageKey))).toBe(
+      true,
+    );
+
+    // 5) The baseline itself never changed: same screenshot, same file.
+    const after = await prisma.visualBaseline.findUniqueOrThrow({ where: { id: baseline.id } });
+    expect(after.screenshotId).toBe(baselineShot.id);
+    expect(after.updatedAt.getTime()).toBe(baseline.updatedAt.getTime());
+    fixtures.setVisualChanged(false);
+  }, 180_000);
 });
 
 describe('issue identity across scans (rescan)', () => {

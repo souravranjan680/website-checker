@@ -128,6 +128,13 @@ function KpiTiles({ summary }: { summary: DashboardSummaryDto }) {
         hint={scoreHint}
       />
       <Kpi label="UI health score" value={scores.uiHealth} suffix="/100" hint={scoreHint} />
+      <Kpi label="SEO score" value={scores.seo} suffix="/100" hint={scoreHint} />
+      <Kpi
+        label="Security score"
+        value={scores.security}
+        suffix="/100"
+        hint={`${scoreHint}. Passive configuration checks only.`}
+      />
       <Kpi
         label="Performance score"
         value={scores.performance}

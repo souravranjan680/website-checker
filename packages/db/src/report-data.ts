@@ -4,7 +4,10 @@ import type { PrismaClient } from './generated/prisma/client';
 export async function loadReportData(
   prisma: PrismaClient,
   scanId: string,
-  options: { category?: 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE'; maxIssues?: number } = {},
+  options: {
+    category?: 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
+    maxIssues?: number;
+  } = {},
 ) {
   const scan = await prisma.scan.findUniqueOrThrow({
     where: { id: scanId },
@@ -24,6 +27,15 @@ export async function loadReportData(
           select: { wcagCriteria: true, wcagLevel: true, helpUrl: true, detection: true },
         },
         uiHealth: { select: { checkType: true, resourceUrl: true, statusCode: true } },
+        seo: { select: { checkType: true, expected: true, actual: true } },
+        security: {
+          select: {
+            checkType: true,
+            findingLevel: true,
+            observedValue: true,
+            recommendedValue: true,
+          },
+        },
         trackedIssue: {
           select: { status: true, firstSeenAt: true, lastSeenAt: true, occurrenceCount: true },
         },
@@ -59,6 +71,9 @@ export async function loadReportData(
       pagesFailed: scan.pagesFailed,
       accessibilityScore: scan.accessibilityScore,
       uiHealthScore: scan.uiHealthScore,
+      performanceScore: scan.performanceScore,
+      seoScore: scan.seoScore,
+      securityScore: scan.securityScore,
       errorMessage: scan.errorMessage,
       triggeredBy: scan.triggeredBy?.name ?? null,
       counts: {

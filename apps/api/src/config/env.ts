@@ -54,6 +54,10 @@ const envSchema = z
     // AI (Phase 6)
     CLAUDE_MODEL: z.string().min(1).default('claude-sonnet-5-5'),
     ANTHROPIC_API_KEY: optionalString,
+    /** Cost controls for AI explanations. */
+    AI_USER_HOURLY_LIMIT: z.coerce.number().int().min(1).max(1000).default(20),
+    AI_DAILY_REQUEST_LIMIT: z.coerce.number().int().min(1).max(100_000).default(200),
+    AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(500).max(8000).default(2500),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === 'production' && env.JWT_ACCESS_SECRET.startsWith('change-me')) {
@@ -90,6 +94,7 @@ export interface AppConfig {
   claudeModel: string;
   /** True when an Anthropic key is configured (the key itself never leaves this process). */
   aiConfigured: boolean;
+  ai: { userHourlyLimit: number; dailyLimit: number; maxOutputTokens: number };
 }
 
 /**
@@ -150,5 +155,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     },
     claudeModel: env.CLAUDE_MODEL,
     aiConfigured: Boolean(env.ANTHROPIC_API_KEY),
+    ai: {
+      userHourlyLimit: env.AI_USER_HOURLY_LIMIT,
+      dailyLimit: env.AI_DAILY_REQUEST_LIMIT,
+      maxOutputTokens: env.AI_MAX_OUTPUT_TOKENS,
+    },
   };
 }

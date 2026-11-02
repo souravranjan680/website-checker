@@ -1,7 +1,9 @@
 import { loadReportData, type PrismaClient } from '@whc/db';
 import { exportQuerySchema, idSchema, manualChecklistUpdateSchema } from '@whc/shared';
 import { Router } from 'express';
-import type { PdfRenderer } from '../../lib/pdf-renderer';
+import type { ExportJobs } from '../../lib/export-jobs';
+import { notFound } from '../../lib/errors';
+import { openStoredFile } from '../../lib/storage';
 import { parseInput } from '../../lib/validate';
 import { currentUser } from '../../middleware/auth';
 import { exportFilename, toCsv, toJson } from './export';
@@ -9,9 +11,10 @@ import type { ReportsService } from './reports.service';
 
 /** /api/reports/:scanId/*. Behind requireAuth; each handler checks project access. */
 export function createReportsRouter(deps: {
+  storageDir: string;
   reports: ReportsService;
   prisma: PrismaClient;
-  pdf: PdfRenderer;
+  pdf: ExportJobs;
 }): Router {
   const { reports } = deps;
   const router = Router();
@@ -36,13 +39,35 @@ export function createReportsRouter(deps: {
     res.json({ data: await reports.responsive(currentUser(req), scanIdOf(req.params.scanId)) });
   });
 
-  for (const kind of ['performance', 'seo', 'security'] as const) {
-    router.get(`/:scanId/${kind}`, async (req, res) => {
-      res.json({
-        data: await reports.pending(currentUser(req), scanIdOf(req.params.scanId), kind),
-      });
+  router.get('/:scanId/seo', async (req, res) => {
+    res.json({ data: await reports.seo(currentUser(req), scanIdOf(req.params.scanId)) });
+  });
+
+  router.get('/:scanId/security', async (req, res) => {
+    res.json({ data: await reports.security(currentUser(req), scanIdOf(req.params.scanId)) });
+  });
+
+  router.get('/:scanId/performance', async (req, res) => {
+    res.json({ data: await reports.performance(currentUser(req), scanIdOf(req.params.scanId)) });
+  });
+
+  /** The full Lighthouse JSON (open it at https://googlechrome.github.io/lighthouse/viewer/). */
+  router.get('/:scanId/lighthouse/:resultId', async (req, res) => {
+    const key = await reports.lighthouseReportKey(
+      currentUser(req),
+      scanIdOf(req.params.scanId),
+      parseInput(idSchema, req.params.resultId),
+    );
+    const file = await openStoredFile(deps.storageDir, key);
+    if (!file) throw notFound('Lighthouse report file');
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Length': file.size,
+      'Content-Disposition': 'attachment; filename="lighthouse-report.json"',
+      'Cache-Control': 'private, no-store',
     });
-  }
+    file.stream.pipe(res);
+  });
 
   /** GET /api/reports/:scanId/export?format=csv|json|pdf[&category=ACCESSIBILITY] */
   router.get('/:scanId/export', async (req, res) => {

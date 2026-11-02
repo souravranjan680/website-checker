@@ -31,6 +31,8 @@ export interface DashboardSummaryDto {
   scores: {
     accessibility: number | null; // average of each website's latest finished scan
     uiHealth: number | null;
+    seo: number | null;
+    security: number | null;
     performance: number | null; // null until Lighthouse exists (Phase 6)
     websitesMeasured: number;
   };
@@ -99,6 +101,9 @@ export interface ReportScanInfo {
   previousScanId: string | null;
   accessibilityScore: number | null;
   uiHealthScore: number | null;
+  performanceScore: number | null;
+  seoScore: number | null;
+  securityScore: number | null;
   myRole: 'OWNER' | 'EDITOR' | 'VIEWER';
   website: { id: string; name: string; baseUrl: string };
   project: { id: string; name: string };
@@ -185,19 +190,153 @@ export interface ResponsiveReportDto {
   viewports: ResponsiveViewportDto[];
 }
 
-/** Performance / SEO / security: honest about what has been measured. */
-export interface PendingReportDto {
-  scan: ReportScanInfo;
-  available: boolean;
-  plannedPhase: number;
-  message: string;
-  /** Whatever real data exists (empty until the scanner produces it). */
-  results: unknown[];
+/** robots.txt / sitemap facts as the scanner recorded them (status null = could not be checked). */
+export interface SiteFileFacts {
+  url: string;
+  status: number | null;
+  found: boolean;
+  error?: string;
 }
+
+export interface SeoReportDto {
+  scan: ReportScanInfo;
+  /** Null for scans made before the SEO audit existed. */
+  site: {
+    robotsTxt: SiteFileFacts & { blocksAll: boolean; sitemaps: string[] };
+    sitemap: SiteFileFacts & { source: 'robots.txt' | 'default'; validXml: boolean };
+  } | null;
+  checks: {
+    checkType: string;
+    ruleId: string;
+    title: string;
+    count: number;
+    highestSeverity: SeverityName;
+  }[];
+  pages: {
+    url: string;
+    title: string | null;
+    metaDescriptionLength: number | null;
+    canonical: string | null;
+    h1Count: number | null;
+    metaRobots: string | null;
+    indexable: boolean;
+    hasOpenGraph: boolean;
+    imagesWithoutAlt: number | null;
+    issues: number;
+  }[];
+}
+
+export type SecurityFindingLevel = 'OBSERVATION' | 'WARNING' | 'CONFIRMED';
+
+export interface SecurityReportDto {
+  scan: ReportScanInfo;
+  /** Null for scans made before the security audit existed. */
+  site: {
+    servedOverHttps: boolean;
+    tls: {
+      host: string;
+      port: number;
+      checked: boolean;
+      valid: boolean;
+      error: string | null;
+      validFrom: string | null;
+      validTo: string | null;
+      daysRemaining: number | null;
+      issuer: string | null;
+      subject: string | null;
+      protocol: string | null;
+    } | null;
+    httpRedirect: {
+      url: string;
+      status: number | null;
+      location: string | null;
+      redirectsToHttps: boolean | null;
+      error?: string;
+    } | null;
+  } | null;
+  levels: Record<SecurityFindingLevel, number>;
+  checks: {
+    checkType: string;
+    ruleId: string;
+    title: string;
+    findingLevel: SecurityFindingLevel;
+    count: number;
+    highestSeverity: SeverityName;
+  }[];
+  /** Which recommended headers each scanned page sent (true = present). */
+  headers: { url: string; present: Record<string, boolean> }[];
+}
+
+export interface PerformanceMetricsDto {
+  fcpMs: number | null;
+  lcpMs: number | null;
+  cls: number | null;
+  tbtMs: number | null;
+  speedIndexMs: number | null;
+  /** Always null: INP needs real user interactions (TBT is the lab stand-in). */
+  inpMs: number | null;
+}
+
+export interface PerformanceReportDto {
+  scan: ReportScanInfo;
+  /** One entry per page Lighthouse ran on (empty = not measured; see notMeasuredReason). */
+  pages: {
+    resultId: string;
+    url: string;
+    formFactor: 'MOBILE' | 'DESKTOP';
+    /** Lighthouse could not measure this page (error says why). */
+    error: string | null;
+    scores: {
+      performance: number | null;
+      accessibility: number | null;
+      bestPractices: number | null;
+      seo: number | null;
+    };
+    metrics: PerformanceMetricsDto;
+    opportunities: {
+      id: string;
+      title: string;
+      displayValue: string | null;
+      savingsMs: number | null;
+      savingsBytes: number | null;
+    }[];
+    slowestRequests: {
+      url: string;
+      resourceType: string | null;
+      transferSize: number | null;
+      durationMs: number | null;
+    }[];
+    totalByteWeight: number | null;
+    warnings: string[];
+    lighthouseVersion: string | null;
+    rawReportAvailable: boolean;
+  }[];
+  notMeasuredReason: string | null;
+  /** This website's finished scans with Lighthouse data, oldest first (max 20). */
+  history: {
+    scanId: string;
+    createdAt: string;
+    performanceScore: number | null;
+    lcpMs: number | null;
+    cls: number | null;
+    tbtMs: number | null;
+  }[];
+}
+
+/** Categories a report export can be limited to (only those the scanner produces). */
+export const EXPORT_CATEGORIES = [
+  'ACCESSIBILITY',
+  'UI_HEALTH',
+  'RESPONSIVE',
+  'PERFORMANCE',
+  'SEO',
+  'SECURITY',
+] as const;
+export type ExportCategory = (typeof EXPORT_CATEGORIES)[number];
 
 export const exportQuerySchema = z.object({
   format: z.enum(['pdf', 'csv', 'json']),
-  category: z.enum(['ACCESSIBILITY', 'UI_HEALTH', 'RESPONSIVE']).optional(),
+  category: z.enum(EXPORT_CATEGORIES).optional(),
 });
 
 export const manualChecklistUpdateSchema = z.object({
@@ -446,4 +585,18 @@ export interface SessionDto {
   lastActiveAt: string;
   expiresAt: string;
   current: boolean;
+}
+
+export interface NotificationDto {
+  id: string;
+  type: 'SCAN_COMPLETED' | 'SCAN_FAILED' | 'REGRESSION_DETECTED' | 'SYSTEM';
+  title: string;
+  message: string;
+  link: string | null;
+  readAt: string | null;
+  /** The real e-mail outcome: only SENT means an e-mail went out. */
+  emailStatus: 'NOT_REQUESTED' | 'PENDING' | 'SENT' | 'FAILED';
+  emailedAt: string | null;
+  emailError: string | null;
+  createdAt: string;
 }

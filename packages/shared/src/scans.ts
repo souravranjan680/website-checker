@@ -192,6 +192,16 @@ export interface IssueDto {
     detection: 'AUTOMATED' | 'NEEDS_REVIEW';
   } | null;
   uiHealth: { checkType: string; resourceUrl: string | null; statusCode: number | null } | null;
+  /** SEO details: what the check expected and what it found. */
+  seo: { checkType: string; expected: string | null; actual: string | null } | null;
+  /** Security details. findingLevel: OBSERVATION / WARNING / CONFIRMED (observed, not exploited). */
+  security: {
+    checkType: string;
+    findingLevel: 'OBSERVATION' | 'WARNING' | 'CONFIRMED';
+    headerName: string | null;
+    observedValue: string | null;
+    recommendedValue: string | null;
+  } | null;
 }
 
 export interface IssueRefDto {

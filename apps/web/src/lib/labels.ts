@@ -14,3 +14,9 @@ export const CATEGORY_LABEL: Record<string, string> = {
   SEO: 'SEO',
   SECURITY: 'Security',
 };
+
+export const BUG_STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Open',
+  IN_PROGRESS: 'In progress',
+  CLOSED: 'Closed',
+};

@@ -121,6 +121,8 @@ const issue: IssueDto = {
     detection: 'AUTOMATED',
   },
   uiHealth: null,
+  seo: null,
+  security: null,
 };
 
 describe('starting a scan', () => {

@@ -11,9 +11,14 @@ import { buildReportHtml, type EmbeddedImages } from './report-html';
 /** Must match EXPORT_QUEUE_NAME in apps/api/src/lib/pdf-renderer.ts. */
 export const EXPORT_QUEUE_NAME = 'exports';
 
+export interface CopyBaselineJobData {
+  fromKey: string;
+  toKey: string;
+}
+
 export interface PdfJobData {
   scanId: string;
-  category?: 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE';
+  category?: 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
 }
 
 /** Issues loaded into a PDF, and how many of them get an embedded screenshot. */
@@ -112,8 +117,26 @@ export function createPdfExportWorker(deps: {
     return browserPromise;
   }
 
-  async function process(job: Job<PdfJobData>): Promise<{ key: string }> {
-    const { scanId, category } = job.data;
+  /**
+   * "copy-baseline": the API's storage is read-only, so when a user makes a scan
+   * snapshot the visual baseline, this worker copies the file. Both keys are
+   * validated (no "..", must stay inside storage) and the source must be a visual snapshot.
+   */
+  async function copyBaseline(
+    data: CopyBaselineJobData,
+  ): Promise<{ key: string; sizeBytes: number }> {
+    if (!data.fromKey.startsWith('scans/') || !data.toKey.startsWith('baselines/')) {
+      throw new UnrecoverableError('Invalid baseline copy');
+    }
+    const content = await readFile(resolveKey(storage.root, data.fromKey));
+    await storage.put(data.toKey, content);
+    logger.info({ toKey: data.toKey, bytes: content.length }, 'visual baseline file copied');
+    return { key: data.toKey, sizeBytes: content.length };
+  }
+
+  async function process(job: Job<PdfJobData | CopyBaselineJobData>): Promise<{ key: string }> {
+    if (job.name === 'copy-baseline') return copyBaseline(job.data as CopyBaselineJobData);
+    const { scanId, category } = job.data as PdfJobData;
     const exists = await prisma.scan.findUnique({ where: { id: scanId }, select: { id: true } });
     if (!exists) throw new UnrecoverableError('Scan not found');
 
@@ -129,13 +152,17 @@ export function createPdfExportWorker(deps: {
     return { key };
   }
 
-  const worker = new Worker<PdfJobData, { key: string }>(EXPORT_QUEUE_NAME, process, {
-    connection: { url: config.redisUrl, maxRetriesPerRequest: null },
-    prefix: deps.queuePrefix ?? 'whc',
-    concurrency: 2,
-  });
+  const worker = new Worker<PdfJobData | CopyBaselineJobData, { key: string }>(
+    EXPORT_QUEUE_NAME,
+    process,
+    {
+      connection: { url: config.redisUrl, maxRetriesPerRequest: null },
+      prefix: deps.queuePrefix ?? 'whc',
+      concurrency: 2,
+    },
+  );
   worker.on('failed', (job, error) =>
-    logger.warn({ scanId: job?.data.scanId, err: error.message }, 'PDF export failed'),
+    logger.warn({ job: job?.name, err: error.message }, 'export/file job failed'),
   );
   worker.on('error', (error) => logger.error({ err: error }, 'export worker error'));
 

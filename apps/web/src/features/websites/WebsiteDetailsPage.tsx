@@ -33,6 +33,7 @@ import { formatDateTime } from '@/lib/format';
 import { ScanStatusBadge } from '@/components/common/StatusBadges';
 import { useStartScan } from '@/features/scans/api';
 import { useDeleteWebsite, useWebsite, useWebsiteScans } from './api';
+import { BaselinesCard } from '@/features/visual/BaselinesCard';
 import { VerificationBadge } from './VerificationBadge';
 import { TrackedIssuesCard, WebsiteActivityCard, WebsiteStatsRow } from './WebsiteInsights';
 
@@ -156,6 +157,7 @@ export function WebsiteDetailsPage() {
 
       <ScanHistory website={data} />
       <TrackedIssuesCard website={data} />
+      <BaselinesCard websiteId={data.id} />
       <WebsiteActivityCard website={data} />
       <DeleteWebsiteDialog website={data} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>

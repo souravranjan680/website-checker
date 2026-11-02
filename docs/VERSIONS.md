@@ -59,8 +59,20 @@ Exact versions installed and tested together in Phase 2 (2026-11-02).
 | esbuild | 0.28.2 | Builds the in-page `dom-checks` bundle |
 | Chromium | bundled with Playwright 1.64.1 | `npm run scanner:install-browser` locally |
 
-Packages planned for later phases (Lighthouse, @anthropic-ai/sdk, Recharts) are
-pinned when their phase starts.
+### Added in Phase 5
+
+| Package | Version | Notes |
+|---|---|---|
+| recharts | ^3.8.0 | Charts (via the shadcn chart component) |
+
+### Added in Phase 6 (all pinned exactly)
+
+| Package | Version | Notes |
+|---|---|---|
+| lighthouse | 13.5.0 | Released 2026-09-18; 13.6.0 was only six days old when Phase 6 started. Scanner only; kept external in the bundle (loads files dynamically) |
+| pixelmatch | 7.2.0 | Visual comparison (anti-aliasing aware) |
+| pngjs | 7.0.0 (+ @types/pngjs 6.0.5) | Read/write PNG for comparisons |
+| @anthropic-ai/sdk | 1.3.0 | API only. Structured outputs via `messages.parse` + `zodOutputFormat` (works with Zod 4) |
 
 ## Deliberate choices
 

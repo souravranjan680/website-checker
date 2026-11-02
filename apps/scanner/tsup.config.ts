@@ -21,6 +21,8 @@ export default defineConfig({
     'bullmq',
     'ioredis',
     'pino',
+    // Loads its audits and locale files dynamically, so it must not be bundled.
+    'lighthouse',
   ],
   // The in-page checks run inside web pages, so they ship as a separate script file.
   onSuccess: async () => {

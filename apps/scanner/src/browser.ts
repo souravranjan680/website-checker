@@ -15,7 +15,10 @@ export const SCANNER_UA_SUFFIX =
  *   - --disable-quic: no HTTP/3 over UDP
  *   - WebRTC limited to proxied connections (no direct UDP)
  */
-export async function launchScanBrowser(config: ScannerConfig): Promise<Browser> {
+export async function launchScanBrowser(
+  config: ScannerConfig,
+  options: { extraArgs?: string[] } = {},
+): Promise<Browser> {
   return chromium.launch({
     headless: config.headless,
     channel: config.browserChannel,
@@ -29,6 +32,7 @@ export async function launchScanBrowser(config: ScannerConfig): Promise<Browser>
       '--disable-default-apps',
       '--disable-sync',
       '--no-first-run',
+      ...(options.extraArgs ?? []),
     ],
   });
 }

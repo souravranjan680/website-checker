@@ -18,6 +18,8 @@ export interface FixtureServer {
   /** How many requests reached /secret (must stay 0: SSRF protection). */
   secretHits: () => number;
   setToggleFixed: (fixed: boolean) => void;
+  /** /visual/ shows a big banner when true (a real visual change). */
+  setVisualChanged: (changed: boolean) => void;
   close: () => Promise<void>;
 }
 
@@ -26,6 +28,7 @@ export const FIXTURE_HOST = 'fixtures.whc.test';
 export async function startFixtureServer(): Promise<FixtureServer> {
   let secretHits = 0;
   let toggleFixed = false;
+  let visualChanged = false;
   let port = 0;
 
   const server = http.createServer(async (req, res) => {
@@ -46,7 +49,52 @@ export async function startFixtureServer(): Promise<FixtureServer> {
       case '/redirect-to-secret':
         return send(302, '', 'text/plain', { location: `http://127.0.0.1:${port}/secret` });
       case '/robots.txt':
-        return send(200, 'User-agent: *\nDisallow: /private/\n', 'text/plain');
+        return send(
+          200,
+          `User-agent: *\nDisallow: /private/\nSitemap: http://${FIXTURE_HOST}:${port}/sitemap.xml\n`,
+          'text/plain',
+        );
+      case '/sitemap.xml':
+        return send(
+          200,
+          '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>/seo/</loc></url></urlset>',
+          'application/xml',
+        );
+      case '/security/':
+        // Weak configuration on purpose; the cookie value must never be stored.
+        res.setHeader('set-cookie', [
+          'session=SECRET-SESSION-VALUE-123; Path=/',
+          'theme=dark; Path=/; SameSite=Lax',
+        ]);
+        return send(
+          200,
+          '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Security fixture page</title></head><body><main><h1>Security</h1></main></body></html>',
+          'text/html; charset=utf-8',
+          { server: 'Apache/2.4.41 (Ubuntu)', 'x-powered-by': 'PHP/7.4.3' },
+        );
+      case '/perf/':
+        // A render-blocking script that keeps the main thread busy: poor TBT, slow LCP.
+        return send(
+          200,
+          '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Performance fixture page</title><script src="/perf/heavy.js"></script></head><body><main><h1>Performance fixture</h1><p>Text.</p></main></body></html>',
+        );
+      case '/perf/heavy.js':
+        return send(
+          200,
+          `/* ${'unused padding '.repeat(20_000)} */\nconst until = Date.now() + 700; while (Date.now() < until) {}\n`,
+          'text/javascript',
+        );
+      case '/visual/':
+        return send(
+          200,
+          `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Visual fixture page</title>
+           <style>body{margin:0;font-family:sans-serif} .hero{height:300px;background:#2a78d6;color:#fff;padding:24px}
+           .banner{height:200px;background:#eb6834} .clock{padding:8px}</style></head><body><main>
+           <div class="hero"><h1>Visual fixture</h1></div>
+           ${visualChanged ? '<div class="banner">New promotion banner</div>' : ''}
+           <p class="clock">Rendered at ${Date.now()}</p>
+           <p>Stable text paragraph.</p></main></body></html>`,
+        );
       case '/toggle/':
         return send(
           200,
@@ -89,6 +137,9 @@ export async function startFixtureServer(): Promise<FixtureServer> {
     port,
     url: (pathname) => `http://${FIXTURE_HOST}:${port}${pathname}`,
     secretHits: () => secretHits,
+    setVisualChanged: (changed) => {
+      visualChanged = changed;
+    },
     setToggleFixed: (fixed) => {
       toggleFixed = fixed;
     },

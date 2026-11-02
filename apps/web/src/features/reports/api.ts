@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AccessibilityReportDto,
   ManualCheckState,
-  PendingReportDto,
+  PerformanceReportDto,
   ResponsiveReportDto,
+  SecurityReportDto,
+  SeoReportDto,
   UiHealthReportDto,
 } from '@whc/shared';
 import { apiData } from '@/lib/api-client';
@@ -11,8 +13,6 @@ import { apiData } from '@/lib/api-client';
 export const reportKeys = {
   report: (scanId: string, kind: string) => ['reports', scanId, kind] as const,
 };
-
-export type PendingKind = 'performance' | 'seo' | 'security';
 
 export function useAccessibilityReport(scanId: string) {
   return useQuery({
@@ -35,10 +35,24 @@ export function useResponsiveReport(scanId: string) {
   });
 }
 
-export function usePendingReport(scanId: string, kind: PendingKind) {
+export function useSeoReport(scanId: string) {
   return useQuery({
-    queryKey: reportKeys.report(scanId, kind),
-    queryFn: () => apiData<PendingReportDto>(`/api/reports/${scanId}/${kind}`),
+    queryKey: reportKeys.report(scanId, 'seo'),
+    queryFn: () => apiData<SeoReportDto>(`/api/reports/${scanId}/seo`),
+  });
+}
+
+export function useSecurityReport(scanId: string) {
+  return useQuery({
+    queryKey: reportKeys.report(scanId, 'security'),
+    queryFn: () => apiData<SecurityReportDto>(`/api/reports/${scanId}/security`),
+  });
+}
+
+export function usePerformanceReport(scanId: string) {
+  return useQuery({
+    queryKey: reportKeys.report(scanId, 'performance'),
+    queryFn: () => apiData<PerformanceReportDto>(`/api/reports/${scanId}/performance`),
   });
 }
 

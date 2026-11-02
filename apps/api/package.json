@@ -12,6 +12,7 @@
     "admin:promote": "tsx src/scripts/promote-admin.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
     "@whc/db": "*",
     "@whc/shared": "*",
     "bullmq": "^6.5.3",

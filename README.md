@@ -4,13 +4,13 @@ A web application that scans websites for accessibility (WCAG), UI, responsive,
 performance, SEO and basic security problems, with screenshots, AI explanations,
 bug reports and scan history.
 
-> **Status: Phase 5 of 8 complete.** Real browser scanning (Playwright + axe-core,
-> five screen sizes, SSRF-blocking egress proxy) plus a full dashboard: metrics and
-> charts from real scan data, scan history with compare, accessibility / UI health /
-> responsive reports, issue tracking with history, PDF/CSV/JSON export, profile and
-> settings. See [docs/08-roadmap.md](docs/08-roadmap.md).
+> **Status: Phase 6 of 8 complete.** Real browser scanning through an SSRF-blocking
+> egress proxy, a full dashboard with history and reports, and now: Google Lighthouse
+> performance, on-page SEO and passive security configuration audits, visual regression
+> with explicit baselines, bug reports, optional AI explanations (Claude Sonnet), and
+> in-app + e-mail notifications. See [docs/08-roadmap.md](docs/08-roadmap.md).
 
-![Dashboard](docs/images/phase5-1-dashboard.png)
+![Security report](docs/images/phase6-2-security-report.png)
 
 | Doc | |
 |---|---|
@@ -19,6 +19,7 @@ bug reports and scan history.
 | [docs/10-phase-3-auth.md](docs/10-phase-3-auth.md) | How sign-in, JWT, roles, projects and websites work |
 | [docs/11-phase-4-scanning.md](docs/11-phase-4-scanning.md) | **How scanning works**: Playwright, DOM checks, axe-core, the security proxy, BullMQ, progress, debugging |
 | [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md) | **How the dashboard, history, reports, issue tracking and exports work** |
+| [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md) | **Lighthouse, SEO, security, visual regression, bug reports, AI, notifications, storage cleanup** |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Exact versions and why |
 
 ---
@@ -289,11 +290,16 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 
 ---
 
-## Known limitations (after Phase 5)
+## Known limitations (after Phase 6)
 
-- **Not yet built:** Lighthouse performance, SEO and security checks, AI explanations,
-  visual regression, bug reports, sending notifications (Phase 6); Chrome extension
-  (Phase 7). Their report pages say "not available" instead of showing numbers.
+- **Not yet built:** scheduled scans and weekly summary e-mails, automatic Jira ticket
+  creation, interactive API docs (Phase 8); Chrome extension (Phase 7). Details of every
+  Phase 6 limit: [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md#14-known-limitations).
+- **AI explanations need an Anthropic API key** (`ANTHROPIC_API_KEY` in `.env`); without it
+  they say "not set up" and everything else works. Not yet verified against the live API.
+- **Lighthouse** is a mobile lab test (scores vary by a few points between runs; INP is not
+  measurable in the lab). **Security** checks are passive configuration checks, not a
+  penetration test.
 - **Automated accessibility testing is partial:** axe-core finds roughly a third of WCAG
   problems; manual testing is still required (the UI says so).
 - **Scanner scope:** pages behind a login, iframes' contents, and shadow DOM are not
@@ -305,15 +311,15 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
   "False positive" and the decision is remembered.
 - Broken-link checks use HEAD requests and only report 404/410, server errors and
   unreachable domains (servers that reject HEAD or bots are not reported). Max 150 per scan.
-- Screenshot files of deleted scans/websites are not cleaned up yet (cleanup job: Phase 6).
 - Domain verification is generated but not checked yet; `REQUIRE_DOMAIN_VERIFICATION`
   only limits unverified sites to single-page scans.
-- Notification preferences are saved but nothing is sent yet (Phase 6). The email
-  address can't be changed. Admin user management is API + `admin:promote` only.
+- Notifications go to the user who started a scan; e-mail uses the SMTP settings (Mailpit
+  in development). The email address can't be changed. Admin user management is API +
+  `admin:promote` only.
 - PDF exports need the scanner service running (CSV/JSON don't) and include at most
   500 issues and 15 screenshots.
 - No interactive API docs (Swagger/OpenAPI) yet; endpoints are specified in
-  [docs/04-api.md](docs/04-api.md) and [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md). Planned for Phase 8.
+  [docs/04-api.md](docs/04-api.md), [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md) and [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md). Planned for Phase 8.
 - Personal API tokens (for the Chrome extension) arrive in Phase 7.
 - Trade-offs: registering with an existing email says so (normal sign-up UX, but it
   reveals that the email has an account; rate-limited); the per-email login limit

@@ -5,6 +5,8 @@ import type { IssueDto } from '@whc/shared';
 export const ISSUE_INCLUDE = {
   accessibility: true,
   uiHealth: true,
+  seo: true,
+  security: true,
   trackedIssue: { select: { id: true, status: true, occurrenceCount: true, firstSeenAt: true } },
   scanPage: {
     select: {
@@ -62,6 +64,18 @@ export function toIssueDto(row: IssueRow): IssueDto {
           checkType: row.uiHealth.checkType,
           resourceUrl: row.uiHealth.resourceUrl,
           statusCode: row.uiHealth.statusCode,
+        }
+      : null,
+    seo: row.seo
+      ? { checkType: row.seo.checkType, expected: row.seo.expected, actual: row.seo.actual }
+      : null,
+    security: row.security
+      ? {
+          checkType: row.security.checkType,
+          findingLevel: row.security.findingLevel,
+          headerName: row.security.headerName,
+          observedValue: row.security.observedValue,
+          recommendedValue: row.security.recommendedValue,
         }
       : null,
   };

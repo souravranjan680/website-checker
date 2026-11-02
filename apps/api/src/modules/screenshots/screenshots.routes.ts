@@ -22,16 +22,16 @@ export function createScreenshotsRouter(deps: {
     const user = currentUser(req);
     const screenshot = await deps.prisma.screenshot.findUnique({
       where: { id: parseInput(idSchema, req.params.id) },
-      include: { scan: { select: { website: { select: { projectId: true } } } } },
+      include: {
+        scan: { select: { website: { select: { projectId: true } } } },
+        // Baseline images belong to a website, not to a scan.
+        baseline: { select: { website: { select: { projectId: true } } } },
+      },
     });
-    if (!screenshot?.scan) throw notFound('Screenshot');
-    await requireProjectRole(
-      deps.prisma,
-      user,
-      screenshot.scan.website.projectId,
-      'VIEWER',
-      'view screenshots',
-    );
+    const projectId =
+      screenshot?.scan?.website.projectId ?? screenshot?.baseline?.website.projectId;
+    if (!screenshot || !projectId) throw notFound('Screenshot');
+    await requireProjectRole(deps.prisma, user, projectId, 'VIEWER', 'view screenshots');
 
     const file = await openStoredFile(deps.storageDir, screenshot.storageKey);
     if (!file) throw notFound('Screenshot file');

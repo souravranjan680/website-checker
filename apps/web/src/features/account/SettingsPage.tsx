@@ -83,6 +83,8 @@ const PREFERENCE_ITEMS: {
   key: keyof NotificationPreferences;
   label: string;
   description: string;
+  /** Not built yet: shown, but cannot be switched on. */
+  unavailable?: boolean;
 }[] = [
   {
     key: 'scanCompleted',
@@ -102,12 +104,15 @@ const PREFERENCE_ITEMS: {
   {
     key: 'weeklySummary',
     label: 'Weekly summary',
-    description: 'A digest of your websites every Monday.',
+    description:
+      'A digest of your websites every Monday. Not available yet (planned with scheduled scans).',
+    unavailable: true,
   },
   {
     key: 'email',
     label: 'Send by email',
-    description: 'Also send the notifications above to your email address.',
+    description:
+      'Also send the notifications above to your email address. Each notification shows whether the e-mail was really sent.',
   },
 ];
 
@@ -130,8 +135,9 @@ function NotificationsCard() {
       <CardHeader>
         <CardTitle>Notifications</CardTitle>
         <CardDescription>
-          Your choices are saved now. Sending notifications (in-app and email) is part of Phase 6,
-          so nothing is delivered yet.
+          Notifications appear under the bell at the top and on the Notifications page, for scans
+          you start. E-mail is sent through the server&apos;s mail settings (in development: the
+          Mailpit inbox).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -145,8 +151,8 @@ function NotificationsCard() {
               <li key={item.key} className="flex items-start gap-3">
                 <Checkbox
                   id={`pref-${item.key}`}
-                  checked={preferences.data[item.key]}
-                  disabled={update.isPending}
+                  checked={item.unavailable ? false : preferences.data[item.key]}
+                  disabled={update.isPending || item.unavailable}
                   onCheckedChange={(checked) => void toggle(item.key, checked === true)}
                   aria-describedby={`pref-${item.key}-description`}
                 />

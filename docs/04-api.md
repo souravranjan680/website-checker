@@ -320,3 +320,21 @@ Details and the meaning of each number: [12-phase-5-frontend.md](12-phase-5-fron
 | `GET /api/activity?websiteId=` | Activity of one website and its scans |
 | `GET /api/auth/sessions` · `DELETE /api/auth/sessions/:id` · `DELETE /api/auth/sessions/others` | Signed-in devices |
 | `GET /api/auth/preferences` · `PUT /api/auth/preferences` | Notification preferences (stored; delivery in Phase 6) |
+
+---
+
+## Phase 6 endpoints (implemented)
+
+Details, rules and limits: [13-phase-6-advanced-audits.md](13-phase-6-advanced-audits.md#12-new-api-endpoints).
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/reports/:scanId/seo` · `security` · `performance` | Real SEO, security (finding levels, TLS, redirect) and Lighthouse reports |
+| `GET /api/reports/:scanId/lighthouse/:resultId` | Raw Lighthouse JSON |
+| `GET /api/visual/baselines` · `GET/POST /api/visual/websites/:id/baselines` | List / create baselines (editor+, explicit) |
+| `PATCH/DELETE /api/visual/baselines/:id` · `POST /api/visual/baselines/:id/replace` · `GET …/comparisons` | Settings, replace image, delete, history |
+| `GET /api/visual/scans/:scanId` | A scan's snapshots with baseline and comparison |
+| `POST /api/bug-reports` `{ issueId }` · `GET /api/bug-reports` | Create from an issue (editor+) / list |
+| `GET/PATCH/DELETE /api/bug-reports/:id` · `GET /api/bug-reports/:id/export?format=markdown|jira|json` | Read, edit, delete, export |
+| `GET /api/ai/status` · `GET /api/ai/issues/:id` · `POST /api/ai/issues/:id/explain` | AI status, saved explanation, explain (rate limited) |
+| `GET /api/notifications` · `GET …/unread-count` · `POST …/:id/read` · `POST …/read-all` | The user's notifications |

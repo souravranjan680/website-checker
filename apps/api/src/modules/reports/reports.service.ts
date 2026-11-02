@@ -5,9 +5,12 @@ import {
   WCAG_CRITERIA,
   type AccessibilityReportDto,
   type ManualCheckState,
-  type PendingReportDto,
+  type PerformanceReportDto,
   type ReportScanInfo,
   type ResponsiveReportDto,
+  type SecurityFindingLevel,
+  type SecurityReportDto,
+  type SeoReportDto,
   type SeverityName,
   type UiHealthReportDto,
 } from '@whc/shared';
@@ -58,6 +61,9 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
       previousScanId: scan.previousScanId,
       accessibilityScore: scan.accessibilityScore,
       uiHealthScore: scan.uiHealthScore,
+      performanceScore: scan.performanceScore,
+      seoScore: scan.seoScore,
+      securityScore: scan.securityScore,
       myRole: role,
       website: { id: scan.website.id, name: scan.website.name, baseUrl: scan.website.baseUrl },
       project: scan.website.project,
@@ -393,38 +399,264 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
       };
     },
 
-    /**
-     * Performance, SEO and security: the scanners for these arrive in Phase 6.
-     * We return whatever REAL rows exist (none yet) and say so plainly.
-     */
-    async pending(
-      user: AuthUser,
-      scanId: string,
-      kind: 'performance' | 'seo' | 'security',
-    ): Promise<PendingReportDto> {
-      const { info } = await scanInfo(user, scanId);
-      const results =
-        kind === 'performance'
-          ? await prisma.performanceResult.findMany({ where: { scanId } })
-          : await prisma.issue.findMany({
-              where: { scanId, category: kind === 'seo' ? 'SEO' : 'SECURITY' },
-              take: 500,
-            });
-      const names = {
-        performance: 'Performance (Lighthouse)',
-        seo: 'SEO',
-        security: 'Security headers',
-      };
+    /** On-page SEO: checks found, robots.txt/sitemap facts and each page's metadata. */
+    async seo(user: AuthUser, scanId: string): Promise<SeoReportDto> {
+      const { scan, info } = await scanInfo(user, scanId);
+      const [issues, pages] = await Promise.all([
+        prisma.issue.findMany({
+          where: { scanId, category: 'SEO' },
+          select: {
+            severity: true,
+            ruleId: true,
+            title: true,
+            scanPageId: true,
+            seo: { select: { checkType: true } },
+          },
+        }),
+        prisma.scanPage.findMany({
+          where: { scanId, status: 'DONE' },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            url: true,
+            title: true,
+            metaDescription: true,
+            canonicalUrl: true,
+            h1Count: true,
+            seoData: true,
+            responseHeaders: true,
+          },
+        }),
+      ]);
+
+      const checks = new Map<string, SeoReportDto['checks'][number]>();
+      const perPage = new Map<string, number>();
+      for (const issue of issues) {
+        const type = issue.seo?.checkType ?? 'OTHER';
+        const entry = checks.get(type) ?? {
+          checkType: type,
+          ruleId: issue.ruleId,
+          title: issue.title,
+          count: 0,
+          highestSeverity: issue.severity,
+        };
+        entry.count += 1;
+        if (RANK[issue.severity] > RANK[entry.highestSeverity])
+          entry.highestSeverity = issue.severity;
+        checks.set(type, entry);
+        if (issue.scanPageId)
+          perPage.set(issue.scanPageId, (perPage.get(issue.scanPageId) ?? 0) + 1);
+      }
+
+      const siteChecks = (scan.siteChecks as { seo?: SeoReportDto['site'] } | null)?.seo ?? null;
       return {
         scan: info,
-        available: results.length > 0,
-        plannedPhase: 6,
-        message:
-          results.length > 0
-            ? `${names[kind]} results for this scan.`
-            : `${names[kind]} checks are not part of the scanner yet (planned for Phase 6), so this scan has no ${names[kind].toLowerCase()} data. Nothing is estimated.`,
-        results,
+        site: siteChecks,
+        checks: [...checks.values()].sort(
+          (a, b) =>
+            RANK[b.highestSeverity] - RANK[a.highestSeverity] ||
+            b.count - a.count ||
+            a.title.localeCompare(b.title),
+        ),
+        pages: pages.map((page) => {
+          const data = page.seoData as {
+            metaRobots?: string | null;
+            ogTitle?: string | null;
+            ogDescription?: string | null;
+            ogImage?: string | null;
+            imagesWithoutAlt?: number;
+          } | null;
+          const headers = (page.responseHeaders as Record<string, string> | null) ?? {};
+          const directives = [data?.metaRobots, headers['x-robots-tag']].filter(Boolean).join(', ');
+          return {
+            url: page.url,
+            title: page.title,
+            metaDescriptionLength: page.metaDescription ? page.metaDescription.trim().length : null,
+            canonical: page.canonicalUrl,
+            h1Count: page.h1Count,
+            metaRobots: directives || null,
+            indexable: !/\bnoindex\b|\bnone\b/i.test(directives),
+            hasOpenGraph: Boolean(data?.ogTitle && data?.ogDescription && data?.ogImage),
+            imagesWithoutAlt: data?.imagesWithoutAlt ?? null,
+            issues: perPage.get(page.id) ?? 0,
+          };
+        }),
       };
+    },
+
+    /**
+     * Performance and security: the scanners for these arrive later in Phase 6.
+     * We return whatever REAL rows exist (none yet) and say so plainly.
+     */
+    /** Passive security configuration: findings by level, TLS / redirect facts, header matrix. */
+    async security(user: AuthUser, scanId: string): Promise<SecurityReportDto> {
+      const { scan, info } = await scanInfo(user, scanId);
+      const [issues, pages] = await Promise.all([
+        prisma.issue.findMany({
+          where: { scanId, category: 'SECURITY' },
+          select: {
+            severity: true,
+            ruleId: true,
+            title: true,
+            security: { select: { checkType: true, findingLevel: true } },
+          },
+        }),
+        prisma.scanPage.findMany({
+          where: { scanId, status: 'DONE' },
+          orderBy: { createdAt: 'asc' },
+          take: 50,
+          select: { url: true, responseHeaders: true },
+        }),
+      ]);
+      const levels: Record<SecurityFindingLevel, number> = {
+        CONFIRMED: 0,
+        WARNING: 0,
+        OBSERVATION: 0,
+      };
+      const LEVEL_RANK: Record<SecurityFindingLevel, number> = {
+        CONFIRMED: 3,
+        WARNING: 2,
+        OBSERVATION: 1,
+      };
+      const checks = new Map<string, SecurityReportDto['checks'][number]>();
+      for (const issue of issues) {
+        const level = (issue.security?.findingLevel ?? 'WARNING') as SecurityFindingLevel;
+        levels[level] += 1;
+        // Same check at two levels (e.g. active vs passive mixed content) = two rows.
+        const key = `${issue.security?.checkType ?? 'OTHER'}|${level}`;
+        const entry = checks.get(key) ?? {
+          checkType: issue.security?.checkType ?? 'OTHER',
+          ruleId: issue.ruleId,
+          title: issue.title,
+          findingLevel: level,
+          count: 0,
+          highestSeverity: issue.severity,
+        };
+        entry.count += 1;
+        if (RANK[issue.severity] > RANK[entry.highestSeverity])
+          entry.highestSeverity = issue.severity;
+        checks.set(key, entry);
+      }
+      const HEADERS = [
+        'content-security-policy',
+        'strict-transport-security',
+        'x-frame-options',
+        'x-content-type-options',
+        'referrer-policy',
+      ];
+      return {
+        scan: info,
+        site:
+          (scan.siteChecks as { security?: SecurityReportDto['site'] } | null)?.security ?? null,
+        levels,
+        checks: [...checks.values()].sort(
+          (a, b) =>
+            LEVEL_RANK[b.findingLevel] - LEVEL_RANK[a.findingLevel] ||
+            RANK[b.highestSeverity] - RANK[a.highestSeverity] ||
+            a.title.localeCompare(b.title),
+        ),
+        headers: pages.map((page) => {
+          const headers = (page.responseHeaders as Record<string, string> | null) ?? {};
+          return {
+            url: page.url,
+            present: Object.fromEntries(HEADERS.map((h) => [h, Boolean(headers[h])])),
+          };
+        }),
+      };
+    },
+
+    /** Lighthouse results of this scan plus the website's performance history. */
+    async performance(user: AuthUser, scanId: string): Promise<PerformanceReportDto> {
+      const { scan, info } = await scanInfo(user, scanId);
+      const [results, history] = await Promise.all([
+        prisma.performanceResult.findMany({
+          where: { scanId },
+          orderBy: { createdAt: 'asc' },
+          include: { scanPage: { select: { url: true } } },
+        }),
+        prisma.scan.findMany({
+          where: {
+            websiteId: scan.websiteId,
+            status: { in: ['COMPLETED', 'PARTIAL'] },
+            performanceResults: { some: {} },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { id: true, createdAt: true, performanceScore: true },
+        }),
+      ]);
+      const averages = await prisma.performanceResult.groupBy({
+        by: ['scanId'],
+        where: { scanId: { in: history.map((h) => h.id) } },
+        _avg: { lcpMs: true, cls: true, tbtMs: true },
+      });
+      const avgOf = new Map(averages.map((a) => [a.scanId, a._avg]));
+      const round = (v: number | null | undefined, digits = 0) =>
+        v === null || v === undefined ? null : Number(v.toFixed(digits));
+
+      return {
+        scan: info,
+        pages: results.map((r) => {
+          const diagnostics = (r.diagnostics ?? {}) as {
+            error?: string | null;
+            slowestRequests?: PerformanceReportDto['pages'][number]['slowestRequests'];
+            totalByteWeight?: number | null;
+            warnings?: string[];
+          };
+          return {
+            resultId: r.id,
+            url: r.scanPage.url,
+            formFactor: r.formFactor,
+            error: diagnostics.error ?? null,
+            scores: {
+              performance: r.performanceScore,
+              accessibility: r.accessibilityScore,
+              bestPractices: r.bestPracticesScore,
+              seo: r.seoScore,
+            },
+            metrics: {
+              fcpMs: r.fcpMs,
+              lcpMs: r.lcpMs,
+              cls: r.cls,
+              tbtMs: r.tbtMs,
+              speedIndexMs: r.speedIndexMs,
+              inpMs: null,
+            },
+            opportunities: (r.opportunities ??
+              []) as PerformanceReportDto['pages'][number]['opportunities'],
+            slowestRequests: diagnostics.slowestRequests ?? [],
+            totalByteWeight: diagnostics.totalByteWeight ?? null,
+            warnings: diagnostics.warnings ?? [],
+            lighthouseVersion: r.lighthouseVersion,
+            rawReportAvailable: Boolean(r.rawReportKey),
+          };
+        }),
+        notMeasuredReason:
+          results.length > 0
+            ? null
+            : scan.status === 'COMPLETED' || scan.status === 'PARTIAL'
+              ? 'Lighthouse did not run for this scan: it was made before the performance audit existed (Phase 6), Lighthouse is switched off on this scanner, or the "Lighthouse pages" setting of the website is 0. Nothing is estimated.'
+              : 'This scan did not finish, so performance was not measured.',
+        history: history.reverse().map((h) => ({
+          scanId: h.id,
+          createdAt: h.createdAt.toISOString(),
+          performanceScore: h.performanceScore,
+          lcpMs: round(avgOf.get(h.id)?.lcpMs),
+          cls: round(avgOf.get(h.id)?.cls, 3),
+          tbtMs: round(avgOf.get(h.id)?.tbtMs),
+        })),
+      };
+    },
+
+    /** Storage key of a raw Lighthouse JSON report, after the permission check. */
+    async lighthouseReportKey(user: AuthUser, scanId: string, resultId: string): Promise<string> {
+      await scanInfo(user, scanId);
+      const result = await prisma.performanceResult.findFirst({
+        where: { id: resultId, scanId },
+        select: { rawReportKey: true },
+      });
+      if (!result?.rawReportKey) throw notFound('Lighthouse report');
+      return result.rawReportKey;
     },
   };
 }

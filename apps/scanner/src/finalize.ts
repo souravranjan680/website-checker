@@ -38,7 +38,12 @@ export async function trackIssues(
   prisma: PrismaClient,
   scan: { id: string; websiteId: string },
   checked: { pages: Set<string>; responsivePages: Set<string> },
-): Promise<{ newCount: number; recurringCount: number; resolvedCount: number }> {
+): Promise<{
+  newCount: number;
+  reopenedCount: number;
+  recurringCount: number;
+  resolvedCount: number;
+}> {
   const issues = await prisma.issue.findMany({
     where: { scanId: scan.id },
     select: {
@@ -81,6 +86,10 @@ export async function trackIssues(
     });
   }
 
+  // Problems that had been fixed and came back: a regression, like new ones.
+  const reopenedCount = existing.filter(
+    (t) => t.status === 'RESOLVED' && t.lastSeenScanId !== scan.id,
+  ).length;
   const updates = existing
     .filter((t) => t.lastSeenScanId !== scan.id)
     .map((t) => {
@@ -147,6 +156,7 @@ export async function trackIssues(
 
   return {
     newCount: toCreate.length,
+    reopenedCount,
     recurringCount: fingerprints.length - toCreate.length,
     resolvedCount: toResolve.length,
   };

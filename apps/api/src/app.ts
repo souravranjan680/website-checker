@@ -23,14 +23,22 @@ import { createHealthRouter } from './modules/health/health.routes';
 import type { HealthService } from './modules/health/health.service';
 import { createProjectsRouter } from './modules/projects/projects.routes';
 import { createProjectsService } from './modules/projects/projects.service';
+import { createAiRouter } from './modules/ai/ai.routes';
+import { createAiService } from './modules/ai/ai.service';
+import { createBugReportsRouter } from './modules/bug-reports/bug-reports.routes';
+import { createBugReportsService } from './modules/bug-reports/bug-reports.service';
+import { createNotificationsRouter } from './modules/notifications/notifications.routes';
 import { createDashboardRouter } from './modules/dashboard/dashboard.routes';
 import { createDashboardService } from './modules/dashboard/dashboard.service';
 import { createIssuesRouter } from './modules/issues/issues.routes';
 import { createReportsRouter } from './modules/reports/reports.routes';
 import { createReportsService } from './modules/reports/reports.service';
+import { createVisualRouter } from './modules/visual/visual.routes';
+import { createVisualService } from './modules/visual/visual.service';
 import { createWebsitesRouter } from './modules/websites/websites.routes';
 import { createWebsitesService } from './modules/websites/websites.service';
-import type { PdfRenderer } from './lib/pdf-renderer';
+import type { AiProvider } from './lib/ai-provider';
+import type { ExportJobs } from './lib/export-jobs';
 import type { ScanEventHub } from './lib/scan-events';
 import type { ScanQueue } from './lib/scan-queue';
 import { createScansRouter } from './modules/scans/scans.routes';
@@ -50,7 +58,9 @@ export interface AppDependencies {
   resolveHostname: ResolveHostname;
   scanQueue: ScanQueue;
   scanEvents: ScanEventHub;
-  pdfRenderer: PdfRenderer;
+  exportJobs: ExportJobs;
+  /** null when no Anthropic key is configured: AI features answer "not configured". */
+  aiProvider: AiProvider | null;
 }
 
 /**
@@ -129,6 +139,16 @@ export function createApp(deps: AppDependencies): Express {
   });
   const dashboard = createDashboardService({ prisma });
   const reports = createReportsService({ prisma });
+  const visual = createVisualService({ prisma, jobs: deps.exportJobs });
+  const bugReports = createBugReportsService({ prisma });
+  const ai = createAiService({ prisma, provider: deps.aiProvider, config, logger });
+  // AI calls cost money: a per-user hourly limit (cached answers are not counted twice).
+  const aiExplainLimit = rateLimit({
+    name: 'ai-explain',
+    windowMs: 60 * 60_000,
+    max: config.ai.userHourlyLimit,
+    keys: (req) => [`user:${req.user?.id ?? clientIp(req)}`],
+  });
   // Scans are expensive: at most 20 started per hour per user.
   const scanStartLimit = rateLimit({
     name: 'scan-start',
@@ -156,11 +176,24 @@ export function createApp(deps: AppDependencies): Express {
   );
   app.use('/api/tracked-issues', requireAuth, createTrackedIssuesRouter({ prisma }));
   app.use('/api/issues', requireAuth, createIssuesRouter({ prisma }));
+  app.use('/api/visual', requireAuth, createVisualRouter({ visual }));
+  app.use('/api/notifications', requireAuth, createNotificationsRouter({ prisma }));
+  app.use('/api/ai', requireAuth, createAiRouter({ ai, explainLimit: aiExplainLimit }));
+  app.use(
+    '/api/bug-reports',
+    requireAuth,
+    createBugReportsRouter({ bugReports, appUrl: config.appUrl }),
+  );
   app.use('/api/dashboard', requireAuth, createDashboardRouter({ dashboard }));
   app.use(
     '/api/reports',
     requireAuth,
-    createReportsRouter({ reports, prisma, pdf: deps.pdfRenderer }),
+    createReportsRouter({
+      reports,
+      prisma,
+      pdf: deps.exportJobs,
+      storageDir: config.scans.storageDir,
+    }),
   );
 
   // 8. Nothing matched → 404; any error → standard JSON error.

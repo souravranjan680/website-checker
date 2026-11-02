@@ -9,3 +9,6 @@ export * from './schemas/projects';
 export * from './schemas/websites';
 export * from './scans';
 export * from './reports';
+export * from './visual';
+export * from './bug-reports';
+export * from './ai';

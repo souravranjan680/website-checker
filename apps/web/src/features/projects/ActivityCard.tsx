@@ -34,6 +34,22 @@ export function describeActivity(activity: Pick<ActivityDto, 'action' | 'metadat
       return `rescanned ${text('website') || 'a website'}`;
     case 'scan.cancelled':
       return 'cancelled a scan';
+    case 'visual.baseline_created':
+      return `set a visual baseline for ${text('pageUrl')} (${text('viewport')})`;
+    case 'visual.baseline_replaced':
+      return `replaced the visual baseline for ${text('pageUrl')} (${text('viewport')})`;
+    case 'visual.baseline_updated':
+      return 'changed visual baseline settings';
+    case 'visual.baseline_deleted':
+      return `deleted the visual baseline for ${text('pageUrl')} (${text('viewport')})`;
+    case 'bug_report.created':
+      return `created the bug report "${text('title')}"`;
+    case 'bug_report.updated':
+      return text('to')
+        ? `moved the bug report "${text('title')}" to ${text('to').toLowerCase().replace('_', ' ')}`
+        : `edited the bug report "${text('title')}"`;
+    case 'bug_report.deleted':
+      return `deleted the bug report "${text('title')}"`;
     case 'issue.status_changed':
       return `marked "${text('title')}" as ${text('to').toLowerCase().replace('_', ' ')}`;
     default:

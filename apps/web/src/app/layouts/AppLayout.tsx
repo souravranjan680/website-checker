@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/features/auth/auth-context';
+import { NotificationBell } from '@/features/notifications/NotificationsPage';
 import { cn } from '@/lib/utils';
 import { useTheme, type Theme } from '../theme';
 
@@ -48,8 +49,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Websites', icon: Globe, to: '/websites' },
   { label: 'Scan Center', icon: ScanSearch, to: '/scans' },
   { label: 'History', icon: History, to: '/history' },
-  { label: 'Visual regression', icon: Images, phase: 6 },
-  { label: 'Bug reports', icon: Bug, phase: 6 },
+  { label: 'Visual regression', icon: Images, to: '/visual' },
+  { label: 'Bug reports', icon: Bug, to: '/bug-reports' },
   { label: 'Settings', icon: Settings, to: '/settings' },
   { label: 'System status', icon: Activity, to: '/status' },
 ];
@@ -79,9 +80,10 @@ export function AppLayout() {
         <header className="flex h-14 items-center justify-between gap-4 border-b px-4 md:px-6">
           <MobileNav />
           <span className="hidden text-sm text-muted-foreground md:block">
-            Phase 5 · dashboard and reports
+            Phase 6 · advanced audits
           </span>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <ThemeSwitcher />
             <UserMenu />
           </div>

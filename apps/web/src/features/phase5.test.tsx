@@ -28,7 +28,14 @@ const summary: DashboardSummaryDto = {
     highIssues: 11,
     resolvedIssues: 9,
   },
-  scores: { accessibility: 81, uiHealth: 92, performance: null, websitesMeasured: 3 },
+  scores: {
+    accessibility: 81,
+    uiHealth: 92,
+    seo: 74,
+    security: null,
+    performance: null,
+    websitesMeasured: 3,
+  },
   openBySeverity: [
     { severity: 'CRITICAL', count: 4 },
     { severity: 'HIGH', count: 11 },
@@ -252,6 +259,8 @@ const issueHistory: IssueHistoryDto = {
       detection: 'AUTOMATED',
     },
     uiHealth: null,
+    seo: null,
+    security: null,
   },
   scan: { id: 's2', createdAt: '2026-11-02T10:00:00.000Z', status: 'COMPLETED' },
   website: { id: 'w1', name: 'Shop', baseUrl: 'https://shop.example.com/' },
@@ -325,6 +334,9 @@ const a11yReport: AccessibilityReportDto = {
     previousScanId: null,
     accessibilityScore: 74,
     uiHealthScore: 90,
+    seoScore: null,
+    performanceScore: null,
+    securityScore: null,
     myRole: 'EDITOR',
     website: { id: 'w1', name: 'Shop', baseUrl: 'https://shop.example.com/' },
     project: { id: 'p1', name: 'Retail' },
@@ -420,15 +432,16 @@ describe('reports', () => {
       ...reportApi,
       'GET /api/reports/s2/performance': ok({
         scan: a11yReport.scan,
-        available: false,
-        plannedPhase: 6,
-        message: 'Performance (Lighthouse) checks are not part of the scanner yet.',
-        results: [],
+        pages: [],
+        history: [],
+        notMeasuredReason: 'Lighthouse did not run for this scan. Nothing is estimated.',
       }),
     });
     renderApp('/scans/s2/reports/performance');
-    expect(await screen.findByText(/data is not available for this scan/)).toBeInTheDocument();
-    expect(screen.getByText(/not part of the scanner yet/)).toBeInTheDocument();
+    expect(
+      await screen.findByText('Performance was not measured for this scan'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is estimated/)).toBeInTheDocument();
   });
 
   it('downloads a CSV export from the API', async () => {
@@ -533,10 +546,12 @@ describe('profile and settings', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Light/ }));
     expect(document.documentElement).not.toHaveClass('dark');
 
-    fireEvent.click(await screen.findByLabelText('Weekly summary'));
+    // The weekly summary is not built yet, so it cannot be switched on.
+    expect(await screen.findByLabelText('Weekly summary')).toBeDisabled();
+    fireEvent.click(screen.getByLabelText('Send by email'));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({
-        weeklySummary: true,
+        email: true,
         scanCompleted: true,
       }),
     );

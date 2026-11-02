@@ -8,7 +8,15 @@
  *
  * Every check prefers missing an edge case over reporting a false positive.
  */
-import type { Box, DomCheckOptions, DomCheckResult, DomFinding, LinkInfo } from './types';
+import type {
+  Box,
+  DomCheckOptions,
+  DomCheckResult,
+  DomFinding,
+  LinkInfo,
+  InsecureReference,
+  SeoSnapshot,
+} from './types';
 
 const INTERACTIVE =
   'a[href], button, input:not([type=hidden]), select, textarea, [role=button], [role=link], [tabindex]:not([tabindex="-1"])';
@@ -374,6 +382,8 @@ export function runDomChecks(options: DomCheckOptions): DomCheckResult {
         document.querySelector('meta[name="description"]')?.getAttribute('content') ?? null,
       canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null,
       h1Count: document.querySelectorAll('h1').length,
+      seo: seoSnapshot(),
+      insecureReferences: insecureReferences(selectorFor),
       viewportWidth,
       viewportHeight,
       documentWidth: scrollWidth,
@@ -381,4 +391,74 @@ export function runDomChecks(options: DomCheckOptions): DomCheckResult {
       links,
     },
   };
+}
+
+/** Reads the on-page SEO signals. Text only; nothing is changed in the page. */
+function seoSnapshot(): SeoSnapshot {
+  const meta = (selector: string) =>
+    document.querySelector(selector)?.getAttribute('content')?.trim() || null;
+  const headings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+    .slice(0, 100)
+    .map((el) => ({
+      level: Number(el.tagName.slice(1)),
+      text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 120),
+    }));
+  const images = Array.from(document.querySelectorAll('img'));
+  const withoutAlt = images.filter(
+    (img) =>
+      !img.hasAttribute('alt') &&
+      img.getAttribute('role') !== 'presentation' &&
+      img.getAttribute('role') !== 'none' &&
+      img.getAttribute('aria-hidden') !== 'true',
+  ).length;
+  return {
+    metaRobots: meta('meta[name="robots" i]'),
+    ogTitle: meta('meta[property="og:title"]'),
+    ogDescription: meta('meta[property="og:description"]'),
+    ogImage: meta('meta[property="og:image"]'),
+    headings,
+    imagesTotal: images.length,
+    imagesWithoutAlt: withoutAlt,
+  };
+}
+
+/**
+ * Mixed content: on an https page, sub-resources or form targets that use plain http.
+ * Read from the DOM because Chrome blocks or auto-upgrades such requests.
+ */
+function insecureReferences(selectorFor: (el: Element) => string): InsecureReference[] {
+  if (location.protocol !== 'https:') return [];
+  const found: InsecureReference[] = [];
+  const add = (el: Element, kind: InsecureReference['kind'], raw: string | null) => {
+    if (!raw || found.length >= 50) return;
+    let url: URL;
+    try {
+      url = new URL(raw, document.baseURI);
+    } catch {
+      return;
+    }
+    if (url.protocol !== 'http:') return;
+    found.push({
+      kind,
+      tag: el.tagName.toLowerCase(),
+      url: url.href.slice(0, 300),
+      selector: selectorFor(el),
+    });
+  };
+  document
+    .querySelectorAll('script[src]')
+    .forEach((el) => add(el, 'active', el.getAttribute('src')));
+  document
+    .querySelectorAll('iframe[src], object[data], embed[src]')
+    .forEach((el) => add(el, 'active', el.getAttribute('src') ?? el.getAttribute('data')));
+  document
+    .querySelectorAll('link[rel~="stylesheet" i][href]')
+    .forEach((el) => add(el, 'active', el.getAttribute('href')));
+  document
+    .querySelectorAll('img[src], audio[src], video[src], source[src], video[poster]')
+    .forEach((el) => add(el, 'passive', el.getAttribute('src') ?? el.getAttribute('poster')));
+  document
+    .querySelectorAll('form[action]')
+    .forEach((el) => add(el, 'form', el.getAttribute('action')));
+  return found;
 }

@@ -17,6 +17,16 @@ const CATEGORY_LABEL: Record<string, string> = {
   ACCESSIBILITY: 'Accessibility',
   UI_HEALTH: 'UI health',
   RESPONSIVE: 'Responsive',
+  PERFORMANCE: 'Performance',
+  SEO: 'SEO',
+  SECURITY: 'Security',
+};
+
+/** Security finding levels in words (passive checks; nothing was exploited). */
+const LEVEL_TEXT: Record<string, string> = {
+  CONFIRMED: 'Confirmed (insecure configuration observed, not an exploit)',
+  WARNING: 'Warning (recommended protection missing)',
+  OBSERVATION: 'Observation (worth knowing, often fine)',
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -72,6 +82,9 @@ export function buildReportHtml(
       const wcag = issue.accessibility?.wcagCriteria?.length
         ? `<div><b>WCAG:</b> ${esc(issue.accessibility.wcagCriteria.join(', '))} ${esc(issue.accessibility.wcagLevel ?? '')}</div>`
         : '';
+      const security = issue.security
+        ? `<div><b>Finding level:</b> ${esc(LEVEL_TEXT[issue.security.findingLevel] ?? issue.security.findingLevel)}${issue.security.observedValue ? ` · <b>Observed:</b> ${esc(issue.security.observedValue)}` : ''}</div>`
+        : '';
       return `<section class="issue">
   <div class="issue-head">
     <span class="sev" style="background:${SEVERITY_COLOR[issue.severity] ?? '#898781'}">${esc(issue.severity)}</span>
@@ -83,6 +96,7 @@ export function buildReportHtml(
     <div><b>Page:</b> ${esc(issue.pageUrl ?? '—')}${issue.viewport ? ` <i>(${esc(issue.viewport.toLowerCase())})</i>` : ''}</div>
     ${issue.selector ? `<div><b>Element:</b> <code>${esc(issue.selector)}</code></div>` : ''}
     ${wcag}
+    ${security}
     <div><b>Rule:</b> ${esc(issue.ruleId)}${issue.trackedIssue ? ` · <b>Status:</b> ${esc(issue.trackedIssue.status)} · first seen ${esc(formatDate(issue.trackedIssue.firstSeenAt))}` : ''}</div>
   </div>
   ${issue.htmlSnippet ? `<pre>${esc(issue.htmlSnippet.slice(0, 600))}</pre>` : ''}
@@ -146,6 +160,9 @@ ${rest
   <div class="grid">
     <div class="tile"><div class="v">${score(scan.accessibilityScore)}</div><div class="l">Accessibility score</div></div>
     <div class="tile"><div class="v">${score(scan.uiHealthScore)}</div><div class="l">UI health score</div></div>
+    <div class="tile"><div class="v">${score(scan.seoScore)}</div><div class="l">SEO score</div></div>
+    <div class="tile"><div class="v">${score(scan.performanceScore)}</div><div class="l">Performance (Lighthouse)</div></div>
+    <div class="tile"><div class="v">${score(scan.securityScore)}</div><div class="l">Security score</div></div>
     <div class="tile"><div class="v">${scan.pagesScanned}</div><div class="l">Pages scanned</div></div>
     <div class="tile"><div class="v">${scan.pagesFailed}</div><div class="l">Pages failed</div></div>
     <div class="tile"><div class="v">${counts.total}</div><div class="l">Issues (all categories)</div></div>

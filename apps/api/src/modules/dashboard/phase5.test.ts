@@ -214,6 +214,8 @@ describe('GET /api/dashboard/summary', () => {
     expect(s.scores).toEqual({
       accessibility: 80,
       uiHealth: 90,
+      seo: null, // these seeded scans have no SEO / security audit data
+      security: null,
       performance: null,
       websitesMeasured: 2,
     });
@@ -510,15 +512,14 @@ describe('reports', () => {
     expect(r.consoleErrors[0].text).toContain('TypeError');
   });
 
-  it('performance/SEO/security say honestly that nothing was measured', async () => {
+  it('performance says honestly that nothing was measured', async () => {
     const { agent } = await signUp(ctx.app);
     const site = await siteFor(agent);
     const { scanId } = await seedScan(site.websiteId);
-    for (const kind of ['performance', 'seo', 'security']) {
-      const r = (await agent.get(`/api/reports/${scanId}/${kind}`)).body.data;
-      expect(r).toMatchObject({ available: false, results: [] });
-      expect(r.message).toBeTruthy();
-    }
+    const r = (await agent.get(`/api/reports/${scanId}/performance`)).body.data;
+    expect(r).toMatchObject({ pages: [], history: [] });
+    expect(r.scan.performanceScore).toBeNull();
+    expect(r.notMeasuredReason).toContain('Nothing is estimated');
   });
 
   it('reports are not visible to outsiders', async () => {

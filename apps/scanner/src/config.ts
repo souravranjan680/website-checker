@@ -20,6 +20,14 @@ const schema = z.object({
     .default(15 * 60_000),
   SCAN_MAX_LINK_CHECKS: z.coerce.number().int().min(0).max(1000).default(150),
   SCAN_MAX_ISSUE_SCREENSHOTS: z.coerce.number().int().min(0).max(200).default(40),
+  /** Lighthouse performance audit: on/off, at most this many pages per scan, time per page. */
+  SCAN_LIGHTHOUSE_ENABLED: z.stringbool().default(true),
+  SCAN_MAX_LIGHTHOUSE_PAGES: z.coerce.number().int().min(0).max(10).default(3),
+  SCAN_LIGHTHOUSE_TIMEOUT_MS: z.coerce.number().int().min(20_000).max(300_000).default(90_000),
+  /** Visual regression: PNG snapshots of this many pages (desktop + mobile). 0 = off. */
+  SCAN_VISUAL_PAGES: z.coerce.number().int().min(0).max(10).default(3),
+  /** Days to keep page screenshots and raw Lighthouse files of old scans. 0 = keep forever. */
+  SCAN_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(0),
   SCANNER_HEADLESS: z.stringbool().default(true),
   SCANNER_BROWSER_CHANNEL: z
     .string()
@@ -40,6 +48,11 @@ export interface ScannerConfig {
   maxDurationMs: number;
   maxLinkChecks: number;
   maxIssueScreenshots: number;
+  lighthouseEnabled: boolean;
+  maxLighthousePages: number;
+  lighthouseTimeoutMs: number;
+  visualPages: number;
+  retentionDays: number;
   headless: boolean;
   browserChannel?: string;
 }
@@ -77,6 +90,11 @@ export function loadScannerConfig(source: NodeJS.ProcessEnv = process.env): Scan
     maxDurationMs: env.SCAN_MAX_DURATION_MS,
     maxLinkChecks: env.SCAN_MAX_LINK_CHECKS,
     maxIssueScreenshots: env.SCAN_MAX_ISSUE_SCREENSHOTS,
+    lighthouseEnabled: env.SCAN_LIGHTHOUSE_ENABLED,
+    maxLighthousePages: env.SCAN_MAX_LIGHTHOUSE_PAGES,
+    lighthouseTimeoutMs: env.SCAN_LIGHTHOUSE_TIMEOUT_MS,
+    visualPages: env.SCAN_VISUAL_PAGES,
+    retentionDays: env.SCAN_RETENTION_DAYS,
     headless: env.SCANNER_HEADLESS,
     browserChannel: env.SCANNER_BROWSER_CHANNEL,
   };
