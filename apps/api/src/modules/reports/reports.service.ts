@@ -4,9 +4,11 @@ import {
   VIEWPORTS,
   WCAG_CRITERIA,
   type AccessibilityReportDto,
+  type ConsoleKindName,
   type ManualCheckState,
   type PerformanceReportDto,
   type ReportScanInfo,
+  type ResourceVerdictName,
   type ResponsiveReportDto,
   type SecurityFindingLevel,
   type SecurityReportDto,
@@ -218,7 +220,7 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
     },
 
     async uiHealth(user: AuthUser, scanId: string): Promise<UiHealthReportDto> {
-      const { info } = await scanInfo(user, scanId);
+      const { info, scan } = await scanInfo(user, scanId);
       const [issues, pages, perPage] = await Promise.all([
         prisma.issue.findMany({
           where: { scanId, category: 'UI_HEALTH' },
@@ -227,7 +229,14 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
         prisma.scanPage.findMany({
           where: { scanId },
           orderBy: { createdAt: 'asc' },
-          select: { id: true, url: true, status: true, consoleErrors: true, failedRequests: true },
+          select: {
+            id: true,
+            url: true,
+            status: true,
+            consoleErrors: true,
+            pageErrors: true,
+            failedRequests: true,
+          },
         }),
         prisma.issue.groupBy({
           by: ['scanPageId'],
@@ -245,39 +254,92 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
         checks.set(type, entry);
       }
       const counts = new Map(perPage.map((row) => [row.scanPageId, row._count._all]));
-      type Console = { text: string };
+      type Related = { url: string; status: number | null; relation: 'mentioned' | 'same-service' };
+      type Console = {
+        text?: string;
+        message?: string;
+        level?: 'error' | 'warning';
+        kind?: ConsoleKindName;
+        source?: string;
+        line?: number;
+        column?: number;
+        related?: Related[];
+      };
       type Failed = {
         url: string;
         resourceType: string;
         status?: number;
         error?: string;
         blockedByPolicy?: boolean;
+        verdict?: ResourceVerdictName;
+        verdictReason?: string;
       };
       const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
+      // The same message from the same script is one row, however many pages logged it.
+      const consoleRows = new Map<string, UiHealthReportDto['consoleErrors'][number]>();
+      for (const page of pages) {
+        const entries = [
+          ...asArray<Console>(page.consoleErrors).map((c) => ({ ...c, level: c.level ?? 'error' })),
+          ...asArray<Console>(page.pageErrors).map((c) => ({ ...c, level: 'exception' as const })),
+        ];
+        for (const entry of entries) {
+          const text = entry.text ?? entry.message ?? '';
+          const key = [entry.level, text, entry.source ?? ''].join('|');
+          const row = consoleRows.get(key);
+          if (row) {
+            row.occurrences += 1;
+            if (
+              row.pageUrl !== page.url &&
+              !row.otherPages.includes(page.url) &&
+              row.otherPages.length < 5
+            ) {
+              row.otherPages.push(page.url);
+            }
+            continue;
+          }
+          if (consoleRows.size >= 200) continue;
+          consoleRows.set(key, {
+            pageUrl: page.url,
+            otherPages: [],
+            occurrences: 1,
+            level: entry.level,
+            kind: entry.kind ?? null,
+            text,
+            source: entry.source ?? null,
+            line: entry.line ?? null,
+            column: entry.column ?? null,
+            related: (entry.related ?? []).map((r) => ({
+              url: r.url,
+              status: r.status ?? null,
+              relation: r.relation,
+            })),
+          });
+        }
+      }
+      const linkSummary =
+        (scan.siteChecks as { links?: UiHealthReportDto['links'] } | null)?.links ?? null;
 
       return {
         scan: info,
         checks: [...checks.entries()]
           .map(([checkType, c]) => ({ checkType, ...c }))
           .sort((a, b) => RANK[b.highestSeverity] - RANK[a.highestSeverity] || b.count - a.count),
-        consoleErrors: pages
-          .flatMap((p) =>
-            asArray<Console>(p.consoleErrors).map((c) => ({ pageUrl: p.url, text: c.text })),
-          )
-          .slice(0, 200),
+        consoleErrors: [...consoleRows.values()],
         failedRequests: pages
           .flatMap((p) =>
-            asArray<Failed>(p.failedRequests)
-              .filter((f) => !f.blockedByPolicy)
-              .map((f) => ({
-                pageUrl: p.url,
-                url: f.url,
-                resourceType: f.resourceType,
-                status: f.status ?? null,
-                error: f.error ?? null,
-              })),
+            asArray<Failed>(p.failedRequests).map((f) => ({
+              pageUrl: p.url,
+              url: f.url,
+              resourceType: f.resourceType,
+              status: f.status ?? null,
+              error: f.error ?? null,
+              verdict: f.verdict ?? (f.blockedByPolicy ? 'BLOCKED_BY_POLICY' : null),
+              verdictReason: f.verdictReason ?? null,
+            })),
           )
           .slice(0, 200),
+        links: linkSummary,
         pages: pages.map((p) => ({
           url: p.url,
           status: p.status,

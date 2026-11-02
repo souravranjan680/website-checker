@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useParams } from 'react-router';
+import type { ConsoleKindName, ResourceVerdictName } from '@whc/shared';
 import { ErrorState } from '@/components/common/ErrorState';
 import { canEdit } from '@/components/common/RoleBadge';
 import { SeverityBadge } from '@/components/common/StatusBadges';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,6 +39,20 @@ const CHECK_LABEL: Record<string, string> = {
   IMAGE_SIZING: 'Image sizing',
 };
 
+const CONSOLE_KIND: Record<ConsoleKindName, string> = {
+  APPLICATION: 'Site code',
+  INTEGRATION_CONFIG: 'Integration config',
+  THIRD_PARTY: 'Third-party script',
+  NETWORK: 'Network',
+  HARMLESS: 'Harmless',
+};
+
+const VERDICT: Record<ResourceVerdictName, string> = {
+  CONFIRMED: 'Confirmed',
+  INCONCLUSIVE: 'Inconclusive',
+  BLOCKED_BY_POLICY: 'Blocked (policy)',
+};
+
 /** Broken links/images, layout problems, JavaScript and console errors, failed requests. */
 export function UiHealthReport() {
   const { scanId = '' } = useParams();
@@ -68,13 +84,17 @@ export function UiHealthReport() {
         />
         <MetricTile
           label="Console errors"
-          value={r.consoleErrors.length}
-          hint="Errors the page logged to the browser console"
+          value={
+            r.consoleErrors.filter((e) => e.kind !== 'HARMLESS' && e.level !== 'warning').length
+          }
+          hint="Distinct errors and uncaught exceptions (harmless warnings excluded)"
         />
         <MetricTile
-          label="Failed requests"
-          value={r.failedRequests.length}
-          hint="Requests that failed or returned 4xx/5xx (blocked requests excluded)"
+          label="Confirmed failed requests"
+          value={r.failedRequests.filter((f) => f.verdict === 'CONFIRMED').length}
+          hint={`Failures confirmed by a re-check; ${
+            r.failedRequests.filter((f) => f.verdict !== 'CONFIRMED').length
+          } more could not be verified or were blocked by the security policy`}
         />
       </dl>
 
@@ -115,21 +135,51 @@ export function UiHealthReport() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Console errors</CardTitle>
-            <CardDescription>As logged by the page (first 200)</CardDescription>
+            <CardTitle>Console messages</CardTitle>
+            <CardDescription>
+              Errors, warnings and uncaught exceptions with their source. The same message from the
+              same script is listed once.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {r.consoleErrors.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No console errors.</p>
+              <p className="text-sm text-muted-foreground">No console errors or warnings.</p>
             ) : (
-              <ul className="max-h-72 space-y-2 overflow-auto text-sm">
+              <ul className="max-h-96 space-y-3 overflow-auto text-sm">
                 {r.consoleErrors.map((e, i) => (
-                  <li key={i}>
+                  <li key={i} className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant={e.kind === 'HARMLESS' ? 'outline' : 'secondary'}>
+                        {e.kind ? CONSOLE_KIND[e.kind] : 'Not classified'}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {e.level === 'exception' ? 'Uncaught exception' : e.level}
+                        {e.occurrences > 1 ? ` · ${e.occurrences} times` : ''}
+                      </span>
+                    </div>
                     <pre className="rounded bg-muted p-2 text-xs whitespace-pre-wrap break-all">
                       {e.text}
                     </pre>
+                    {e.source ? (
+                      <span className="block break-all text-xs text-muted-foreground">
+                        Source: {e.source}
+                        {e.line ? `:${e.line}${e.column ? `:${e.column}` : ''}` : ''}
+                      </span>
+                    ) : null}
+                    {e.related.length > 0 ? (
+                      <span className="block break-all text-xs text-muted-foreground">
+                        Related requests:{' '}
+                        {e.related
+                          .map(
+                            (rel) =>
+                              `${rel.url} (${rel.status ? `HTTP ${rel.status}` : 'failed'}${rel.relation === 'same-service' ? ', possibly related' : ''})`,
+                          )
+                          .join('; ')}
+                      </span>
+                    ) : null}
                     <span className="block truncate text-xs text-muted-foreground">
                       {e.pageUrl}
+                      {e.otherPages.length > 0 ? ` and ${e.otherPages.length} more page(s)` : ''}
                     </span>
                   </li>
                 ))}
@@ -140,23 +190,32 @@ export function UiHealthReport() {
         <Card>
           <CardHeader>
             <CardTitle>Failed requests</CardTitle>
-            <CardDescription>Resources that could not be loaded</CardDescription>
+            <CardDescription>
+              Each failure is re-checked. Only confirmed failures are reported as issues.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {r.failedRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">No failed requests.</p>
             ) : (
-              <ul className="max-h-72 space-y-2 overflow-auto text-sm">
+              <ul className="max-h-96 space-y-3 overflow-auto text-sm">
                 {r.failedRequests.map((f, i) => (
-                  <li key={i} className="flex items-start justify-between gap-2">
-                    <span className="min-w-0">
-                      <span className="block break-all">{f.url}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {f.resourceType} on {f.pageUrl}
-                      </span>
+                  <li key={i} className="space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 break-all">{f.url}</span>
+                      <Badge
+                        variant={f.verdict === 'CONFIRMED' ? 'destructive' : 'outline'}
+                        className="shrink-0"
+                      >
+                        {f.verdict ? VERDICT[f.verdict] : 'Not re-checked'}
+                      </Badge>
+                    </div>
+                    <span className="block text-xs text-muted-foreground">
+                      {f.status ? `HTTP ${f.status}` : (f.error ?? 'failed')}
+                      {f.verdictReason ? ` · ${f.verdictReason}` : ''}
                     </span>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {f.status ?? f.error ?? 'failed'}
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {f.resourceType} on {f.pageUrl}
                     </span>
                   </li>
                 ))}
@@ -165,6 +224,38 @@ export function UiHealthReport() {
           </CardContent>
         </Card>
       </div>
+
+      {r.links && (r.links.inconclusive.length > 0 || r.links.blockedByPolicy.length > 0) ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Links that could not be verified</CardTitle>
+            <CardDescription>
+              {r.links.checked} links checked, {r.links.confirmedBroken} confirmed broken (listed as
+              issues). These were not reported as broken: check them manually.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="max-h-72 space-y-2 overflow-auto text-sm">
+              {r.links.inconclusive.map((l) => (
+                <li key={l.href}>
+                  <span className="block break-all">{l.href}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Inconclusive · {l.reason}
+                  </span>
+                </li>
+              ))}
+              {r.links.blockedByPolicy.map((l) => (
+                <li key={l.href}>
+                  <span className="block break-all">{l.href}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Not checked · {l.reason}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

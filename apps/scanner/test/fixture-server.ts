@@ -24,6 +24,10 @@ export interface FixtureServer {
 }
 
 export const FIXTURE_HOST = 'fixtures.whc.test';
+/** Stands in for Storyblok's content API (test proxy only; never contacted for real). */
+export const STORYBLOK_HOST = 'api.storyblok.com';
+/** A third-party widget script host. */
+export const THIRD_PARTY_HOST = 'widgets.thirdparty-cdn.test';
 
 export async function startFixtureServer(): Promise<FixtureServer> {
   let secretHits = 0;
@@ -40,7 +44,40 @@ export async function startFixtureServer(): Promise<FixtureServer> {
       extra: Record<string, string> = {},
     ) => res.writeHead(status, { 'content-type': type, ...extra }).end(body);
 
+    // Other "websites" (third-party services), mapped to this server by the test proxy.
+    const host = (req.headers.host ?? '').split(':')[0];
+    if (host === STORYBLOK_HOST) {
+      // The Storyblok content API without a valid access token.
+      return send(401, '{"error":"Unauthorized"}', 'application/json', {
+        'access-control-allow-origin': '*',
+      });
+    }
+    if (host === THIRD_PARTY_HOST) {
+      return send(
+        200,
+        "window.addEventListener('load', () => { throw new Error('Widget failed to initialise'); });\n",
+        'text/javascript',
+      );
+    }
+
     switch (url.pathname) {
+      case '/resources/flaky.png':
+        // Fails in the browser (connection cut mid-file), loads fine for the re-check:
+        // the "net::ERR_FAILED but not actually broken" case.
+        if ((req.headers['user-agent'] ?? '').includes('Chrome')) {
+          res.writeHead(200, { 'content-type': 'image/png', 'content-length': '5000' });
+          res.write(Buffer.alloc(16));
+          setTimeout(() => res.socket?.destroy(), 20);
+          return;
+        }
+        return res
+          .writeHead(200, { 'content-type': 'image/svg+xml' })
+          .end('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
+      case '/resources/not-an-image.png':
+        // Downloads fine, but it is an HTML error page served with 200: a real broken image.
+        return send(200, '<!doctype html><title>Oops</title><p>Image moved</p>');
+      case '/resources/always-500':
+        return send(500, 'Internal Server Error', 'text/plain');
       case '/secret':
         secretHits += 1;
         return send(200, 'TOP-SECRET internal data', 'text/plain');

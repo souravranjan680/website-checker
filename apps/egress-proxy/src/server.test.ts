@@ -28,7 +28,7 @@ const fakeDns: Record<string, string[]> = {
 };
 const resolve: ResolveFn = async (host) => {
   if (fakeDns[host]) return fakeDns[host]!;
-  throw new Error('ENOTFOUND');
+  throw Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' });
 };
 
 beforeAll(async () => {
@@ -61,9 +61,13 @@ afterAll(async () => {
 });
 
 /** Sends "GET <absolute url>" to the proxy, like a browser configured with a proxy. */
-function getViaProxy(
-  url: string,
-): Promise<{ status: number; blocked: boolean; body: string; location?: string }> {
+function getViaProxy(url: string): Promise<{
+  status: number;
+  blocked: boolean;
+  reason?: string;
+  body: string;
+  location?: string;
+}> {
   return new Promise((resolveResult, reject) => {
     const request = http.request(
       {
@@ -80,6 +84,7 @@ function getViaProxy(
           resolveResult({
             status: res.statusCode ?? 0,
             blocked: res.headers[BLOCKED_HEADER] === '1',
+            reason: res.headers['x-whc-egress-reason'] as string | undefined,
             body,
             location: res.headers.location,
           }),
@@ -131,10 +136,25 @@ describe('plain HTTP through the proxy', () => {
     expect(res.body).not.toContain('TOP-SECRET');
   });
 
-  it('fails closed with 502 when DNS lookup fails', async () => {
+  it('fails closed with 502 + reason "dns-not-found" when the domain does not exist', async () => {
     const res = await getViaProxy('http://does-not-exist.example/');
     expect(res.status).toBe(502);
     expect(res.blocked).toBe(true);
+    expect(res.reason).toBe('dns-not-found');
+  });
+
+  it('answers 504 + reason "unreachable" when the site refuses the connection (not a policy block)', async () => {
+    // fixtures.whc.test is mapped to 127.0.0.1; port 1 has nothing listening.
+    const res = await getViaProxy('http://fixtures.whc.test:1/');
+    expect(res.status).toBe(504);
+    expect(res.blocked).toBe(false);
+    expect(res.reason).toBe('unreachable');
+  });
+
+  it('labels policy refusals with reason "policy"', async () => {
+    const res = await getViaProxy(`http://127.0.0.1:${secretPort}/secret`);
+    expect(res.status).toBe(403);
+    expect(res.reason).toBe('policy');
   });
 
   it('re-checks every redirect hop (redirect-based SSRF)', async () => {
@@ -190,6 +210,11 @@ describe('HTTPS tunnels (CONNECT)', () => {
     [() => 'example.com:22'],
   ])('refuses %s', async (authority) => {
     expect(await connectViaProxy(authority())).toBe(403);
+  });
+
+  it('tells a missing domain (502) and an unreachable site (504) apart from a policy refusal', async () => {
+    expect(await connectViaProxy('does-not-exist.example:443')).toBe(502);
+    expect(await connectViaProxy('fixtures.whc.test:1')).toBe(504);
   });
 });
 

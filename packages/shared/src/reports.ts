@@ -146,17 +146,46 @@ export interface AccessibilityReportDto {
   checklist: Record<string, ManualCheckState>;
 }
 
+/** How the scanner classified a console message (null: scans before the classifier existed). */
+export type ConsoleKindName =
+  'APPLICATION' | 'INTEGRATION_CONFIG' | 'THIRD_PARTY' | 'NETWORK' | 'HARMLESS';
+
+/** Re-check result of a failed resource (null: scans before re-checks existed). */
+export type ResourceVerdictName = 'CONFIRMED' | 'INCONCLUSIVE' | 'BLOCKED_BY_POLICY';
+
 export interface UiHealthReportDto {
   scan: ReportScanInfo;
   checks: { checkType: string; count: number; highestSeverity: SeverityName }[];
-  consoleErrors: { pageUrl: string; text: string }[];
+  /** Console errors/warnings and uncaught exceptions; the same message from the same script is one row. */
+  consoleErrors: {
+    pageUrl: string;
+    /** Other pages where the same message appeared (up to 5). */
+    otherPages: string[];
+    occurrences: number;
+    level: 'error' | 'warning' | 'exception';
+    kind: ConsoleKindName | null;
+    text: string;
+    source: string | null;
+    line: number | null;
+    column: number | null;
+    related: { url: string; status: number | null; relation: 'mentioned' | 'same-service' }[];
+  }[];
   failedRequests: {
     pageUrl: string;
     url: string;
     resourceType: string;
     status: number | null;
     error: string | null;
+    verdict: ResourceVerdictName | null;
+    verdictReason: string | null;
   }[];
+  /** Link check summary (null when no links were checked). */
+  links: {
+    checked: number;
+    confirmedBroken: number;
+    inconclusive: { href: string; reason: string; status: number | null }[];
+    blockedByPolicy: { href: string; reason: string }[];
+  } | null;
   pages: {
     url: string;
     status: string;

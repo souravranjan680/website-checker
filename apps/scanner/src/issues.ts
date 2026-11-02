@@ -3,6 +3,7 @@ import type { Box, DomFinding } from '@whc/dom-checks';
 import type { AxeOutput, AxeRuleResult } from './checks/axe';
 import { axeSelector } from './checks/axe';
 import type { PageNetworkLog } from './checks/collectors';
+import type { ConsoleGroup, ConsoleKind } from './checks/console-classify';
 import { pathOf } from './crawler/urls';
 
 export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
@@ -312,7 +313,102 @@ export function domToDrafts(
   );
 }
 
-/** Failed resources, console messages and uncaught exceptions → issues. */
+const CONSOLE_TITLES: Record<ConsoleKind, string> = {
+  APPLICATION: 'JavaScript error in the site’s code',
+  INTEGRATION_CONFIG: 'Integration not configured correctly',
+  THIRD_PARTY: 'Error in a third-party script',
+  NETWORK: 'Request failure reported in the console',
+  HARMLESS: 'Console warning',
+};
+
+/** Problems that look the same on every page (a service, a widget): one issue per scan. */
+const SITE_WIDE_KINDS = new Set<ConsoleKind>(['INTEGRATION_CONFIG', 'THIRD_PARTY', 'NETWORK']);
+
+function locationText(location: {
+  source?: string;
+  line?: number;
+  column?: number;
+}): string | null {
+  if (!location.source) return null;
+  return `${location.source}${location.line ? `:${location.line}${location.column ? `:${location.column}` : ''}` : ''}`;
+}
+
+/** Console messages and uncaught exceptions (already classified and grouped) → issues. */
+export function consoleToDrafts(groups: ConsoleGroup[], ctx: IssueContext): IssueDraft[] {
+  const drafts: IssueDraft[] = [];
+  let consoleCount = 0;
+  let exceptionCount = 0;
+  for (const group of groups) {
+    const { classification } = group;
+    if (!classification.severity) continue; // HARMLESS: kept on the page record only
+    const exception = group.level === 'exception';
+    if (exception ? exceptionCount++ >= 10 : consoleCount++ >= 10) continue;
+    const where = locationText(group.location);
+    const related = classification.related
+      .map(
+        (r) =>
+          `${r.url} (${r.status ? `HTTP ${r.status}` : (r.error ?? 'failed')}${r.relation === 'same-service' ? ', possibly related' : ''})`,
+      )
+      .join('; ');
+    const description = [
+      group.text,
+      where ? `Source: ${where}` : null,
+      group.occurrences > 1 ? `Logged ${group.occurrences} times on this page.` : null,
+      related ? `Related failed requests: ${related}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const target = `${classification.kind}|${classification.normalized}|${classification.sourcePath ?? ''}`;
+    const draft = uiDraft(exception ? 'JS_ERROR' : 'CONSOLE_ERROR', ctx, 'UI_HEALTH', {
+      severity: classification.severity,
+      description,
+      resourceUrl: group.location.source ?? null,
+      measurements: {
+        kind: classification.kind,
+        level: group.level,
+        message: group.text,
+        source: group.location.source ?? null,
+        line: group.location.line ?? null,
+        column: group.location.column ?? null,
+        stack: group.stack ?? null,
+        occurrences: group.occurrences,
+        relatedRequests: classification.related,
+      },
+      target,
+    });
+    draft.title =
+      exception && classification.kind === 'APPLICATION'
+        ? UI_TEXT.JS_ERROR.title
+        : CONSOLE_TITLES[classification.kind];
+    if (classification.kind === 'INTEGRATION_CONFIG') {
+      draft.suggestedFix =
+        'A service the page uses rejected the request or is missing its configuration (for example an API key or access token). Check the service’s settings and the keys/tokens in the site’s environment; the feature that depends on it does not work until then.';
+    } else if (classification.kind === 'THIRD_PARTY') {
+      draft.suggestedFix =
+        'The error comes from a script loaded from another service. Check its configuration and version, or contact its provider; remove it if it is no longer needed.';
+    } else if (classification.kind === 'NETWORK') {
+      draft.suggestedFix =
+        'A request made by the page failed. See the related failed requests (each is re-checked separately) and the server or CORS configuration.';
+    }
+    if (SITE_WIDE_KINDS.has(classification.kind)) {
+      // Same service problem on every page → one issue per scan, stable across scans.
+      draft.fingerprint = fingerprint({
+        ...ctx,
+        pageUrl: '/',
+        category: 'UI_HEALTH',
+        ruleId: draft.ruleId,
+        target,
+      });
+    }
+    drafts.push(draft);
+  }
+  return drafts;
+}
+
+/**
+ * Failed resources → issues. Only CONFIRMED failures (see checks/verify-resources.ts)
+ * are reported; inconclusive and policy-blocked ones stay on the page record.
+ */
 export function networkToDrafts(
   log: PageNetworkLog,
   ctx: IssueContext,
@@ -323,11 +419,19 @@ export function networkToDrafts(
   const seen = new Set<string>();
 
   for (const request of log.failedRequests) {
-    if (request.blockedByPolicy) continue; // our proxy refused it (private address): not the site's fault
+    if (request.blockedByPolicy || request.verdict !== 'CONFIRMED') continue;
     const key = `${request.resourceType}|${request.url}`;
     if (seen.has(key) || request.resourceType === 'document') continue;
     seen.add(key);
-    const problem = request.status ? `HTTP ${request.status}` : (request.error ?? 'failed');
+    // "… could not be loaded. The server answered HTTP 404, and HTTP 404 again on a re-check."
+    const problem =
+      request.verdictReason ??
+      (request.status ? `HTTP ${request.status}.` : `${request.error ?? 'failed'}.`);
+    const verification = {
+      verdict: request.verdict,
+      verdictReason: request.verdictReason ?? null,
+      error: request.error ?? null,
+    };
     let host = '';
     try {
       host = new URL(request.url).hostname;
@@ -341,9 +445,10 @@ export function networkToDrafts(
       drafts.push(
         uiDraft(check, ctx, 'UI_HEALTH', {
           severity: thirdParty ? 'MEDIUM' : 'HIGH',
-          description: `${request.url} could not be loaded (${problem}).`,
+          description: `${request.url} could not be loaded. ${problem}`,
           resourceUrl: request.url,
           statusCode: request.status ?? null,
+          measurements: verification,
           target: request.url,
         }),
       );
@@ -352,9 +457,10 @@ export function networkToDrafts(
       drafts.push(
         uiDraft('BROKEN_IMAGE', ctx, 'UI_HEALTH', {
           severity: 'MEDIUM',
-          description: `The image ${request.url} could not be loaded (${problem}).`,
+          description: `The image ${request.url} could not be loaded. ${problem}`,
           resourceUrl: request.url,
           statusCode: request.status ?? null,
+          measurements: verification,
           target: request.url,
         }),
       );
@@ -363,39 +469,14 @@ export function networkToDrafts(
       drafts.push(
         uiDraft('FAILED_REQUEST', ctx, 'UI_HEALTH', {
           severity: isFavicon || thirdParty ? 'INFO' : 'LOW',
-          description: `A ${request.resourceType} request to ${request.url} failed (${problem}).`,
+          description: `A ${request.resourceType} request to ${request.url} failed. ${problem}`,
           resourceUrl: request.url,
           statusCode: request.status ?? null,
+          measurements: verification,
           target: request.url,
         }),
       );
     }
-  }
-
-  const consoleSeen = new Set<string>();
-  for (const entry of log.consoleErrors.slice(0, 10)) {
-    if (consoleSeen.has(entry.text)) continue;
-    consoleSeen.add(entry.text);
-    drafts.push(
-      uiDraft('CONSOLE_ERROR', ctx, 'UI_HEALTH', {
-        severity: 'LOW',
-        description: entry.text,
-        resourceUrl: entry.source ?? null,
-        target: entry.text.slice(0, 200),
-      }),
-    );
-  }
-  const errorSeen = new Set<string>();
-  for (const entry of log.pageErrors.slice(0, 10)) {
-    if (errorSeen.has(entry.message)) continue;
-    errorSeen.add(entry.message);
-    drafts.push(
-      uiDraft('JS_ERROR', ctx, 'UI_HEALTH', {
-        severity: 'MEDIUM',
-        description: entry.message,
-        target: entry.message.slice(0, 200),
-      }),
-    );
   }
   return drafts;
 }

@@ -20,6 +20,7 @@ bug reports and scan history.
 | [docs/11-phase-4-scanning.md](docs/11-phase-4-scanning.md) | **How scanning works**: Playwright, DOM checks, axe-core, the security proxy, BullMQ, progress, debugging |
 | [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md) | **How the dashboard, history, reports, issue tracking and exports work** |
 | [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md) | **Lighthouse, SEO, security, visual regression, bug reports, AI, notifications, storage cleanup** |
+| [docs/14-scanner-reliability.md](docs/14-scanner-reliability.md) | **Re-checking failed resources and links (no false "broken"), console error classification** |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Exact versions and why |
 
 ---
@@ -297,6 +298,9 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
   Phase 6 limit: [docs/13-phase-6-advanced-audits.md](docs/13-phase-6-advanced-audits.md#14-known-limitations).
 - **AI explanations need an Anthropic API key** (`ANTHROPIC_API_KEY` in `.env`); without it
   they say "not set up" and everything else works. Not yet verified against the live API.
+- **Failed resources and links are re-checked once**; only confirmed failures become issues.
+  Ones that could not be verified (timeouts, refused connections) are listed in the UI health
+  report, not reported as broken. Limits: [docs/14-scanner-reliability.md](docs/14-scanner-reliability.md#5-limitations).
 - **Lighthouse** is a mobile lab test (scores vary by a few points between runs; INP is not
   measurable in the lab). **Security** checks are passive configuration checks, not a
   penetration test.

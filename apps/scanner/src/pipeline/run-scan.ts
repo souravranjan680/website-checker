@@ -23,6 +23,7 @@ import {
 } from '../audits/lighthouse';
 import { captureVisual, compareImages, parseIgnoreSettings } from '../audits/visual';
 import { collectSiteSecurityFacts, collectSiteSeoFacts, fetchSiteFile } from '../audits/site-files';
+import { checkLink, probeUrl } from '../audits/resource-check';
 import { ALLOW_ALL, parseRobotsTxt, type RobotsRules } from '../crawler/robots';
 import {
   compilePatterns,
@@ -215,6 +216,8 @@ export async function runScan(
           cropBudget,
           alreadyScanned: (u) =>
             pages.some((p) => p.status === 'DONE' && normalizeUrl(p.url) === u),
+          // Same proxy-only client as the link checks: the egress policy applies to re-checks too.
+          probe: (resourceUrl) => probeUrl(api!, resourceUrl, 'GET', 8_000),
           logger: log,
         });
       } finally {
@@ -238,9 +241,9 @@ export async function runScan(
           h1Count: result.meta?.h1Count ?? null,
           loadTimeMs: result.loadTimeMs,
           responseHeaders: result.responseHeaders ?? undefined,
-          consoleErrors: result.network.consoleErrors,
+          consoleErrors: result.network.consoleErrors as unknown as object[],
           failedRequests: result.network.failedRequests as unknown as object[],
-          pageErrors: result.network.pageErrors,
+          pageErrors: result.network.pageErrors as unknown as object[],
           seoData: result.meta ? (result.meta.seo as unknown as object) : undefined,
           errorMessage: result.errorMessage,
         },
@@ -419,6 +422,7 @@ export async function runScan(
 
     // -------------------------------------------------------- broken links
     checkpoint();
+    let linkSummary: LinkCheckSummary | null = null;
     if (scannedPages.length > 0 && !timeLimitReached) {
       await progress.update({
         step: 'Checking links',
@@ -426,7 +430,7 @@ export async function runScan(
         progress: 80,
         issuesFound,
       });
-      await checkLinks({
+      linkSummary = await checkLinks({
         api,
         scanId,
         websiteId: website.id,
@@ -516,6 +520,7 @@ export async function runScan(
     // ----------------------------------------------------------------- SEO
     // Runs on facts already collected; only robots.txt and the sitemap are fetched.
     const siteChecks: Record<string, unknown> = {};
+    if (linkSummary) siteChecks.links = linkSummary;
     if (scannedPages.length > 0) {
       await progress.update({ step: 'Checking SEO', currentUrl: null, progress: 86, issuesFound });
       const duplicates = duplicateSeoDrafts(website.id, seoPages);
@@ -898,37 +903,20 @@ async function scanViewport(args: {
   }
 }
 
-type LinkProblem = 'ok' | 'broken' | 'server-error' | 'unreachable' | 'blocked' | 'unknown';
-
-async function probeLink(
-  api: APIRequestContext,
-  url: string,
-): Promise<{ problem: LinkProblem; status: number | null }> {
-  try {
-    const response = await api.head(url, {
-      maxRedirects: 5,
-      timeout: 10_000,
-      failOnStatusCode: false,
-    });
-    const status = response.status();
-    const blocked = response.headers()[BLOCKED_RESPONSE_HEADER] === '1';
-    await response.dispose();
-    if (blocked) return { problem: status === 403 ? 'blocked' : 'unreachable', status: null };
-    if (status === 404 || status === 410) return { problem: 'broken', status };
-    if (status >= 500) return { problem: 'server-error', status };
-    // 2xx/3xx, and 401/403/405/429 (servers that reject HEAD or bots) are not reported.
-    return { problem: 'ok', status };
-  } catch (error) {
-    const message = (error as Error).message;
-    if (/statusCode=403|status code 403/i.test(message))
-      return { problem: 'blocked', status: null };
-    if (/statusCode=502|ENOTFOUND|ECONNREFUSED|tunnel/i.test(message))
-      return { problem: 'unreachable', status: null };
-    return { problem: 'unknown', status: null }; // timeouts etc.: not reported to avoid false positives
-  }
+export interface LinkCheckSummary {
+  checked: number;
+  confirmedBroken: number;
+  /** Not reported as issues: could not be verified (timeouts, refused connections...). */
+  inconclusive: { href: string; reason: string; status: number | null }[];
+  /** Not checked: private/internal addresses refused by the egress policy. */
+  blockedByPolicy: { href: string; reason: string }[];
 }
 
-/** Finds broken links: internal pages we visited + a capped number of HEAD checks. */
+/**
+ * Finds broken links: internal pages we visited + a capped number of checks
+ * (HEAD, then GET to confirm). Only CONFIRMED broken links become issues; the
+ * rest are returned so the report can list them.
+ */
 async function checkLinks(args: {
   api: APIRequestContext;
   scanId: string;
@@ -940,20 +928,26 @@ async function checkLinks(args: {
   storeIssues: (scanPageId: string | null, drafts: IssueDraft[]) => Promise<void>;
   checkpoint: () => void;
   log: Logger;
-}): Promise<void> {
+}): Promise<LinkCheckSummary> {
   const { linkRefs, pages, deps } = args;
   const visitedStatus = new Map(pages.map((p) => [p.normalizedUrl, p]));
   const toProbe: string[] = [];
-  const results = new Map<string, { problem: LinkProblem; status: number | null }>();
+  const results = new Map<string, Awaited<ReturnType<typeof checkLink>>>();
 
   for (const href of linkRefs.keys()) {
     const visited = visitedStatus.get(href);
     if (visited) {
-      if (visited.httpStatus === 404 || visited.httpStatus === 410)
-        results.set(href, { problem: 'broken', status: visited.httpStatus });
-      else if (visited.httpStatus && visited.httpStatus >= 500)
-        results.set(href, { problem: 'server-error', status: visited.httpStatus });
-      continue; // FAILED (incl. blocked) pages are reported on the Pages list, not as broken links
+      // The browser loaded it as a page: a 404/410 is the site's own answer.
+      if (visited.httpStatus === 404 || visited.httpStatus === 410) {
+        results.set(href, {
+          verdict: 'CONFIRMED',
+          reason: `The page does not exist (HTTP ${visited.httpStatus}).`,
+          status: visited.httpStatus,
+        });
+        continue;
+      }
+      // A server error may be temporary: re-checked below like any other link.
+      if (!(visited.httpStatus && visited.httpStatus >= 500)) continue; // FAILED pages are on the Pages list
     }
     if (toProbe.length < deps.config.maxLinkChecks) toProbe.push(href);
   }
@@ -962,43 +956,55 @@ async function checkLinks(args: {
   for (let i = 0; i < toProbe.length; i += 4) {
     args.checkpoint();
     const batch = toProbe.slice(i, i + 4);
-    const outcomes = await Promise.all(batch.map((href) => probeLink(args.api, href)));
+    const outcomes = await Promise.all(batch.map((href) => checkLink(args.api, href)));
     batch.forEach((href, index) => results.set(href, outcomes[index]!));
   }
 
+  const summary: LinkCheckSummary = {
+    checked: results.size,
+    confirmedBroken: 0,
+    inconclusive: [],
+    blockedByPolicy: [],
+  };
   for (const [href, result] of results) {
-    if (result.problem === 'ok' || result.problem === 'unknown') continue;
-    if (result.problem === 'blocked') {
+    if (result.verdict === 'OK') continue;
+    if (result.verdict === 'BLOCKED_BY_POLICY') {
       args.log.info({ href }, 'link points to a private/internal address; not checked');
+      if (summary.blockedByPolicy.length < 50)
+        summary.blockedByPolicy.push({ href, reason: result.reason });
       continue;
     }
+    if (result.verdict === 'INCONCLUSIVE') {
+      if (summary.inconclusive.length < 50) {
+        summary.inconclusive.push({ href, reason: result.reason, status: result.status });
+      }
+      continue;
+    }
+    summary.confirmedBroken += 1;
     const internal = isSameSite(href, args.siteHostname);
+    const serverError = result.status !== null && result.status >= 500;
     for (const ref of linkRefs.get(href) ?? []) {
-      const description =
-        result.problem === 'broken'
-          ? `This link points to ${href}, which returns HTTP ${result.status} (not found).`
-          : result.problem === 'server-error'
-            ? `This link points to ${href}, which returns a server error (HTTP ${result.status}).`
-            : `This link points to ${href}, which could not be reached (the domain may not exist).`;
+      const description = `This link points to ${href}. ${result.reason}`;
       await args.storeIssues(ref.scanPageId, [
         uiDraft(
           'BROKEN_LINK',
           { websiteId: args.websiteId, pageUrl: ref.pageUrl, viewport: SCAN_VIEWPORTS[0]!.label },
           'UI_HEALTH',
           {
-            severity: result.problem === 'server-error' ? 'LOW' : internal ? 'HIGH' : 'MEDIUM',
+            severity: serverError ? 'LOW' : internal ? 'HIGH' : 'MEDIUM',
             description,
             selector: ref.selector,
             html: ref.html,
             resourceUrl: href,
             statusCode: result.status,
-            measurements: { href, internal, problem: result.problem },
+            measurements: { href, internal, verdict: result.verdict, verdictReason: result.reason },
             target: href,
           },
         ),
       ]);
     }
   }
+  return summary;
 }
 
 export type { ProgressReporter };

@@ -66,7 +66,15 @@ proxy:
 2. rejects if any resolved IP is blocked,
 3. **connects to the exact IP it checked** (no second lookup → no rebinding),
 4. enforces port rules, a max response size and timeouts,
-5. logs the decision (`allowed`/`blocked`, host, reason) with the scan ID.
+5. logs the decision (`allowed`/`blocked`, host, reason) with the scan ID,
+6. tells the client why it did not deliver a response (`x-whc-egress-reason`:
+   `policy` 403, `dns-not-found` 502, `dns-error` 503, `unreachable` 504), so the
+   scanner never confuses "refused by our policy" with "the site is broken"
+   ([14-scanner-reliability.md](14-scanner-reliability.md)). The reason codes do not
+   change what is allowed.
+
+Re-checks of failed resources and links use the same proxy-only client, so they are
+subject to exactly the same policy.
 
 Every redirect hop is a new request, so **every redirect is revalidated
 automatically**. Chromium flags close bypasses: `--disable-quic` (UDP),

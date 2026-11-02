@@ -1,13 +1,17 @@
 import type { InsecureReference, LinkInfo, SeoSnapshot } from '@whc/dom-checks';
+import { EGRESS_REASON_HEADER } from '@whc/shared';
 import { parseSetCookie, type CookieFacts } from '../audits/security';
 import type { Page } from 'playwright';
 import { BLOCKED_RESPONSE_HEADER, type ViewportSpec } from '../browser-types';
 import { axeSelector, boxesFor, runAxe } from '../checks/axe';
 import { attachCollectors, type PageNetworkLog } from '../checks/collectors';
+import { classifyPageConsole } from '../checks/console-classify';
 import { runDomChecksInPage } from '../checks/dom';
+import { verifyPageResources, type ProbeFn } from '../checks/verify-resources';
 import { isSameSite, normalizeUrl } from '../crawler/urls';
 import {
   axeToDrafts,
+  consoleToDrafts,
   domToDrafts,
   networkToDrafts,
   SEVERITY_RANK,
@@ -64,7 +68,8 @@ export function describeNavigationError(error: unknown, timeoutMs: number): stri
  *   1. navigate (wait for "load", then briefly for network quiet: JS-heavy pages)
  *   2. axe-core accessibility rules
  *   3. DOM/UI checks (layout, broken images, empty controls)
- *   4. network/console findings collected while loading
+ *   4. failed resources re-checked through the egress proxy (only confirmed ones
+ *      become issues); console messages and exceptions classified and grouped
  *   5. full-page screenshot + highlighted screenshots of the worst problems
  */
 export async function scanPage(params: {
@@ -77,6 +82,8 @@ export async function scanPage(params: {
   domBundle: string;
   cropBudget: { remaining: number };
   alreadyScanned: (normalizedUrl: string) => boolean;
+  /** Re-checks a failed resource through the egress proxy; null = no re-checks. */
+  probe: ProbeFn | null;
   logger: Logger;
 }): Promise<PageScanResult> {
   const { page, url, viewport, logger } = params;
@@ -130,10 +137,15 @@ export async function scanPage(params: {
       .slice(0, 50);
 
     if (headers[BLOCKED_RESPONSE_HEADER] === '1') {
+      const reason = headers[EGRESS_REASON_HEADER];
       result.errorMessage =
-        response.status() === 403
+        reason === 'policy' || (!reason && response.status() === 403)
           ? 'Blocked by the security proxy: this address (or a redirect it followed) points to a private or internal network.'
-          : 'The site could not be reached (the domain may not exist).';
+          : reason === 'dns-not-found'
+            ? 'The domain name does not exist.'
+            : reason === 'dns-error'
+              ? 'The domain name could not be looked up (temporary DNS failure).'
+              : 'The site could not be reached.';
       return result;
     }
     const skip = (message: string) => {
@@ -197,19 +209,37 @@ export async function scanPage(params: {
       seo: dom.snapshot.seo,
     };
     result.insecureReferences = dom.snapshot.insecureReferences;
+
+    // 3) re-check failed resources: only confirmed failures become issues
+    const imageVerdicts = await verifyPageResources(log, dom.findings, params.probe);
+    const domFindings = dom.findings.filter((finding) => {
+      if (finding.check !== 'BROKEN_IMAGE') return true;
+      const verdict = imageVerdicts.get(String(finding.measurements?.src ?? ''));
+      if (verdict?.verdict !== 'CONFIRMED') return false; // listed in the report as unverified
+      finding.measurements = {
+        ...finding.measurements,
+        verdict: verdict.verdict,
+        verdictReason: verdict.reason,
+      };
+      finding.message = `${finding.message} ${verdict.reason}`;
+      return true;
+    });
     const brokenImageSrcs = new Set(
-      dom.findings
+      domFindings
         .filter((f) => f.check === 'BROKEN_IMAGE')
         .map((f) => String(f.measurements?.src ?? '')),
     );
+    // 4) console messages and exceptions, classified after the requests have verdicts
+    const consoleGroups = classifyPageConsole(log, params.siteHostname);
 
     result.drafts = [
       ...axeToDrafts(axe, ctx, boxes),
-      ...domToDrafts(dom.findings, ctx, 'UI_HEALTH'),
+      ...domToDrafts(domFindings, ctx, 'UI_HEALTH'),
       ...networkToDrafts(log, ctx, params.siteHostname, brokenImageSrcs),
+      ...consoleToDrafts(consoleGroups, ctx),
     ];
 
-    // 3) screenshots (failures are logged, never fatal)
+    // 5) screenshots (failures are logged, never fatal)
     try {
       result.fullPage = await captureFullPage(page);
     } catch (error) {

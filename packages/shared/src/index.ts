@@ -12,3 +12,4 @@ export * from './reports';
 export * from './visual';
 export * from './bug-reports';
 export * from './ai';
+export * from './egress';

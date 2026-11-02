@@ -1,0 +1,31 @@
+<!doctype html>
+<!--
+  Failed resources of every kind. Only the ones marked "real" are broken for visitors;
+  the others fail for reasons that are not the site's fault or cannot be verified,
+  and must NOT be reported as broken.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: resource failures</title>
+    <link rel="stylesheet" href="/resources/missing.css" /><!-- real: 404 -->
+    <script src="http://fixtures.whc.test:1/app.js"></script><!-- unreachable server: inconclusive -->
+  </head>
+  <body>
+    <main>
+      <h1>Resource failures</h1>
+      <img src="/resources/missing.png" alt="Missing" width="40" height="40" /><!-- real: 404 -->
+      <img src="/resources/not-an-image.png" alt="Not an image" width="40" height="40" /><!-- real: HTML served as an image -->
+      <img src="http://no-such-host.invalid/logo.png" alt="Gone domain" width="40" height="40" /><!-- real: domain does not exist -->
+      <img src="/resources/flaky.png" alt="Flaky" width="40" height="40" /><!-- fails in the browser only: inconclusive -->
+      <img src="http://fixtures.whc.test:1/unreachable.png" alt="Unreachable" width="40" height="40" /><!-- inconclusive -->
+      <img src="http://10.0.0.1/internal.png" alt="Internal" width="40" height="40" /><!-- blocked by policy -->
+      <p>
+        <a href="/resources/gone">Gone page</a>
+        <a href="/resources/always-500">Always failing page</a>
+        <a href="http://fixtures.whc.test:1/">Unreachable site</a>
+        <a href="http://10.0.0.1/admin">Intranet</a>
+      </p>
+    </main>
+  </body>
+</html>

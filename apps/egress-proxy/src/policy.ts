@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { isPublicIpAddress } from '@whc/shared';
+import { EGRESS_REASONS, isPublicIpAddress } from '@whc/shared';
 
 /** Resolves a host name to every IP address it points to. Replaceable in tests. */
 export type ResolveFn = (hostname: string) => Promise<string[]>;
@@ -22,7 +22,15 @@ export interface EgressPolicy {
 
 export type EgressDecision =
   | { allowed: true; host: string; port: number; address: string }
-  | { allowed: false; host: string; port: number; status: 403 | 502; reason: string };
+  | {
+      allowed: false;
+      host: string;
+      port: number;
+      status: number;
+      /** Machine-readable cause, sent to the client (see @whc/shared egress.ts). */
+      code: 'policy' | 'dns-not-found' | 'dns-error';
+      reason: string;
+    };
 
 const INTERNAL_SUFFIXES = [
   '.localhost',
@@ -71,11 +79,15 @@ export async function decideEgress(
   resolve: ResolveFn,
 ): Promise<EgressDecision> {
   const host = canonicalHost(rawHost);
-  const deny = (reason: string, status: 403 | 502 = 403): EgressDecision => ({
+  const deny = (
+    reason: string,
+    code: 'policy' | 'dns-not-found' | 'dns-error' = 'policy',
+  ): EgressDecision => ({
     allowed: false,
     host: host ?? rawHost,
     port,
-    status,
+    status: EGRESS_REASONS[code],
+    code,
     reason,
   });
 
@@ -100,10 +112,14 @@ export async function decideEgress(
   let addresses: string[];
   try {
     addresses = await resolve(host);
-  } catch {
-    return deny('DNS lookup failed', 502);
+  } catch (error) {
+    // "No such name" is a fact about the site; other DNS errors may be temporary.
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOTFOUND' || code === 'ENODATA'
+      ? deny('DNS: the domain does not exist', 'dns-not-found')
+      : deny(`DNS lookup failed (${code ?? 'error'})`, 'dns-error');
   }
-  if (addresses.length === 0) return deny('DNS lookup returned no addresses', 502);
+  if (addresses.length === 0) return deny('DNS lookup returned no addresses', 'dns-not-found');
 
   const blocked = addresses.find((address) => !isPublicIpAddress(address));
   if (blocked) return deny(`resolves to a private or reserved address (${blocked})`);

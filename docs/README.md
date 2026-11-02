@@ -18,6 +18,7 @@ Phase 1 (architecture & planning). Read in this order:
 | [11-phase-4-scanning.md](11-phase-4-scanning.md) | Phase 4 explained: Playwright, DOM checks, axe-core, egress proxy, BullMQ, results, live progress, debugging |
 | [12-phase-5-frontend.md](12-phase-5-frontend.md) | Phase 5 explained: dashboard metrics and charts, history queries, report filtering, issue tracking, exports, settings |
 | [13-phase-6-advanced-audits.md](13-phase-6-advanced-audits.md) | Phase 6 explained: Lighthouse, SEO, security levels, visual regression, bug reports, AI safety and costs, notifications, storage cleanup |
+| [14-scanner-reliability.md](14-scanner-reliability.md) | Fixes after Phase 6: re-checking failed resources and links (confirmed / inconclusive / blocked), proxy reason codes, console error classification and grouping |
 | [VERSIONS.md](VERSIONS.md) | Exact package and image versions, and why |
 
 Diagrams use Mermaid; they render on GitHub and in VS Code (with a Mermaid

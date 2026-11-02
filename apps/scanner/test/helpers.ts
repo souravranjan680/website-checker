@@ -41,10 +41,16 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
 
 export const silentLogger = pino({ level: 'silent' });
 
-/** A real egress proxy for tests. Only FIXTURE_HOST is mapped to 127.0.0.1. */
-export async function startTestProxy() {
+/**
+ * A real egress proxy for tests. Only FIXTURE_HOST (plus any `extraHosts`, which
+ * simulate third-party services) is mapped to 127.0.0.1.
+ */
+export async function startTestProxy(extraHosts: string[] = []) {
+  const testHostMap = Object.fromEntries(
+    [FIXTURE_HOST, ...extraHosts].map((host) => [host, '127.0.0.1']),
+  );
   const server = createEgressProxy({
-    policy: { allowedPorts: [80, 443], testHostMap: { [FIXTURE_HOST]: '127.0.0.1' } },
+    policy: { allowedPorts: [80, 443], testHostMap },
     logger: silentLogger,
   });
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));

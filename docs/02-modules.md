@@ -205,7 +205,7 @@ can reuse them.
 | Check | Detection logic |
 |---|---|
 | Broken images | `img.complete && img.naturalWidth === 0` after load, plus image requests that failed or returned ≥ 400 |
-| Broken links | Link-check stage (HEAD → GET fallback), status ≥ 400 or network error |
+| Broken links | Link-check stage (HEAD, confirmed with GET): 404/410, 5xx twice, missing domain or invalid certificate. Timeouts and refused connections are "inconclusive", not broken ([14-scanner-reliability.md](14-scanner-reliability.md)) |
 | Horizontal scrolling | `document.documentElement.scrollWidth > window.innerWidth + 1` |
 | Content overflow | Visible element whose right edge is beyond the viewport *and* no ancestor clips it (`overflow: hidden/auto`) |
 | Overlapping elements | For each visible interactive element, `document.elementFromPoint(centerX, centerY)`. If the top element is neither it nor a child, something covers it. Fixed headers are excluded when the element is just scrolled under them. |

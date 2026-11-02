@@ -9,9 +9,12 @@ const dns: Record<string, string[]> = {
   'mixed.example': ['93.184.215.14', '127.0.0.1'],
   'mapped6.example': ['::ffff:169.254.169.254'],
 };
+/** Like Node's DNS errors: a code tells "no such name" from a temporary failure. */
+const dnsError = (code: string) => Object.assign(new Error(code), { code });
 const resolve: ResolveFn = vi.fn(async (host: string) => {
+  if (host === 'flaky.example') throw dnsError('EAI_AGAIN');
   const result = dns[host];
-  if (!result) throw new Error('ENOTFOUND');
+  if (!result) throw dnsError('ENOTFOUND');
   return result;
 });
 
@@ -70,10 +73,24 @@ describe('decideEgress', () => {
     expect(resolve).not.toHaveBeenCalled();
   });
 
-  it('fails closed when DNS fails (502, not allowed)', async () => {
+  it('fails closed when DNS fails, telling "no such domain" from a temporary error', async () => {
     expect(await decideEgress('nope.example', 443, policy, resolve)).toMatchObject({
       allowed: false,
       status: 502,
+      code: 'dns-not-found',
+    });
+    expect(await decideEgress('flaky.example', 443, policy, resolve)).toMatchObject({
+      allowed: false,
+      status: 503,
+      code: 'dns-error',
+    });
+  });
+
+  it('labels security refusals as policy (403)', async () => {
+    expect(await decideEgress('127.0.0.1', 80, policy, resolve)).toMatchObject({
+      allowed: false,
+      status: 403,
+      code: 'policy',
     });
   });
 

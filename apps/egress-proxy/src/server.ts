@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import net, { type Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import type { Logger } from 'pino';
+import { EGRESS_BLOCKED_HEADER, EGRESS_REASON_HEADER, EGRESS_REASONS } from '@whc/shared';
 import { decideEgress, systemResolve, type EgressPolicy, type ResolveFn } from './policy';
 
 /** Opens a TCP connection to an (already approved) IP address. Replaceable in tests. */
@@ -20,7 +21,13 @@ export interface EgressProxyOptions {
 }
 
 /** Response header that marks "refused by our policy" (vs. the target site failing). */
-export const BLOCKED_HEADER = 'x-whc-egress-blocked';
+export const BLOCKED_HEADER = EGRESS_BLOCKED_HEADER;
+const STATUS_TEXT: Record<number, string> = {
+  403: 'Forbidden',
+  502: 'Bad Gateway',
+  503: 'Service Unavailable',
+  504: 'Gateway Timeout',
+};
 
 // Headers that only concern the hop between client and proxy; never forwarded.
 const HOP_BY_HOP = new Set([
@@ -91,7 +98,11 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
         'egress blocked',
       );
       res
-        .writeHead(decision.status, { 'content-type': 'text/plain', [BLOCKED_HEADER]: '1' })
+        .writeHead(decision.status, {
+          'content-type': 'text/plain',
+          [BLOCKED_HEADER]: '1',
+          [EGRESS_REASON_HEADER]: decision.code,
+        })
         .end(`Blocked by egress policy: ${decision.reason}`);
       return;
     }
@@ -118,13 +129,21 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
         if (value !== undefined && !HOP_BY_HOP.has(name)) responseHeaders[name] = value;
       }
       res.writeHead(upstreamRes.statusCode ?? 502, responseHeaders);
+      // The site may cut the body off mid-way; pass that on as a broken response.
+      upstreamRes.on('error', () => res.destroy());
       upstreamRes.pipe(res);
     });
     upstream.on('timeout', () => upstream.destroy(new Error('upstream timeout')));
     upstream.on('error', (error) => {
       logger.info({ host: decision.host, err: error.message }, 'upstream http error');
+      // The site could not be reached (refused, reset, timeout): not a policy decision.
       if (!res.headersSent)
-        res.writeHead(502, { 'content-type': 'text/plain' }).end('Upstream error');
+        res
+          .writeHead(EGRESS_REASONS.unreachable, {
+            'content-type': 'text/plain',
+            [EGRESS_REASON_HEADER]: 'unreachable',
+          })
+          .end('Upstream unreachable');
       else res.destroy();
     });
     res.on('close', () => upstream.destroy());
@@ -146,8 +165,9 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
         'egress blocked',
       );
       client.end(
-        `HTTP/1.1 ${decision.status} ${decision.status === 403 ? 'Forbidden' : 'Bad Gateway'}\r\n` +
-          `${BLOCKED_HEADER}: 1\r\ncontent-length: 0\r\nconnection: close\r\n\r\n`,
+        `HTTP/1.1 ${decision.status} ${STATUS_TEXT[decision.status] ?? 'Bad Gateway'}\r\n` +
+          `${BLOCKED_HEADER}: 1\r\n${EGRESS_REASON_HEADER}: ${decision.code}\r\n` +
+          'content-length: 0\r\nconnection: close\r\n\r\n',
       );
       return;
     }
@@ -174,7 +194,12 @@ export function createEgressProxy(options: EgressProxyOptions): http.Server {
     upstream.on('error', (error) => {
       clearTimeout(connectTimer);
       logger.info({ host: decision.host, err: error.message }, 'upstream tunnel error');
-      if (client.writable) client.end('HTTP/1.1 502 Bad Gateway\r\nconnection: close\r\n\r\n');
+      // The site could not be reached (refused, reset, timeout): not a policy decision.
+      if (client.writable)
+        client.end(
+          `HTTP/1.1 ${EGRESS_REASONS.unreachable} Gateway Timeout\r\n` +
+            `${EGRESS_REASON_HEADER}: unreachable\r\nconnection: close\r\n\r\n`,
+        );
       client.destroy();
     });
     upstream.on('close', () => client.destroy());
