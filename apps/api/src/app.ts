@@ -25,6 +25,14 @@ import { createProjectsRouter } from './modules/projects/projects.routes';
 import { createProjectsService } from './modules/projects/projects.service';
 import { createWebsitesRouter } from './modules/websites/websites.routes';
 import { createWebsitesService } from './modules/websites/websites.service';
+import type { ScanEventHub } from './lib/scan-events';
+import type { ScanQueue } from './lib/scan-queue';
+import { createScansRouter } from './modules/scans/scans.routes';
+import { createScansService } from './modules/scans/scans.service';
+import {
+  createScreenshotsRouter,
+  createTrackedIssuesRouter,
+} from './modules/screenshots/screenshots.routes';
 
 export interface AppDependencies {
   config: AppConfig;
@@ -34,6 +42,8 @@ export interface AppDependencies {
   rateLimitStore: RateLimitStore;
   mailer: Mailer;
   resolveHostname: ResolveHostname;
+  scanQueue: ScanQueue;
+  scanEvents: ScanEventHub;
 }
 
 /**
@@ -104,6 +114,19 @@ export function createApp(deps: AppDependencies): Express {
   const auth = createAuthService({ prisma, jwt, mailer: deps.mailer, config, logger });
   const projects = createProjectsService({ prisma });
   const websites = createWebsitesService({ prisma, resolveHostname: deps.resolveHostname });
+  const scans = createScansService({
+    prisma,
+    queue: deps.scanQueue,
+    events: deps.scanEvents,
+    config,
+  });
+  // Scans are expensive: at most 20 started per hour per user.
+  const scanStartLimit = rateLimit({
+    name: 'scan-start',
+    windowMs: 60 * 60_000,
+    max: 20,
+    keys: (req) => [`user:${req.user?.id ?? clientIp(req)}`],
+  });
 
   // 7. Routes. Public: health + auth. Everything else requires a signed-in user.
   app.use('/api/health', createHealthRouter(deps.healthService));
@@ -112,6 +135,17 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/api/websites', requireAuth, createWebsitesRouter({ websites }));
   app.use('/api/activity', requireAuth, createActivityRouter({ prisma }));
   app.use('/api/admin', requireAuth, requireAdmin, createAdminRouter({ prisma }));
+  app.use(
+    '/api/scans',
+    requireAuth,
+    createScansRouter({ scans, events: deps.scanEvents, startLimit: scanStartLimit }),
+  );
+  app.use(
+    '/api/screenshots',
+    requireAuth,
+    createScreenshotsRouter({ prisma, storageDir: config.scans.storageDir }),
+  );
+  app.use('/api/tracked-issues', requireAuth, createTrackedIssuesRouter({ prisma }));
 
   // 8. Nothing matched → 404; any error → standard JSON error.
   app.use(notFoundHandler);

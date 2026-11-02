@@ -9,6 +9,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
+COPY packages/dom-checks/package.json packages/dom-checks/
+COPY apps/egress-proxy/package.json apps/egress-proxy/
+COPY apps/scanner/package.json apps/scanner/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 RUN npm ci --no-fund --no-audit -w @whc/api -w @whc/db -w @whc/shared
@@ -27,6 +30,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
+COPY packages/dom-checks/package.json packages/dom-checks/
+COPY apps/egress-proxy/package.json apps/egress-proxy/
+COPY apps/scanner/package.json apps/scanner/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 # Known limitation (trimmed in Phase 8): npm ci installs the production dependencies of

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
+import { findRepoRoot } from '../lib/storage';
 
 /** "15m" → 900 seconds. Supports s (seconds), m (minutes), h (hours). */
 const durationSchema = z
@@ -44,6 +45,12 @@ const envSchema = z
     SMTP_PASSWORD: optionalString,
     MAIL_FROM: z.string().default('Website Health Checker <no-reply@whc.local>'),
 
+    // Scanning
+    STORAGE_DIR: z.string().default('./storage'),
+    REQUIRE_DOMAIN_VERIFICATION: z.stringbool().default(false),
+    SCAN_QUEUE_PREFIX: z.string().default('whc'),
+    MAX_ACTIVE_SCANS_PER_USER: z.coerce.number().int().min(1).max(20).default(3),
+
     // AI (Phase 6)
     CLAUDE_MODEL: z.string().min(1).default('claude-sonnet-5-5'),
     ANTHROPIC_API_KEY: optionalString,
@@ -74,6 +81,12 @@ export interface AppConfig {
   appUrl: string;
   rateLimitEnabled: boolean;
   mail: { host: string; port: number; user?: string; password?: string; from: string };
+  scans: {
+    storageDir: string;
+    requireDomainVerification: boolean;
+    queuePrefix: string;
+    maxActivePerUser: number;
+  };
   claudeModel: string;
   /** True when an Anthropic key is configured (the key itself never leaves this process). */
   aiConfigured: boolean;
@@ -127,6 +140,13 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       user: env.SMTP_USER,
       password: env.SMTP_PASSWORD,
       from: env.MAIL_FROM,
+    },
+    scans: {
+      // Relative paths are relative to the repository root, so API and scanner agree.
+      storageDir: path.resolve(findRepoRoot(), env.STORAGE_DIR),
+      requireDomainVerification: env.REQUIRE_DOMAIN_VERIFICATION,
+      queuePrefix: env.SCAN_QUEUE_PREFIX,
+      maxActivePerUser: env.MAX_ACTIVE_SCANS_PER_USER,
     },
     claudeModel: env.CLAUDE_MODEL,
     aiConfigured: Boolean(env.ANTHROPIC_API_KEY),

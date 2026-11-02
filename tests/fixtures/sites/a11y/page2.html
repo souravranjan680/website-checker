@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Intentional UI health defects: missing CSS/JS/image, a console error and an uncaught exception. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture page 2</title>
+    <link rel="stylesheet" href="/missing-style.css" />
+    <script src="/missing-script.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Page two</h1>
+      <img src="/missing-image.png" alt="A picture that is missing" width="100" height="100" />
+      <p>Back to the <a href="/a11y/">first page</a>.</p>
+      <p id="section">A section.</p>
+    </main>
+    <script>
+      console.error('Fixture console error');
+      setTimeout(() => {
+        throw new Error('Fixture uncaught error');
+      }, 0);
+    </script>
+  </body>
+</html>

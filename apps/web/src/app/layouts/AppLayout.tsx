@@ -44,7 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, phase: 5 },
   { label: 'Projects', icon: FolderKanban, to: '/projects' },
   { label: 'Websites', icon: Globe, to: '/websites' },
-  { label: 'Scan Center', icon: ScanSearch, phase: 4 },
+  { label: 'Scan Center', icon: ScanSearch, to: '/scans' },
   { label: 'History', icon: History, phase: 5 },
   { label: 'Visual regression', icon: Images, phase: 6 },
   { label: 'Bug reports', icon: Bug, phase: 6 },
@@ -92,7 +92,7 @@ export function AppLayout() {
             ))}
           </nav>
           <span className="hidden text-sm text-muted-foreground md:block">
-            Phase 3 · accounts, projects & websites
+            Phase 4 · scanning engine
           </span>
           <div className="flex items-center gap-2">
             <ThemeSwitcher />

@@ -16,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,6 +30,8 @@ import {
 import { ApiError } from '@/lib/api-client';
 import { errorMessage } from '@/lib/form-errors';
 import { formatDateTime } from '@/lib/format';
+import { ScanStatusBadge } from '@/components/common/StatusBadges';
+import { useStartScan } from '@/features/scans/api';
 import { useDeleteWebsite, useWebsite, useWebsiteScans } from './api';
 import { VerificationBadge } from './VerificationBadge';
 
@@ -184,19 +185,53 @@ function DetailList({ items }: { items: [string, ReactNode][] }) {
   );
 }
 
-/** Real data from GET /api/websites/:id/scans. Until Phase 4 it is always empty. */
+/** Real data from GET /api/websites/:id/scans, newest first. */
 function ScanHistory({ website }: { website: WebsiteDto }) {
   const scans = useWebsiteScans(website.id);
+  const start = useStartScan();
+  const navigate = useNavigate();
+  const editable = canEdit(website.myRole);
+
+  const onStart = async (mode: 'CRAWL' | 'SINGLE_PAGE') => {
+    try {
+      const scan = await start.mutateAsync({ websiteId: website.id, mode });
+      toast.success('Scan queued.');
+      navigate(`/scans/${scan.id}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'SCAN_ALREADY_RUNNING') {
+        const runningId = (error.details as unknown as { scanId?: string } | undefined)?.scanId;
+        toast.info('A scan of this website is already running.');
+        if (runningId) navigate(`/scans/${runningId}`);
+        return;
+      }
+      toast.error(errorMessage(error));
+    }
+  };
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4">
         <div className="space-y-1.5">
           <CardTitle>Scan history</CardTitle>
-          <CardDescription>Every scan of this website, newest first.</CardDescription>
+          <CardDescription>
+            Crawl: up to {website.maxPages} pages, {website.maxDepth} links deep. Single page: only{' '}
+            {website.baseUrl}.
+          </CardDescription>
         </div>
-        <Button disabled title="The scanning engine is built in Phase 4">
-          <ScanSearch aria-hidden="true" /> Start scan
-        </Button>
+        {editable ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void onStart('SINGLE_PAGE')}
+              disabled={start.isPending}
+            >
+              Scan one page
+            </Button>
+            <Button onClick={() => void onStart('CRAWL')} disabled={start.isPending}>
+              <ScanSearch aria-hidden="true" /> {start.isPending ? 'Starting…' : 'Start scan'}
+            </Button>
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent>
         {scans.isPending ? (
@@ -208,10 +243,9 @@ function ScanHistory({ website }: { website: WebsiteDto }) {
             icon={History}
             title="No scans yet"
             description={
-              <>
-                The scanning engine (Playwright, axe-core, Lighthouse) is built in{' '}
-                <strong>Phase 4</strong>. Real scan results will appear here. Nothing is simulated.
-              </>
+              editable
+                ? 'Start a scan to check this website for accessibility, UI and layout problems.'
+                : 'An owner or editor of this project can start a scan.'
             }
           />
         ) : (
@@ -221,16 +255,24 @@ function ScanHistory({ website }: { website: WebsiteDto }) {
                 <TableHead>Started</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Issues</TableHead>
+                <TableHead className="text-right">Accessibility</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {scans.data.data.map((scan) => (
                 <TableRow key={scan.id}>
-                  <TableCell>{formatDateTime(scan.createdAt)}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{scan.status.toLowerCase()}</Badge>
+                    <Link to={`/scans/${scan.id}`} className="font-medium hover:underline">
+                      {formatDateTime(scan.createdAt)}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <ScanStatusBadge status={scan.status} />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{scan.totalIssues}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {scan.accessibilityScore ?? '-'}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

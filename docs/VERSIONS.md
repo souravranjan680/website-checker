@@ -49,8 +49,18 @@ Exact versions installed and tested together in Phase 2 (2026-11-02).
 | | prettier | 3.9.10 |
 | | concurrently | 10.0.6 |
 
-Packages planned for later phases (Playwright, axe-core, Lighthouse, BullMQ,
-@anthropic-ai/sdk, Recharts) are pinned when their phase starts.
+### Added in Phase 4 (scanning)
+
+| Package / image | Version | Notes |
+|---|---|---|
+| playwright | 1.64.1 (pinned exactly) | Must equal the Docker base image `mcr.microsoft.com/playwright:v1.64.1-noble` |
+| axe-core | 4.14.0 | Accessibility rules (WCAG 2.0–2.2 A/AA + best practices) |
+| bullmq | 6.5.3 | Job queue on Redis (API = producer, scanner = worker) |
+| esbuild | 0.28.2 | Builds the in-page `dom-checks` bundle |
+| Chromium | bundled with Playwright 1.64.1 | `npm run scanner:install-browser` locally |
+
+Packages planned for later phases (Lighthouse, @anthropic-ai/sdk, Recharts) are
+pinned when their phase starts.
 
 ## Deliberate choices
 
@@ -62,8 +72,10 @@ Packages planned for later phases (Playwright, axe-core, Lighthouse, BullMQ,
   Prisma prints an "Update available 7.10.1 → 8.0.0-rc" banner; ignore it.
 - **No `cn` package.** The shadcn CLI adds a pre-1.0 `cn` package; we keep the
   standard `cn()` helper in `apps/web/src/lib/utils.ts` (clsx + tailwind-merge)
-  instead. After `npx shadcn add <component>`, change `from "cn"` to
-  `from "@/lib/utils"` and run `npm uninstall cn -w @whc/web`.
+  instead. After `npx shadcn add <component>`, run
+  `npm run ui:fix-cn -w @whc/web` and then `npm uninstall cn -w @whc/web`.
+  (The fix script is Node-based on purpose: Windows PowerShell 5.1 can corrupt
+  UTF-8 files when rewriting them.)
 
 ## npm `allowScripts`
 
@@ -74,6 +86,7 @@ npm 11 does not run packages' install scripts unless they are approved.
 |---|---|
 | prisma, @prisma/engines | Download the migration engine for your OS |
 | esbuild | Verify its native binary (used by Vite, tsx, tsup) |
+| msgpackr-extract | **Denied**: optional native speed-up for BullMQ's message encoding; the pure-JavaScript fallback is used, so no C++ compiler is needed |
 
 When one of these is upgraded, npm warns; review and run
 `npm install-scripts approve <package>`.

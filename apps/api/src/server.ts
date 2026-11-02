@@ -7,6 +7,8 @@ import { createLogger } from './lib/logger';
 import { createSmtpMailer } from './lib/mailer';
 import { createRedisRateLimitStore } from './lib/rate-limit';
 import { createRedisClient } from './lib/redis';
+import { createRedisScanEventHub } from './lib/scan-events';
+import { createBullScanQueue } from './lib/scan-queue';
 import { createHealthService } from './modules/health/health.service';
 
 // Entry point: wires real dependencies together and starts the HTTP server.
@@ -27,6 +29,9 @@ const healthService = createHealthService({
   exposeErrors: config.nodeEnv !== 'production',
 });
 
+const scanQueue = createBullScanQueue(config.redisUrl, config.scans.queuePrefix);
+const scanEvents = createRedisScanEventHub(config.redisUrl, redis, logger);
+
 const app = createApp({
   config,
   logger,
@@ -35,6 +40,8 @@ const app = createApp({
   rateLimitStore: createRedisRateLimitStore(redis),
   mailer: createSmtpMailer(config.mail),
   resolveHostname: systemResolveHostname,
+  scanQueue,
+  scanEvents,
 });
 
 if (config.nodeEnv === 'production' && !config.auth.cookieSecure) {
@@ -65,7 +72,8 @@ async function shutdown(signal: string): Promise<void> {
   forceExit.unref();
 
   server.close();
-  await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
+  await Promise.allSettled([prisma.$disconnect(), scanQueue.close(), scanEvents.close()]);
+  await redis.quit().catch(() => {});
   process.exit(0);
 }
 

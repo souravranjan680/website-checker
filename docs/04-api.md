@@ -8,9 +8,18 @@ at **`/api/docs`**, raw spec at `/api/openapi.json` (planned for Phase 5).
 > `/api/admin/users`. Cookie names are `whc_access` (path `/api`) and
 > `whc_refresh` (path `/api/auth`). Health endpoints return their report directly
 > (no `{ data }` wrapper). Deleting a project takes `{ "confirmName": "<name>" }`
-> in the request body. Not yet implemented: API tokens (Phase 7),
-> `/api/websites/:id/verify` and `/schedule` (Phase 4/6), scans, reports, AI,
-> visual, bug reports, dashboard, notifications.
+> in the request body.
+>
+> **Added in Phase 4:** `POST/GET /api/scans`, `GET /api/scans/:id`,
+> `POST /api/scans/:id/cancel` (202), `POST /api/scans/:id/rescan`,
+> `GET /api/scans/:id/events` (SSE), `GET /api/scans/:id/pages`,
+> `GET /api/scans/:id/issues` (filters: category, severity, viewport, pageId, q),
+> `GET /api/scans/:id/compare?with=`, `GET /api/screenshots/:id[?download=1]`,
+> `PATCH /api/tracked-issues/:id`. Starting a scan returns **201** with the queued
+> scan. The per-category report endpoints (`/api/reports/...`) and exports come in
+> Phases 5–6; until then, issues are filtered by `category` on `/api/scans/:id/issues`.
+> Not yet implemented: API tokens (Phase 7), `/api/websites/:id/verify` and `/schedule`
+> (Phase 6), reports/exports, AI, visual, bug reports, dashboard, notifications.
 
 ## 1. Conventions
 

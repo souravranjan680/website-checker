@@ -75,15 +75,12 @@ describe('project CRUD', () => {
   it('shows project statistics computed from the database', async () => {
     const { agent } = await signUp(ctx.app);
     const project = await createProject(agent);
-    await agent
-      .post('/api/websites')
-      .set(CSRF)
-      .send({
-        projectId: project.id,
-        name: 'Home',
-        baseUrl: 'https://example.com',
-        authorizationConfirmed: true,
-      });
+    await agent.post('/api/websites').set(CSRF).send({
+      projectId: project.id,
+      name: 'Home',
+      baseUrl: 'https://example.com',
+      authorizationConfirmed: true,
+    });
 
     const res = await agent.get(`/api/projects/${project.id}`);
     expect(res.body.data.stats).toEqual({
@@ -110,15 +107,12 @@ describe('project CRUD', () => {
   it('deletes only when the exact project name is typed, and cascades to websites', async () => {
     const { agent } = await signUp(ctx.app);
     const project = await createProject(agent);
-    await agent
-      .post('/api/websites')
-      .set(CSRF)
-      .send({
-        projectId: project.id,
-        name: 'Home',
-        baseUrl: 'example.com',
-        authorizationConfirmed: true,
-      });
+    await agent.post('/api/websites').set(CSRF).send({
+      projectId: project.id,
+      name: 'Home',
+      baseUrl: 'example.com',
+      authorizationConfirmed: true,
+    });
 
     const wrong = await agent
       .delete(`/api/projects/${project.id}`)

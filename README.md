@@ -4,16 +4,20 @@ A web application that scans websites for accessibility (WCAG), UI, responsive,
 performance, SEO and basic security problems, with screenshots, AI explanations,
 bug reports and scan history.
 
-> **Status: Phase 3 of 8 complete.** Accounts (register, sign in, sessions,
-> password reset), role-based access, projects with members and websites with
-> URL-safety checks all work end to end and are tested. Scanning arrives in Phase 4;
-> see [docs/08-roadmap.md](docs/08-roadmap.md).
+> **Status: Phase 4 of 8 complete.** Real browser scanning works end to end:
+> Playwright + axe-core find accessibility and UI problems across pages and five
+> screen sizes, with screenshots, live progress, cancellation, rescans and issue
+> identity across scans. Every scanner request passes through an SSRF-blocking
+> egress proxy. See [docs/08-roadmap.md](docs/08-roadmap.md).
+
+![Scan results](docs/images/phase4-3-results-summary.png)
 
 | Doc | |
 |---|---|
 | [docs/README.md](docs/README.md) | Design documents (architecture, database, API, security, ...) |
 | [docs/09-phase-2-setup.md](docs/09-phase-2-setup.md) | How the project setup works: config files, dependencies, database, health checks |
-| [docs/10-phase-3-auth.md](docs/10-phase-3-auth.md) | **How sign-in, JWT, roles, projects and websites work**, plus debugging |
+| [docs/10-phase-3-auth.md](docs/10-phase-3-auth.md) | How sign-in, JWT, roles, projects and websites work |
+| [docs/11-phase-4-scanning.md](docs/11-phase-4-scanning.md) | **How scanning works**: Playwright, DOM checks, axe-core, the security proxy, BullMQ, progress, debugging |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Exact versions and why |
 
 ---
@@ -22,8 +26,8 @@ bug reports and scan history.
 
 React 19 · Vite 8 · Tailwind CSS 4 · shadcn/ui · React Router 8 · TanStack Query ·
 Node.js 24 · Express 5 · TypeScript 6 · PostgreSQL 17 · Prisma 7 · Redis 7 ·
-Zod 4 · Vitest · Docker Compose. *(Planned: Playwright, axe-core, Lighthouse,
-BullMQ, Claude API, Chrome Extension MV3.)*
+BullMQ 6 · Playwright 1.64 · axe-core 4.14 · Zod 4 · Vitest · Docker Compose.
+*(Planned: Lighthouse, Claude API, Chrome Extension MV3.)*
 
 ## Project structure
 
@@ -31,9 +35,13 @@ BullMQ, Claude API, Chrome Extension MV3.)*
 apps/
   api/            Express REST API          (src/app.ts, src/server.ts, src/modules/*)
   web/            React dashboard           (src/app, src/features, src/components/ui)
+  scanner/        BullMQ worker: Playwright, axe-core, crawler, screenshots
+  egress-proxy/   SSRF guard: every scanner request goes through it
 packages/
-  shared/         Code used by API and web  (Zod schemas, constants)
+  shared/         Code used everywhere      (Zod schemas, URL/IP safety, constants)
   db/             Prisma schema, migrations, typed client, relationship tests
+  dom-checks/     UI checks that run inside web pages (scanner + future extension)
+tests/fixtures/   Small websites with deliberate defects (scanner tests)
 docker/           Dockerfiles, nginx config, Postgres init script
 docs/             Design and explanation documents
 docker-compose.yml
@@ -72,10 +80,13 @@ $secret = node -e "process.stdout.write(require('crypto').randomBytes(48).toStri
 npm install
 npm run db:generate
 
-# 5. Start PostgreSQL, Redis and Mailpit in Docker, wait until healthy
+# 5. Download the Chromium build the scanner uses (~150 MB, once)
+npm run scanner:install-browser
+
+# 6. Start PostgreSQL, Redis and Mailpit in Docker, wait until healthy
 docker compose up -d --wait postgres redis mailpit
 
-# 6. Create the database tables
+# 7. Create the database tables
 npm run db:deploy
 ```
 
@@ -92,13 +103,16 @@ Then sign out and back in. (Admins can see every project and use the
 
 ## Run the app: option A, development (recommended while coding)
 
-The database services run in Docker; the API and web run on your PC with
-**hot reload** (save a file → it updates instantly).
+The database services run in Docker; the egress proxy, scanner, API and web run
+on your PC with **hot reload** (save a file → it updates instantly).
 
 ```powershell
 docker compose up -d --wait postgres redis mailpit   # if not already running
-npm run dev
+npm run dev        # starts [proxy] [scanner] [api] [web]
 ```
+
+You should see `Egress proxy listening`, `Scanner worker ready, waiting for scan jobs`,
+`API listening` and `VITE ready`.
 
 | Open | What |
 |---|---|
@@ -119,7 +133,11 @@ docker compose up -d --build --wait
 ```
 
 This builds the images, runs database migrations (the `migrate` container runs
-once and exits), then starts the API and the nginx web server.
+once and exits), then starts the egress proxy, scanner, API and the nginx web server.
+The first build downloads the Playwright image (~2 GB, includes Chromium).
+
+In Docker the scanner sits on an **internal network with no internet access**
+(`scan-net`); its only way out is the egress proxy.
 
 | Open | What |
 |---|---|
@@ -143,7 +161,8 @@ docker compose down -v            # ⚠ also DELETES the database and Redis data
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | API (:4000) + web (:5173) with hot reload |
+| `npm run dev` | Proxy (:3128) + scanner + API (:4000) + web (:5173) with hot reload |
+| `npm run scanner:install-browser` | Download Playwright's Chromium (once per machine) |
 | `npm run check` | **Everything CI would check**: schema validation → type check → lint → all tests |
 | `npm test` | All tests (needs Postgres + Redis running) |
 | `npm run typecheck` | TypeScript errors in every workspace |
@@ -159,7 +178,25 @@ docker compose down -v            # ⚠ also DELETES the database and Redis data
 | `npm run db:reset` | ⚠ Drop and recreate the dev database |
 | `npm run admin:promote -- <email>` | Make a registered user a global admin |
 
-Run one workspace's script: `npm run test -w @whc/api` (or `@whc/web`, `@whc/db`, `@whc/shared`).
+Run one workspace's script: `npm run test -w @whc/api` (or `@whc/web`, `@whc/db`,
+`@whc/shared`, `@whc/scanner`, `@whc/egress-proxy`). The scanner tests start a real
+Chromium and take about a minute.
+
+## Scanning a website
+
+1. Sign in → **Websites** → **Add website** (tick "I own this website or have
+   permission to test it").
+2. Open the website → **Start scan** (crawl) or **Scan one page**.
+3. Watch live progress (current page, pages scanned, issues found). **Cancel scan**
+   stops the browser immediately.
+4. When it finishes: scores, issues by category (Accessibility / UI health / Screen
+   sizes), highlighted screenshots, a page list and **Compare** with the previous scan.
+5. **Rescan** after fixing things: issues keep their identity, so the Compare tab shows
+   what is new, resolved and still present.
+
+Only scan websites you own or are allowed to test. A good public practice target is
+the W3C's deliberately inaccessible demo: `https://www.w3.org/WAI/demos/bad/before/home.html`
+(set "Only include paths" to `/WAI/demos/bad/*` to stay inside the demo).
 
 ## Health checks
 
@@ -213,6 +250,13 @@ comments for every variable). Important ones:
 | `RATE_LIMIT_ENABLED` | `true` | Login/registration/reset limits (Redis) |
 | `SMTP_HOST` / `SMTP_PORT` | Mailpit | Outgoing email |
 | `WEB_PORT` | `8081` | Docker web port (8080 was taken on this PC) |
+| `EGRESS_PROXY_URL` | `http://127.0.0.1:3128` | Where the scanner finds the security proxy |
+| `PROXY_ALLOWED_PORTS` | `80,443` | Ports the scanner may contact |
+| `STORAGE_DIR` | `./storage` | Screenshot files (shared by scanner and API) |
+| `SCANNER_CONCURRENCY` | `1` | Scans at the same time per scanner process |
+| `SCAN_MAX_PAGES` / `SCAN_NAV_TIMEOUT_MS` / `SCAN_MAX_DURATION_MS` | `100` / `30000` / `900000` | Hard limits |
+| `SCANNER_HEADLESS` | `true` | `false` shows the browser (local debugging) |
+| `MAX_ACTIVE_SCANS_PER_USER` | `3` | Queued/running scans per user |
 | `CLAUDE_MODEL` | `claude-sonnet-5-5` | AI model (Phase 6), change any time |
 | `ANTHROPIC_API_KEY` | empty | AI features are off until set |
 
@@ -238,11 +282,25 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 
 ---
 
-## Known limitations (after Phase 3)
+## Known limitations (after Phase 4)
 
-- **No scanning yet** (Phase 4). Websites show an honest "No scans yet" state; scan
-  counts are real zeros. Domain *verification* is generated but not checked yet
-  (it needs the scanner's safe network path).
+- **Not yet built:** Lighthouse performance, SEO and security checks, AI explanations,
+  visual regression, bug-report exports (Phase 6); dashboard, history charts,
+  settings (Phase 5); Chrome extension (Phase 7).
+- **Automated accessibility testing is partial:** axe-core finds roughly a third of WCAG
+  problems; manual testing is still required (the UI says so).
+- **Scanner scope:** pages behind a login, iframes' contents, and shadow DOM are not
+  scanned; pages are crawled one at a time; same host = same site (use include
+  patterns to limit to a section). Sites without a mobile `<meta name="viewport">`
+  render zoomed-out on phones, so their small-screen problems aren't flagged (the
+  viewport audit arrives with Lighthouse).
+- **UI checks are heuristics** (tuned to avoid false positives); mark wrong ones as
+  "False positive" and the decision is remembered.
+- Broken-link checks use HEAD requests and only report 404/410, server errors and
+  unreachable domains (servers that reject HEAD or bots are not reported). Max 150 per scan.
+- Screenshot files of deleted scans/websites are not cleaned up yet (cleanup job: Phase 6).
+- Domain verification is generated but not checked yet; `REQUIRE_DOMAIN_VERIFICATION`
+  only limits unverified sites to single-page scans.
 - No profile/settings screens yet (Phase 5). The API already supports changing
   your name and password (`PATCH /api/auth/me`, `POST /api/auth/change-password`), and
   these are tested. Admin user management is API + `admin:promote` only.
@@ -256,7 +314,7 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 - The API Docker image is ~730 MB: `npm ci` installs every workspace's production
   dependencies plus Prisma's peer dependencies. It works; slimming it is planned
   for Phase 8.
-- Scanner, egress proxy (SSRF protection) and Chrome extension are designed
-  ([docs/](docs/README.md)) but not implemented yet (Phases 4 and 7).
+- The scanner Docker image is large (~2 GB) because it is based on the official
+  Playwright image with Chromium and its system libraries.
 - Prisma shows an "update available → 8.0.0-rc" notice. That's a release
   candidate; we intentionally stay on stable 7.10.1.

@@ -32,6 +32,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    networks: [default, scan-net]
 
   # ---- Redis: job queue (Phase 4), rate limits, live progress ----------------
   redis:
@@ -47,6 +48,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    networks: [default, scan-net]
 
   # ---- Mailpit: catches emails in development. Inbox: http://localhost:8025 ---
   mailpit:
@@ -98,6 +100,12 @@ services:
       MAIL_FROM: ${MAIL_FROM:-Website Health Checker <no-reply@whc.local>}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      STORAGE_DIR: /data/storage
+      MAX_ACTIVE_SCANS_PER_USER: ${MAX_ACTIVE_SCANS_PER_USER:-3}
+      REQUIRE_DOMAIN_VERIFICATION: ${REQUIRE_DOMAIN_VERIFICATION:-false}
+    # The API only READS screenshots written by the scanner.
+    volumes:
+      - storage:/data/storage:ro
     # No published port: the browser reaches the API through the web container (/api).
     depends_on:
       mailpit:
@@ -119,6 +127,62 @@ services:
       retries: 6
       start_period: 10s
 
+  # ---- Egress proxy: the ONLY way out to the internet for the scanner (SSRF guard) --
+  egress-proxy:
+    build:
+      context: .
+      dockerfile: docker/egress-proxy.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PROXY_HOST: 0.0.0.0
+      PROXY_PORT: 3128
+      PROXY_ALLOWED_PORTS: ${PROXY_ALLOWED_PORTS:-80,443}
+    # On both networks: receives requests on scan-net, sends them out on default.
+    networks: [default, scan-net]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3128/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # ---- Scanner worker (Playwright + axe-core) ----------------------------------------
+  scanner:
+    build:
+      context: .
+      dockerfile: docker/scanner.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: *database-url
+      REDIS_URL: redis://redis:6379
+      EGRESS_PROXY_URL: http://egress-proxy:3128
+      STORAGE_DIR: /data/storage
+      SCANNER_CONCURRENCY: ${SCANNER_CONCURRENCY:-1}
+      SCAN_MAX_PAGES: ${SCAN_MAX_PAGES:-100}
+      SCAN_NAV_TIMEOUT_MS: ${SCAN_NAV_TIMEOUT_MS:-30000}
+      SCAN_MAX_DURATION_MS: ${SCAN_MAX_DURATION_MS:-900000}
+    volumes:
+      - storage:/data/storage
+    # ONLY the internal network: no route to the internet except via egress-proxy.
+    networks: [scan-net]
+    shm_size: 1gb # Chromium needs shared memory for rendering
+    mem_limit: 3g
+    cpus: 2
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      egress-proxy:
+        condition: service_healthy
+
   # ---- Web (React build served by nginx; forwards /api to the API) ---------------
   web:
     build:
@@ -136,6 +200,13 @@ services:
       timeout: 3s
       retries: 6
 
+networks:
+  default: {}
+  # Internal network: containers on it can talk to each other but not to the internet.
+  scan-net:
+    internal: true
+
 volumes:
   pgdata:
   redisdata:
+  storage: # screenshots (written by scanner, read by api)

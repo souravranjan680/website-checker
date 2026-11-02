@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- An accessible page: automated checks should find no violations here. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: clean page</title>
+    <style>
+      body { margin: 0 auto; max-width: 40rem; padding: 1rem; font-family: sans-serif; color: #111; background: #fff; }
+      img { max-width: 100%; height: auto; }
+    </style>
+  </head>
+  <body>
+    <header><nav aria-label="Main"><a href="/clean/">Home</a></nav></header>
+    <main>
+      <h1>An accessible page</h1>
+      <p>Plain, readable text with enough contrast.</p>
+      <img src="/a11y/photo.svg" alt="A blue rectangle" width="120" height="80" />
+      <form>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" />
+        <button type="submit">Subscribe</button>
+      </form>
+    </main>
+    <footer><p>Fixture footer</p></footer>
+  </body>
+</html>

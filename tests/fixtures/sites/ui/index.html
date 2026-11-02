@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Intentional layout defects, plus things that look similar but are NOT bugs (must not be reported). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: UI problems</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; }
+      .wide { width: 2400px; height: 40px; background: #ddd; }          /* overflows at every size */
+      .tablet-wide { min-width: 600px; height: 30px; background: #cde; } /* overflows only below 600px */
+      .clip { width: 120px; height: 20px; overflow: hidden; white-space: nowrap; } /* text cut off */
+      .stack { position: relative; height: 60px; }
+      .stack button { position: absolute; left: 10px; top: 10px; }
+      .stack .cover { position: absolute; left: 0; top: 0; width: 200px; height: 60px; background: rgba(0, 0, 0, 0.6); }
+      .stretched { width: 300px; height: 50px; }                         /* distorted image */
+      /* NOT bugs: */
+      .ellipsis { width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+      .carousel { overflow-x: auto; white-space: nowrap; width: 200px; }
+      .carousel span { display: inline-block; width: 400px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>UI fixture</h1>
+      <div class="wide">Wide banner</div>
+      <div class="tablet-wide">Needs at least 600 pixels</div>
+      <div class="clip">This sentence is far too long to fit inside its small box</div>
+      <div class="stack"><button type="button">Hidden action</button><div class="cover"></div></div>
+      <button type="button" class="empty"></button>
+      <img class="stretched" src="/a11y/photo.svg" alt="A stretched rectangle" />
+      <div class="ellipsis">This text is shortened on purpose with an ellipsis</div>
+      <span class="sr-only">Screen reader only text</span>
+      <div class="carousel"><span>Slide one</span><span>Slide two</span></div>
+    </main>
+  </body>
+</html>

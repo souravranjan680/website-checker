@@ -15,6 +15,8 @@ import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage';
 import { GuestOnly, RequireAuth } from '@/features/auth/route-guards';
 import { ProjectDetailsPage } from '@/features/projects/ProjectDetailsPage';
 import { ProjectsPage } from '@/features/projects/ProjectsPage';
+import { ScanCenterPage } from '@/features/scans/ScanCenterPage';
+import { ScanPage } from '@/features/scans/ScanPage';
 import { SystemStatusPage } from '@/features/system/SystemStatusPage';
 import { AddWebsitePage } from '@/features/websites/AddWebsitePage';
 import { EditWebsitePage } from '@/features/websites/EditWebsitePage';
@@ -58,6 +60,8 @@ export const routes: RouteObject[] = [
               { path: 'websites/new', element: <AddWebsitePage /> },
               { path: 'websites/:websiteId', element: <WebsiteDetailsPage /> },
               { path: 'websites/:websiteId/edit', element: <EditWebsitePage /> },
+              { path: 'scans', element: <ScanCenterPage /> },
+              { path: 'scans/:scanId', element: <ScanPage /> },
               { path: 'status', element: <SystemStatusPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],

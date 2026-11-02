@@ -12,6 +12,9 @@ import type { ResolveHostname } from '../src/lib/hostname-guard';
 import { createLogger } from '../src/lib/logger';
 import type { MailMessage, Mailer } from '../src/lib/mailer';
 import { createMemoryRateLimitStore } from '../src/lib/rate-limit';
+import type { ScanEventHub } from '../src/lib/scan-events';
+import type { ScanQueue } from '../src/lib/scan-queue';
+import type { ScanEvent } from '@whc/shared';
 import { createHealthService } from '../src/modules/health/health.service';
 import { testDatabaseUrl } from './test-env';
 
@@ -64,11 +67,74 @@ export function testConfig(overrides: Record<string, string> = {}): AppConfig {
   });
 }
 
+/** In-memory stand-in for the BullMQ queue: records what the API enqueued. */
+export interface FakeScanQueue extends ScanQueue {
+  enqueued: string[];
+  removed: string[];
+  failNext: boolean;
+}
+
+export function createFakeScanQueue(): FakeScanQueue {
+  const queue: FakeScanQueue = {
+    enqueued: [],
+    removed: [],
+    failNext: false,
+    async enqueue(scanId) {
+      if (queue.failNext) {
+        queue.failNext = false;
+        throw new Error('Redis unavailable');
+      }
+      queue.enqueued.push(scanId);
+    },
+    async remove(scanId) {
+      queue.removed.push(scanId);
+      return true;
+    },
+    async close() {},
+  };
+  return queue;
+}
+
+/** In-memory stand-in for the Redis pub/sub hub (same behaviour, no Redis). */
+export interface FakeScanEvents extends ScanEventHub {
+  cancelRequests: string[];
+  emit(event: ScanEvent): void;
+}
+
+export function createFakeScanEvents(): FakeScanEvents {
+  const listeners = new Map<string, Set<(event: ScanEvent) => void>>();
+  const hub: FakeScanEvents = {
+    cancelRequests: [],
+    subscribe(scanId, listener) {
+      const set = listeners.get(scanId) ?? new Set();
+      set.add(listener);
+      listeners.set(scanId, set);
+      return () => set.delete(listener);
+    },
+    async latest() {
+      return null;
+    },
+    async publish(event) {
+      hub.emit(event);
+    },
+    async requestCancel(scanId) {
+      hub.cancelRequests.push(scanId);
+    },
+    async close() {},
+    emit(event) {
+      for (const listener of listeners.get(event.scanId) ?? []) listener(event);
+    },
+  };
+  return hub;
+}
+
 export interface TestContext {
   app: Express;
   prisma: PrismaClient;
   mailer: FakeMailer;
   config: AppConfig;
+  queue: FakeScanQueue;
+  events: FakeScanEvents;
 }
 
 export function createTestContext(
@@ -77,6 +143,8 @@ export function createTestContext(
 ): TestContext {
   const config = testConfig(configOverrides);
   const mailer = createFakeMailer();
+  const queue = createFakeScanQueue();
+  const events = createFakeScanEvents();
   const app = createApp({
     config,
     logger: createLogger({ level: 'silent', pretty: false }),
@@ -90,8 +158,10 @@ export function createTestContext(
     rateLimitStore: createMemoryRateLimitStore(),
     mailer,
     resolveHostname: fakeResolveHostname,
+    scanQueue: queue,
+    scanEvents: events,
   });
-  return { app, prisma, mailer, config };
+  return { app, prisma, mailer, config, queue, events };
 }
 
 export function createTestPrisma(): PrismaClient {

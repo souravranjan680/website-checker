@@ -2,7 +2,13 @@ import type { PrismaClient } from '@whc/db';
 import { healthReportSchema } from '@whc/shared';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createFakeMailer, fakeResolveHostname, testConfig } from '../../../test/helpers';
+import {
+  createFakeMailer,
+  createFakeScanEvents,
+  createFakeScanQueue,
+  fakeResolveHostname,
+  testConfig,
+} from '../../../test/helpers';
 import { createApp } from '../../app';
 import { createLogger } from '../../lib/logger';
 import { createMemoryRateLimitStore } from '../../lib/rate-limit';
@@ -24,6 +30,8 @@ function buildApp(database: HealthProbe, redis: HealthProbe, exposeErrors = true
     rateLimitStore: createMemoryRateLimitStore(),
     mailer: createFakeMailer(),
     resolveHostname: fakeResolveHostname,
+    scanQueue: createFakeScanQueue(),
+    scanEvents: createFakeScanEvents(),
   });
 }
 

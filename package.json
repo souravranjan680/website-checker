@@ -11,11 +11,15 @@
   "workspaces": [
     "packages/shared",
     "packages/db",
+    "packages/dom-checks",
+    "apps/egress-proxy",
+    "apps/scanner",
     "apps/api",
     "apps/web"
   ],
   "scripts": {
-    "dev": "concurrently --names api,web --prefix-colors blue,green \"npm run dev -w @whc/api\" \"npm run dev -w @whc/web\"",
+    "dev": "concurrently --names proxy,scanner,api,web --prefix-colors magenta,yellow,blue,green \"npm run dev -w @whc/egress-proxy\" \"npm run dev -w @whc/scanner\" \"npm run dev -w @whc/api\" \"npm run dev -w @whc/web\"",
+    "scanner:install-browser": "npx playwright install chromium",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -48,6 +52,7 @@
   "allowScripts": {
     "prisma@7.10.1": true,
     "@prisma/engines@7.10.1": true,
-    "esbuild@0.28.2": true
+    "esbuild@0.28.2": true,
+    "msgpackr-extract": false
   }
 }

@@ -1,0 +1,17 @@
+{
+  "name": "@whc/dom-checks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bundle": "./dist/dom-checks.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

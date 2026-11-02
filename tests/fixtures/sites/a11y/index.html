@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- Intentional accessibility defects. Each one is marked with the axe rule it should trigger. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture: accessibility problems</title>
+    <style>
+      body { font-family: sans-serif; }
+      .low { color: #b0b0b0; background: #ffffff; }
+    </style>
+  </head>
+  <body>
+    <!-- html-has-lang: the <html> element has no lang attribute -->
+    <h1>Accessibility fixture</h1>
+    <h4>Skipped heading levels</h4>
+    <!-- heading-order -->
+
+    <img src="/a11y/photo.svg" width="120" height="80" />
+    <!-- image-alt -->
+
+    <button class="icon-only"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" /></svg></button>
+    <!-- button-name -->
+
+    <form><input type="text" name="q" /></form>
+    <!-- label -->
+
+    <p class="low">Low contrast text that is hard to read.</p>
+    <!-- color-contrast -->
+
+    <div role="checkbox" aria-checked="maybe" tabindex="0">Opt in</div>
+    <!-- aria-valid-attr-value -->
+
+    <span id="dup">One</span><span id="dup">Two</span>
+    <input type="text" aria-labelledby="dup" />
+    <!-- duplicate-id-aria -->
+
+    <a href="/a11y/page2.html"><img src="/a11y/photo.svg" width="20" height="20" /></a>
+    <!-- link-name (+ image-alt) -->
+
+    <nav>
+      <a href="/a11y/page2.html">Page 2</a>
+      <a href="/a11y/page2.html#section">Page 2, same page with a #fragment</a>
+      <a href="/a11y/page2.html?b=2&amp;a=1">Page 2 with a query</a>
+      <a href="/a11y/page2.html?a=1&amp;b=2">Page 2, same query in another order</a>
+      <a href="/missing-page.html">A page that does not exist (404)</a>
+      <a href="/redirect">Redirects to page 2</a>
+      <a href="/redirect-to-secret">Redirects to an internal address</a>
+      <a href="http://127.0.0.1:__PORT__/secret">Internal admin page</a>
+      <a href="http://no-such-host.invalid/">A domain that does not exist</a>
+      <a href="/private/hidden.html">Disallowed by robots.txt</a>
+      <a href="/a11y/document.pdf">A PDF (not crawled)</a>
+    </nav>
+  </body>
+</html>
