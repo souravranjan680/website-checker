@@ -1,15 +1,20 @@
 import type { Prisma, PrismaClient } from '@whc/db';
 import { idSchema, listQuerySchema, type ActivityDto } from '@whc/shared';
 import { Router } from 'express';
+import { notFound } from '../../lib/errors';
 import { pageMeta, toSkipTake } from '../../lib/pagination';
 import { parseInput } from '../../lib/validate';
 import { currentUser } from '../../middleware/auth';
 import { requireProjectRole } from '../projects/project-access';
 
-const querySchema = listQuerySchema.extend({ projectId: idSchema.optional() });
+const querySchema = listQuerySchema.extend({
+  projectId: idSchema.optional(),
+  websiteId: idSchema.optional(),
+});
 
 /**
  * GET /api/activity?projectId=...  → audit trail of a project (any member may read it)
+ * GET /api/activity?websiteId=...  → actions on one website and its scans
  * GET /api/activity                → your own recent actions
  */
 export function createActivityRouter({ prisma }: { prisma: PrismaClient }): Router {
@@ -18,12 +23,26 @@ export function createActivityRouter({ prisma }: { prisma: PrismaClient }): Rout
   router.get('/', async (req, res) => {
     const user = currentUser(req);
     const query = parseInput(querySchema, req.query);
-    if (query.projectId) {
+    let where: Prisma.ActivityLogWhereInput = { userId: user.id };
+    if (query.websiteId) {
+      const website = await prisma.website.findUnique({
+        where: { id: query.websiteId },
+        select: { projectId: true },
+      });
+      if (!website) throw notFound('Website');
+      await requireProjectRole(prisma, user, website.projectId, 'VIEWER', 'view its activity');
+      // Scans of this website are logged with entityType 'Scan'; match them via metadata.
+      where = {
+        projectId: website.projectId,
+        OR: [
+          { entityType: 'Website', entityId: query.websiteId },
+          { metadata: { path: ['websiteId'], equals: query.websiteId } },
+        ],
+      };
+    } else if (query.projectId) {
       await requireProjectRole(prisma, user, query.projectId, 'VIEWER', 'view its activity');
+      where = { projectId: query.projectId };
     }
-    const where: Prisma.ActivityLogWhereInput = query.projectId
-      ? { projectId: query.projectId }
-      : { userId: user.id };
 
     const [total, rows] = await Promise.all([
       prisma.activityLog.count({ where }),

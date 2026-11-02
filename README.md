@@ -4,13 +4,13 @@ A web application that scans websites for accessibility (WCAG), UI, responsive,
 performance, SEO and basic security problems, with screenshots, AI explanations,
 bug reports and scan history.
 
-> **Status: Phase 4 of 8 complete.** Real browser scanning works end to end:
-> Playwright + axe-core find accessibility and UI problems across pages and five
-> screen sizes, with screenshots, live progress, cancellation, rescans and issue
-> identity across scans. Every scanner request passes through an SSRF-blocking
-> egress proxy. See [docs/08-roadmap.md](docs/08-roadmap.md).
+> **Status: Phase 5 of 8 complete.** Real browser scanning (Playwright + axe-core,
+> five screen sizes, SSRF-blocking egress proxy) plus a full dashboard: metrics and
+> charts from real scan data, scan history with compare, accessibility / UI health /
+> responsive reports, issue tracking with history, PDF/CSV/JSON export, profile and
+> settings. See [docs/08-roadmap.md](docs/08-roadmap.md).
 
-![Scan results](docs/images/phase4-3-results-summary.png)
+![Dashboard](docs/images/phase5-1-dashboard.png)
 
 | Doc | |
 |---|---|
@@ -18,6 +18,7 @@ bug reports and scan history.
 | [docs/09-phase-2-setup.md](docs/09-phase-2-setup.md) | How the project setup works: config files, dependencies, database, health checks |
 | [docs/10-phase-3-auth.md](docs/10-phase-3-auth.md) | How sign-in, JWT, roles, projects and websites work |
 | [docs/11-phase-4-scanning.md](docs/11-phase-4-scanning.md) | **How scanning works**: Playwright, DOM checks, axe-core, the security proxy, BullMQ, progress, debugging |
+| [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md) | **How the dashboard, history, reports, issue tracking and exports work** |
 | [docs/VERSIONS.md](docs/VERSIONS.md) | Exact versions and why |
 
 ---
@@ -189,10 +190,16 @@ Chromium and take about a minute.
 2. Open the website → **Start scan** (crawl) or **Scan one page**.
 3. Watch live progress (current page, pages scanned, issues found). **Cancel scan**
    stops the browser immediately.
-4. When it finishes: scores, issues by category (Accessibility / UI health / Screen
-   sizes), highlighted screenshots, a page list and **Compare** with the previous scan.
+4. When it finishes: scores, issues by category, highlighted screenshots, a page list
+   and **Compare** with the previous scan. **Reports** (from the scan, the website page
+   or History) show the accessibility (WCAG criteria, rules, pages, manual checklist),
+   UI health and responsive (per screen size, before/after) reports. **Export** gives
+   PDF, CSV or JSON.
 5. **Rescan** after fixing things: issues keep their identity, so the Compare tab shows
-   what is new, resolved and still present.
+   what is new, resolved and still present. Open an issue for its full history, or mark
+   it **Ignored** / **False positive**.
+6. **Dashboard** and **History** summarise all your websites (filter by project, website,
+   dates, status).
 
 Only scan websites you own or are allowed to test. A good public practice target is
 the W3C's deliberately inaccessible demo: `https://www.w3.org/WAI/demos/bad/before/home.html`
@@ -282,11 +289,11 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 
 ---
 
-## Known limitations (after Phase 4)
+## Known limitations (after Phase 5)
 
 - **Not yet built:** Lighthouse performance, SEO and security checks, AI explanations,
-  visual regression, bug-report exports (Phase 6); dashboard, history charts,
-  settings (Phase 5); Chrome extension (Phase 7).
+  visual regression, bug reports, sending notifications (Phase 6); Chrome extension
+  (Phase 7). Their report pages say "not available" instead of showing numbers.
 - **Automated accessibility testing is partial:** axe-core finds roughly a third of WCAG
   problems; manual testing is still required (the UI says so).
 - **Scanner scope:** pages behind a login, iframes' contents, and shadow DOM are not
@@ -301,11 +308,12 @@ To go back and look at an earlier checkpoint: `git log --oneline`, then
 - Screenshot files of deleted scans/websites are not cleaned up yet (cleanup job: Phase 6).
 - Domain verification is generated but not checked yet; `REQUIRE_DOMAIN_VERIFICATION`
   only limits unverified sites to single-page scans.
-- No profile/settings screens yet (Phase 5). The API already supports changing
-  your name and password (`PATCH /api/auth/me`, `POST /api/auth/change-password`), and
-  these are tested. Admin user management is API + `admin:promote` only.
+- Notification preferences are saved but nothing is sent yet (Phase 6). The email
+  address can't be changed. Admin user management is API + `admin:promote` only.
+- PDF exports need the scanner service running (CSV/JSON don't) and include at most
+  500 issues and 15 screenshots.
 - No interactive API docs (Swagger/OpenAPI) yet; endpoints are specified in
-  [docs/04-api.md](docs/04-api.md). Planned for Phase 5.
+  [docs/04-api.md](docs/04-api.md) and [docs/12-phase-5-frontend.md](docs/12-phase-5-frontend.md). Planned for Phase 8.
 - Personal API tokens (for the Chrome extension) arrive in Phase 7.
 - Trade-offs: registering with an existing email says so (normal sign-up UX, but it
   reveals that the email has an account; rate-limited); the per-email login limit

@@ -2,17 +2,22 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
+  notificationPreferencesSchema,
   registerSchema,
   resetPasswordSchema,
   updateProfileSchema,
 } from '@whc/shared';
 import { Router, type Request, type RequestHandler } from 'express';
+import { z } from 'zod';
 import type { AppConfig } from '../../config/env';
 import { clearAuthCookies, REFRESH_COOKIE, setAuthCookies } from '../../lib/cookies';
 import { clientIp, type RateLimiterFactory } from '../../lib/rate-limit';
 import { parseInput } from '../../lib/validate';
 import { currentUser } from '../../middleware/auth';
 import type { AuthService, RequestMeta } from './auth.service';
+
+/** Session IDs are the randomUUID family IDs. */
+const sessionIdSchema = z.uuid();
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -105,6 +110,37 @@ export function createAuthRouter(deps: {
     const tokens = await auth.changePassword(currentUser(req).id, input, requestMeta(req));
     setAuthCookies(res, config, tokens);
     res.status(204).end();
+  });
+
+  router.get('/sessions', requireAuth, async (req, res) => {
+    res.json({
+      data: await auth.listSessions(currentUser(req).id, req.cookies?.[REFRESH_COOKIE]),
+    });
+  });
+
+  // Declared before '/sessions/:id' so "others" is not read as an ID.
+  router.delete('/sessions/others', requireAuth, async (req, res) => {
+    const count = await auth.revokeOtherSessions(
+      currentUser(req).id,
+      req.cookies?.[REFRESH_COOKIE],
+      requestMeta(req),
+    );
+    res.json({ data: { revoked: count } });
+  });
+
+  router.delete('/sessions/:id', requireAuth, async (req, res) => {
+    const familyId = parseInput(sessionIdSchema, req.params.id);
+    await auth.revokeSession(currentUser(req).id, familyId, requestMeta(req));
+    res.status(204).end();
+  });
+
+  router.get('/preferences', requireAuth, async (req, res) => {
+    res.json({ data: await auth.getPreferences(currentUser(req).id) });
+  });
+
+  router.put('/preferences', requireAuth, async (req, res) => {
+    const input = parseInput(notificationPreferencesSchema, req.body);
+    res.json({ data: await auth.updatePreferences(currentUser(req).id, input) });
   });
 
   router.post('/forgot-password', resetLimit, async (req, res) => {

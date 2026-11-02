@@ -7,14 +7,25 @@ import {
   type RouteObject,
 } from 'react-router';
 import { Button } from '@/components/ui/button';
+import { ProfilePage } from '@/features/account/ProfilePage';
+import { SettingsPage } from '@/features/account/SettingsPage';
 import { AuthLayout } from '@/features/auth/AuthLayout';
 import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
 import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage';
 import { GuestOnly, RequireAuth } from '@/features/auth/route-guards';
+import { DashboardPage } from '@/features/dashboard/DashboardPage';
+import { ComparePage } from '@/features/history/ComparePage';
+import { HistoryPage } from '@/features/history/HistoryPage';
+import { IssueDetailPage } from '@/features/issues/IssueDetailPage';
 import { ProjectDetailsPage } from '@/features/projects/ProjectDetailsPage';
 import { ProjectsPage } from '@/features/projects/ProjectsPage';
+import { AccessibilityReport } from '@/features/reports/AccessibilityReport';
+import { PendingReport } from '@/features/reports/PendingReport';
+import { ReportsLayout } from '@/features/reports/ReportsLayout';
+import { ResponsiveReport } from '@/features/reports/ResponsiveReport';
+import { UiHealthReport } from '@/features/reports/UiHealthReport';
 import { ScanCenterPage } from '@/features/scans/ScanCenterPage';
 import { ScanPage } from '@/features/scans/ScanPage';
 import { SystemStatusPage } from '@/features/system/SystemStatusPage';
@@ -53,7 +64,8 @@ export const routes: RouteObject[] = [
             path: '/',
             element: <AppLayout />,
             children: [
-              { index: true, element: <Navigate to="/projects" replace /> },
+              { index: true, element: <Navigate to="/dashboard" replace /> },
+              { path: 'dashboard', element: <DashboardPage /> },
               { path: 'projects', element: <ProjectsPage /> },
               { path: 'projects/:projectId', element: <ProjectDetailsPage /> },
               { path: 'websites', element: <WebsitesPage /> },
@@ -62,6 +74,24 @@ export const routes: RouteObject[] = [
               { path: 'websites/:websiteId/edit', element: <EditWebsitePage /> },
               { path: 'scans', element: <ScanCenterPage /> },
               { path: 'scans/:scanId', element: <ScanPage /> },
+              {
+                path: 'scans/:scanId/reports',
+                element: <ReportsLayout />,
+                children: [
+                  { index: true, element: <Navigate to="accessibility" replace /> },
+                  { path: 'accessibility', element: <AccessibilityReport /> },
+                  { path: 'ui-health', element: <UiHealthReport /> },
+                  { path: 'responsive', element: <ResponsiveReport /> },
+                  { path: 'performance', element: <PendingReport kind="performance" /> },
+                  { path: 'seo', element: <PendingReport kind="seo" /> },
+                  { path: 'security', element: <PendingReport kind="security" /> },
+                ],
+              },
+              { path: 'history', element: <HistoryPage /> },
+              { path: 'history/compare', element: <ComparePage /> },
+              { path: 'issues/:issueId', element: <IssueDetailPage /> },
+              { path: 'profile', element: <ProfilePage /> },
+              { path: 'settings', element: <SettingsPage /> },
               { path: 'status', element: <SystemStatusPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
@@ -83,7 +113,7 @@ function NotFoundPage() {
         This page doesn&apos;t exist yet, or the link is wrong.
       </p>
       <Button asChild>
-        <Link to="/projects">Go to projects</Link>
+        <Link to="/dashboard">Go to the dashboard</Link>
       </Button>
     </div>
   );

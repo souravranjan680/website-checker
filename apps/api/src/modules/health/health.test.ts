@@ -4,6 +4,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import {
   createFakeMailer,
+  createFakePdfRenderer,
   createFakeScanEvents,
   createFakeScanQueue,
   fakeResolveHostname,
@@ -32,6 +33,7 @@ function buildApp(database: HealthProbe, redis: HealthProbe, exposeErrors = true
     resolveHostname: fakeResolveHostname,
     scanQueue: createFakeScanQueue(),
     scanEvents: createFakeScanEvents(),
+    pdfRenderer: createFakePdfRenderer(),
   });
 }
 

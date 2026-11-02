@@ -34,9 +34,13 @@ export type StartScanInput = z.infer<typeof startScanSchema>;
 
 export const scanListQuerySchema = listQuerySchema.extend({
   websiteId: idSchema.optional(),
+  projectId: idSchema.optional(),
   status: z
     .enum(['QUEUED', 'RUNNING', 'CANCELLING', 'CANCELLED', 'COMPLETED', 'PARTIAL', 'FAILED'])
     .optional(),
+  /** Scans created on or after / before these dates. */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
 });
 
 export const issueListQuerySchema = listQuerySchema.extend({
@@ -45,6 +49,11 @@ export const issueListQuerySchema = listQuerySchema.extend({
   severity: z.enum(SEVERITIES).optional(),
   viewport: z.string().max(20).optional(),
   pageId: idSchema.optional(),
+  /** UI check type (e.g. BROKEN_LINK) or axe rule id. */
+  checkType: z.string().max(40).optional(),
+  ruleId: z.string().max(80).optional(),
+  detection: z.enum(['AUTOMATED', 'NEEDS_REVIEW']).optional(),
+  trackedStatus: z.enum(['OPEN', 'RESOLVED', 'IGNORED', 'FALSE_POSITIVE']).optional(),
 });
 
 export const updateTrackedIssueSchema = z.object({

@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient, User } from '@whc/db';
-import type { LoginInput, RegisterInput, UserDto } from '@whc/shared';
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  notificationPreferencesSchema,
+  type LoginInput,
+  type NotificationPreferences,
+  type RegisterInput,
+  type SessionDto,
+  type UserDto,
+} from '@whc/shared';
 import type { AppConfig } from '../../config/env';
 import { logActivity } from '../../lib/activity';
 import { hashPassword, randomToken, sha256, verifyPassword } from '../../lib/crypto';
@@ -215,6 +223,104 @@ export function createAuthService(deps: {
       return toUserDto(
         await prisma.user.update({ where: { id: userId }, data: { name: input.name } }),
       );
+    },
+
+    /**
+     * Signed-in devices. Each login is a refresh-token family; the family's one
+     * un-revoked token is its current state (last refresh = last activity).
+     */
+    async listSessions(userId: string, rawCurrentToken: string | undefined): Promise<SessionDto[]> {
+      const active = await prisma.refreshToken.findMany({
+        where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (active.length === 0) return [];
+      const started = await prisma.refreshToken.groupBy({
+        by: ['familyId'],
+        where: { userId, familyId: { in: active.map((t) => t.familyId) } },
+        _min: { createdAt: true },
+      });
+      const currentHash = rawCurrentToken ? sha256(rawCurrentToken) : null;
+      return active.map((token) => ({
+        id: token.familyId,
+        userAgent: token.userAgent,
+        ipAddress: token.ipAddress,
+        signedInAt: (
+          started.find((s) => s.familyId === token.familyId)?._min.createdAt ?? token.createdAt
+        ).toISOString(),
+        lastActiveAt: token.createdAt.toISOString(),
+        expiresAt: token.expiresAt.toISOString(),
+        current: token.tokenHash === currentHash,
+      }));
+    },
+
+    /** Signs out one device. Only the owner's own sessions can be found. */
+    async revokeSession(userId: string, familyId: string, meta: RequestMeta): Promise<void> {
+      const { count } = await prisma.refreshToken.updateMany({
+        where: { userId, familyId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (count === 0) throw new AppError(404, 'NOT_FOUND', 'Session not found.');
+      await logActivity(prisma, {
+        userId,
+        action: 'auth.session_revoked',
+        entityType: 'User',
+        entityId: userId,
+        ipAddress: meta.ip,
+      });
+    },
+
+    /** Signs out every device except the one making the request. Returns how many. */
+    async revokeOtherSessions(
+      userId: string,
+      rawCurrentToken: string | undefined,
+      meta: RequestMeta,
+    ): Promise<number> {
+      const current = rawCurrentToken
+        ? await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(rawCurrentToken) } })
+        : null;
+      const families = await prisma.refreshToken.findMany({
+        where: {
+          userId,
+          revokedAt: null,
+          ...(current && current.userId === userId ? { familyId: { not: current.familyId } } : {}),
+        },
+        select: { familyId: true },
+        distinct: ['familyId'],
+      });
+      await prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null, familyId: { in: families.map((f) => f.familyId) } },
+        data: { revokedAt: new Date() },
+      });
+      await logActivity(prisma, {
+        userId,
+        action: 'auth.other_sessions_revoked',
+        entityType: 'User',
+        entityId: userId,
+        ipAddress: meta.ip,
+        metadata: { count: families.length },
+      });
+      return families.length;
+    },
+
+    /** Stored notification choices merged over the defaults (new keys get their default). */
+    async getPreferences(userId: string): Promise<NotificationPreferences> {
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { notificationPreferences: true },
+      });
+      const stored = notificationPreferencesSchema
+        .partial()
+        .safeParse(user.notificationPreferences ?? {});
+      return { ...DEFAULT_NOTIFICATION_PREFERENCES, ...(stored.success ? stored.data : {}) };
+    },
+
+    async updatePreferences(
+      userId: string,
+      input: NotificationPreferences,
+    ): Promise<NotificationPreferences> {
+      await prisma.user.update({ where: { id: userId }, data: { notificationPreferences: input } });
+      return input;
     },
 
     /** Changes the password and signs out every other device. */

@@ -4,6 +4,8 @@
 
 # ---- Stage 1: build the bundle ---------------------------------------------------
 FROM node:24-alpine AS build
+# Retry package downloads on flaky networks instead of failing the whole build.
+ENV NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/
@@ -23,6 +25,8 @@ RUN npm run generate -w @whc/db && npm run build -w @whc/scanner
 
 # ---- Stage 2: production dependencies (pure JavaScript, safe to copy across images)
 FROM node:24-alpine AS prod-deps
+# Retry package downloads on flaky networks instead of failing the whole build.
+ENV NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/

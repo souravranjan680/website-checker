@@ -12,6 +12,7 @@ import type { ResolveHostname } from '../src/lib/hostname-guard';
 import { createLogger } from '../src/lib/logger';
 import type { MailMessage, Mailer } from '../src/lib/mailer';
 import { createMemoryRateLimitStore } from '../src/lib/rate-limit';
+import type { PdfRenderer } from '../src/lib/pdf-renderer';
 import type { ScanEventHub } from '../src/lib/scan-events';
 import type { ScanQueue } from '../src/lib/scan-queue';
 import type { ScanEvent } from '@whc/shared';
@@ -128,6 +129,23 @@ export function createFakeScanEvents(): FakeScanEvents {
   return hub;
 }
 
+/** Stand-in for the scanner's PDF worker: returns a tiny fixed PDF and records calls. */
+export interface FakePdfRenderer extends PdfRenderer {
+  calls: { scanId: string; category?: string }[];
+}
+
+export function createFakePdfRenderer(): FakePdfRenderer {
+  const renderer: FakePdfRenderer = {
+    calls: [],
+    async render(scanId, category) {
+      renderer.calls.push({ scanId, category });
+      return Buffer.from('%PDF-1.4\n% fake test pdf\n%%EOF\n');
+    },
+    async close() {},
+  };
+  return renderer;
+}
+
 export interface TestContext {
   app: Express;
   prisma: PrismaClient;
@@ -135,6 +153,7 @@ export interface TestContext {
   config: AppConfig;
   queue: FakeScanQueue;
   events: FakeScanEvents;
+  pdf: FakePdfRenderer;
 }
 
 export function createTestContext(
@@ -145,6 +164,7 @@ export function createTestContext(
   const mailer = createFakeMailer();
   const queue = createFakeScanQueue();
   const events = createFakeScanEvents();
+  const pdf = createFakePdfRenderer();
   const app = createApp({
     config,
     logger: createLogger({ level: 'silent', pretty: false }),
@@ -160,8 +180,9 @@ export function createTestContext(
     resolveHostname: fakeResolveHostname,
     scanQueue: queue,
     scanEvents: events,
+    pdfRenderer: pdf,
   });
-  return { app, prisma, mailer, config, queue, events };
+  return { app, prisma, mailer, config, queue, events, pdf };
 }
 
 export function createTestPrisma(): PrismaClient {

@@ -2,6 +2,8 @@
 
 # ---- Stage 1: build -----------------------------------------------------------
 FROM node:24-alpine AS build
+# Retry package downloads on flaky networks instead of failing the whole build.
+ENV NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 WORKDIR /app
 
 # Copy only package manifests first. Docker caches this layer, so dependencies are
@@ -26,6 +28,8 @@ RUN npm run generate -w @whc/db && npm run build -w @whc/api
 
 # ---- Stage 2: production dependencies only -------------------------------------
 FROM node:24-alpine AS prod-deps
+# Retry package downloads on flaky networks instead of failing the whole build.
+ENV NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json packages/shared/

@@ -16,6 +16,7 @@ Phase 1 (architecture & planning). Read in this order:
 | [09-phase-2-setup.md](09-phase-2-setup.md) | Phase 2 explained: monorepo, config files, dependencies, database, health checks, debugging |
 | [10-phase-3-auth.md](10-phase-3-auth.md) | Phase 3 explained: authentication flow, JWT, roles, projects, websites, tests, debugging |
 | [11-phase-4-scanning.md](11-phase-4-scanning.md) | Phase 4 explained: Playwright, DOM checks, axe-core, egress proxy, BullMQ, results, live progress, debugging |
+| [12-phase-5-frontend.md](12-phase-5-frontend.md) | Phase 5 explained: dashboard metrics and charts, history queries, report filtering, issue tracking, exports, settings |
 | [VERSIONS.md](VERSIONS.md) | Exact package and image versions, and why |
 
 Diagrams use Mermaid; they render on GitHub and in VS Code (with a Mermaid

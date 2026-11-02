@@ -22,9 +22,30 @@ import type { ScanEventHub } from '../../lib/scan-events';
 import type { ScanQueue } from '../../lib/scan-queue';
 import type { AuthUser } from '../../types/express';
 import { requireProjectRole, visibleProjectsWhere } from '../projects/project-access';
+import { ISSUE_INCLUDE, toIssueDto } from './issue-mapping';
 import type { issueListQuerySchema, scanListQuerySchema } from '@whc/shared';
 
 type IssueQuery = z.output<typeof issueListQuerySchema>;
+
+/** Values of the Prisma UiCheckType enum (validated before filtering on them). */
+const UI_CHECK_TYPES = new Set([
+  'BROKEN_IMAGE',
+  'BROKEN_LINK',
+  'HORIZONTAL_SCROLL',
+  'CONTENT_OVERFLOW',
+  'OVERLAPPING_ELEMENTS',
+  'TEXT_CLIPPING',
+  'OUT_OF_VIEWPORT',
+  'FAILED_STYLESHEET',
+  'FAILED_SCRIPT',
+  'CONSOLE_ERROR',
+  'JS_ERROR',
+  'FAILED_REQUEST',
+  'EMPTY_BUTTON',
+  'EMPTY_LINK',
+  'BROKEN_NAVIGATION',
+  'IMAGE_SIZING',
+]);
 type ScanQuery = z.output<typeof scanListQuerySchema>;
 
 export type ScansService = ReturnType<typeof createScansService>;
@@ -196,7 +217,7 @@ export function createScansService(deps: {
       action: trigger === 'RESCAN' ? 'scan.rescanned' : 'scan.started',
       entityType: 'Scan',
       entityId: scan.id,
-      metadata: { website: website.name, mode: input.mode },
+      metadata: { website: website.name, websiteId: website.id, mode: input.mode },
     });
     return details(user, scan.id);
   }
@@ -206,15 +227,27 @@ export function createScansService(deps: {
     start,
 
     async list(user: AuthUser, query: ScanQuery): Promise<Paginated<ScanListItemDto>> {
+      // The visibility rule is always part of the website filter, whatever else is added.
       const where: Prisma.ScanWhereInput = {
-        website: { project: visibleProjectsWhere(user) },
+        website: {
+          project: visibleProjectsWhere(user),
+          ...(query.projectId ? { projectId: query.projectId } : {}),
+          ...(query.q
+            ? {
+                OR: [
+                  { name: { contains: query.q, mode: 'insensitive' } },
+                  { baseUrl: { contains: query.q, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        },
         ...(query.websiteId ? { websiteId: query.websiteId } : {}),
         ...(query.status ? { status: query.status } : {}),
-        ...(query.q
+        ...(query.from || query.to
           ? {
-              website: {
-                project: visibleProjectsWhere(user),
-                name: { contains: query.q, mode: 'insensitive' },
+              createdAt: {
+                ...(query.from ? { gte: query.from } : {}),
+                ...(query.to ? { lte: query.to } : {}),
               },
             }
           : {}),
@@ -298,6 +331,7 @@ export function createScansService(deps: {
         action: 'scan.cancelled',
         entityType: 'Scan',
         entityId: scanId,
+        metadata: { websiteId: scan.website.id },
       });
       return details(user, scanId);
     },
@@ -342,15 +376,26 @@ export function createScansService(deps: {
         ...(query.severity ? { severity: query.severity } : {}),
         ...(query.viewport ? { viewport: query.viewport } : {}),
         ...(query.pageId ? { scanPageId: query.pageId } : {}),
+        ...(query.ruleId ? { ruleId: query.ruleId } : {}),
+        ...(query.checkType ? { uiHealth: { checkType: query.checkType as never } } : {}),
+        ...(query.detection ? { accessibility: { detection: query.detection } } : {}),
+        ...(query.trackedStatus ? { trackedIssue: { status: query.trackedStatus } } : {}),
         ...(query.q
           ? {
               OR: [
                 { title: { contains: query.q, mode: 'insensitive' } },
                 { ruleId: { contains: query.q, mode: 'insensitive' } },
+                { pageUrl: { contains: query.q, mode: 'insensitive' } },
+                { selector: { contains: query.q, mode: 'insensitive' } },
               ],
             }
           : {}),
       };
+      if (query.checkType && !UI_CHECK_TYPES.has(query.checkType)) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'Unknown check type.', [
+          { path: 'checkType', message: 'Unknown check type.' },
+        ]);
+      }
       const [total, rows] = await Promise.all([
         prisma.issue.count({ where }),
         prisma.issue.findMany({
@@ -358,71 +403,10 @@ export function createScansService(deps: {
           // Severity enum order is CRITICAL → INFO, so "asc" lists the worst first.
           orderBy: [{ severity: 'asc' }, { ruleId: 'asc' }, { createdAt: 'asc' }],
           ...toSkipTake(query.page, query.pageSize),
-          include: {
-            accessibility: true,
-            uiHealth: true,
-            trackedIssue: {
-              select: { id: true, status: true, occurrenceCount: true, firstSeenAt: true },
-            },
-            scanPage: {
-              select: {
-                screenshots: {
-                  where: { kind: { in: ['PAGE_FULL', 'VIEWPORT'] } },
-                  select: { id: true, kind: true, viewport: true },
-                },
-              },
-            },
-          },
+          include: ISSUE_INCLUDE,
         }),
       ]);
-
-      const data: IssueDto[] = rows.map((row) => {
-        const shots = row.scanPage?.screenshots ?? [];
-        const pageShot =
-          shots.find((s) => s.kind === 'VIEWPORT' && s.viewport === row.viewport) ??
-          shots.find((s) => s.kind === 'PAGE_FULL');
-        return {
-          id: row.id,
-          category: row.category,
-          severity: row.severity,
-          ruleId: row.ruleId,
-          title: row.title,
-          description: row.description,
-          pageId: row.scanPageId,
-          pageUrl: row.pageUrl,
-          viewport: row.viewport,
-          selector: row.selector,
-          htmlSnippet: row.htmlSnippet,
-          boundingBox: (row.boundingBox as IssueDto['boundingBox']) ?? null,
-          suggestedFix: row.suggestedFix,
-          details: (row.details as Record<string, unknown> | null) ?? null,
-          fingerprint: row.fingerprint,
-          screenshotId: row.screenshotId,
-          pageScreenshotId: pageShot?.id ?? null,
-          createdAt: row.createdAt.toISOString(),
-          tracked: row.trackedIssue
-            ? { ...row.trackedIssue, firstSeenAt: row.trackedIssue.firstSeenAt.toISOString() }
-            : null,
-          accessibility: row.accessibility
-            ? {
-                axeRuleId: row.accessibility.axeRuleId,
-                impact: row.accessibility.impact,
-                wcagCriteria: row.accessibility.wcagCriteria,
-                wcagLevel: row.accessibility.wcagLevel,
-                helpUrl: row.accessibility.helpUrl,
-                detection: row.accessibility.detection,
-              }
-            : null,
-          uiHealth: row.uiHealth
-            ? {
-                checkType: row.uiHealth.checkType,
-                resourceUrl: row.uiHealth.resourceUrl,
-                statusCode: row.uiHealth.statusCode,
-              }
-            : null,
-        };
-      });
-      return { data, meta: pageMeta(query.page, query.pageSize, total) };
+      return { data: rows.map(toIssueDto), meta: pageMeta(query.page, query.pageSize, total) };
     },
 
     /** New / resolved / recurring issues between this scan and another (default: the previous one). */

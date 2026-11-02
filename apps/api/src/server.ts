@@ -5,6 +5,7 @@ import { loadConfig } from './config/env';
 import { systemResolveHostname } from './lib/hostname-guard';
 import { createLogger } from './lib/logger';
 import { createSmtpMailer } from './lib/mailer';
+import { createBullPdfRenderer } from './lib/pdf-renderer';
 import { createRedisRateLimitStore } from './lib/rate-limit';
 import { createRedisClient } from './lib/redis';
 import { createRedisScanEventHub } from './lib/scan-events';
@@ -31,6 +32,13 @@ const healthService = createHealthService({
 
 const scanQueue = createBullScanQueue(config.redisUrl, config.scans.queuePrefix);
 const scanEvents = createRedisScanEventHub(config.redisUrl, redis, logger);
+// PDF reports are rendered by the scanner worker (it already has a browser).
+const pdfRenderer = createBullPdfRenderer({
+  redisUrl: config.redisUrl,
+  prefix: config.scans.queuePrefix,
+  storageDir: config.scans.storageDir,
+  logger,
+});
 
 const app = createApp({
   config,
@@ -42,6 +50,7 @@ const app = createApp({
   resolveHostname: systemResolveHostname,
   scanQueue,
   scanEvents,
+  pdfRenderer,
 });
 
 if (config.nodeEnv === 'production' && !config.auth.cookieSecure) {
@@ -72,7 +81,12 @@ async function shutdown(signal: string): Promise<void> {
   forceExit.unref();
 
   server.close();
-  await Promise.allSettled([prisma.$disconnect(), scanQueue.close(), scanEvents.close()]);
+  await Promise.allSettled([
+    prisma.$disconnect(),
+    scanQueue.close(),
+    scanEvents.close(),
+    pdfRenderer.close(),
+  ]);
   await redis.quit().catch(() => {});
   process.exit(0);
 }

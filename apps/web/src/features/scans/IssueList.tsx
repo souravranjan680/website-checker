@@ -1,19 +1,14 @@
 import type { IssueDto } from '@whc/shared';
-import { ChevronRight, ExternalLink } from 'lucide-react';
+import { ChevronRight, ExternalLink, History } from 'lucide-react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { SeverityBadge } from '@/components/common/StatusBadges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { errorMessage } from '@/lib/form-errors';
+import { TRACKED_LABEL } from '@/lib/labels';
 import { useUpdateTrackedIssue } from './api';
 import { ScreenshotPreview } from './Screenshot';
-
-const TRACKED_LABEL: Record<string, string> = {
-  OPEN: 'Open',
-  RESOLVED: 'Resolved',
-  IGNORED: 'Ignored',
-  FALSE_POSITIVE: 'False positive',
-};
 
 /**
  * Issues of a scan. Each row expands (native <details>, keyboard accessible) to show
@@ -136,6 +131,12 @@ export function IssueList({
                     <span className="sr-only">(opens in a new tab)</span>
                   </a>
                 ) : null}
+                <Link
+                  to={`/issues/${issue.id}`}
+                  className="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+                >
+                  <History className="size-3.5" aria-hidden="true" /> Details and history
+                </Link>
                 {canEdit && issue.tracked ? (
                   <div className="flex flex-wrap gap-2 pt-1">
                     {issue.tracked.status === 'OPEN' || issue.tracked.status === 'RESOLVED' ? (

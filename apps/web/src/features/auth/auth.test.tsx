@@ -25,7 +25,7 @@ describe('protected routes', () => {
   it('keeps signed-in users away from the login page', async () => {
     mockApi({ ...signedIn, 'GET /api/projects': page([]) });
     const { router } = renderApp('/login');
-    await waitFor(() => expect(router.state.location.pathname).toBe('/projects'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard'));
   });
 });
 

@@ -15,7 +15,10 @@ const walk = (dir) => {
     else if (/\.(tsx?|jsx?)$/.test(name)) {
       const original = readFileSync(file, 'utf8');
       const text = original.startsWith(BOM) ? original.slice(1) : original;
-      const next = text.replace(/import \{ cn \} from ["']cn["']/g, 'import { cn } from "@/lib/utils"');
+      const next = text.replace(
+        /import \{ cn \} from ["']cn["']/g,
+        'import { cn } from "@/lib/utils"',
+      );
       if (next !== original) {
         writeFileSync(file, next, 'utf8');
         fixed += 1;

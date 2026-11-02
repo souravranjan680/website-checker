@@ -24,15 +24,12 @@ afterAll(() => prisma.$disconnect());
 async function siteFor(agent: Agent) {
   const project = (await agent.post('/api/projects').set(CSRF).send({ name: 'Sites' })).body.data;
   const website = (
-    await agent
-      .post('/api/websites')
-      .set(CSRF)
-      .send({
-        projectId: project.id,
-        name: 'Home',
-        baseUrl: 'https://example.com',
-        authorizationConfirmed: true,
-      })
+    await agent.post('/api/websites').set(CSRF).send({
+      projectId: project.id,
+      name: 'Home',
+      baseUrl: 'https://example.com',
+      authorizationConfirmed: true,
+    })
   ).body.data;
   return { projectId: project.id as string, websiteId: website.id as string };
 }

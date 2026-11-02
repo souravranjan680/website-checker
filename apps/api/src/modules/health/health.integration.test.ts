@@ -7,6 +7,7 @@ import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   createFakeMailer,
+  createFakePdfRenderer,
   createFakeScanEvents,
   createFakeScanQueue,
   createTestPrisma,
@@ -47,6 +48,7 @@ describe('health check against real services', () => {
       resolveHostname: fakeResolveHostname,
       scanQueue: createFakeScanQueue(),
       scanEvents: createFakeScanEvents(),
+      pdfRenderer: createFakePdfRenderer(),
     });
 
     const res = await request(app).get('/api/health');

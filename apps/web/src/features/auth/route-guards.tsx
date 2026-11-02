@@ -5,7 +5,7 @@ import { useAuth } from './auth-context';
 
 /** Only allow same-site paths like "/projects/1" (never "//evil.com" or "https://..."). */
 export function safeNextPath(value: string | null): string {
-  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/projects';
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/dashboard';
 }
 
 function FullPageLoader() {

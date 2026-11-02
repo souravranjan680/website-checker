@@ -295,3 +295,28 @@ const { data, isLoading, error } = useQuery({
   queryFn: () => api<Scan>(`/scans/${scanId}`),
 });
 ```
+
+---
+
+## Phase 5 endpoints (implemented)
+
+All require sign-in; every one checks project access (outsiders get 404).
+Details and the meaning of each number: [12-phase-5-frontend.md](12-phase-5-frontend.md).
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/dashboard/summary?projectId&websiteId&from&to&status` | Totals, open issues by severity/category, latest-scan scores, recent scans/websites/activity |
+| `GET /api/dashboard/trends?...same` | One point per day: scans by status, average scores, new and resolved issues |
+| `GET /api/scans?q&projectId&websiteId&status&from&to&page&pageSize` | Scan history (paginated) |
+| `GET /api/scans/:id/compare?with=:otherId` | New / resolved / still-present issues between two scans of one website |
+| `GET /api/scans/:id/issues?category&severity&q&ruleId&checkType&viewport&detection&trackedStatus&page` | Filtered issue list |
+| `GET /api/issues/:id` | One issue + tracking + timeline |
+| `GET /api/reports/:scanId/accessibility` · `ui-health` · `responsive` | Report data |
+| `GET /api/reports/:scanId/performance` · `seo` · `security` | Real rows or `available: false` |
+| `PATCH /api/reports/:scanId/accessibility/checklist` | `{itemId, status: PASS\|FAIL\|NOT_APPLICABLE\|null, note?}` (editor+) |
+| `GET /api/reports/:scanId/export?format=pdf\|csv\|json&category=` | File download (PDF: 503 `PDF_UNAVAILABLE` if no scanner runs) |
+| `GET /api/websites/:id/stats` | Scan count, latest scan, tracked issues by status |
+| `GET /api/websites/:id/issues?status&category&severity&q&page` | Tracked issues of a website |
+| `GET /api/activity?websiteId=` | Activity of one website and its scans |
+| `GET /api/auth/sessions` · `DELETE /api/auth/sessions/:id` · `DELETE /api/auth/sessions/others` | Signed-in devices |
+| `GET /api/auth/preferences` · `PUT /api/auth/preferences` | Notification preferences (stored; delivery in Phase 6) |

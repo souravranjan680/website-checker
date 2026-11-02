@@ -1,5 +1,7 @@
 # ---- Stage 1: build the React app into static files -----------------------------
 FROM node:24-alpine AS build
+# Retry package downloads on flaky networks instead of failing the whole build.
+ENV NPM_CONFIG_FETCH_RETRIES=5 NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 WORKDIR /app
 
 COPY package.json package-lock.json ./

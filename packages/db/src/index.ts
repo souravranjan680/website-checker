@@ -4,6 +4,7 @@ import { PrismaClient } from './generated/prisma/client';
 // Re-export the generated client, model types (User, Scan, ...) and enums (Severity, ...)
 // so other workspaces only ever import from "@whc/db".
 export * from './generated/prisma/client';
+export { loadReportData, type ReportData } from './report-data';
 
 /**
  * Creates a Prisma client.

@@ -78,7 +78,12 @@ export function createTrackedIssuesRouter(deps: { prisma: PrismaClient }): Route
       action: 'issue.status_changed',
       entityType: 'TrackedIssue',
       entityId: tracked.id,
-      metadata: { from: tracked.status, to: status, title: tracked.title },
+      metadata: {
+        from: tracked.status,
+        to: status,
+        title: tracked.title,
+        websiteId: tracked.websiteId,
+      },
     });
     res.json({ data: { id: updated.id, status: updated.status } });
   });

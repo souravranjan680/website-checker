@@ -7,8 +7,10 @@ import {
   type Paginated,
   type ProjectRole,
   type ScanSummaryDto,
+  type TrackedIssueDto,
   type UpdateWebsiteInput,
   type WebsiteDto,
+  type WebsiteStatsDto,
 } from '@whc/shared';
 import { logActivity } from '../../lib/activity';
 import { randomToken } from '../../lib/crypto';
@@ -292,7 +294,120 @@ export function createWebsitesService(deps: {
       });
     },
 
-    /** Real scan history. Empty until the scanner exists (Phase 4); never invented. */
+    /** Numbers for the website page: scans, latest scores, tracked issue counts by status. */
+    async stats(user: AuthUser, websiteId: string): Promise<WebsiteStatsDto> {
+      await loadWebsite(user, websiteId, 'VIEWER', 'view it');
+      const [totalScans, latest, latestFinished, byStatus] = await Promise.all([
+        prisma.scan.count({ where: { websiteId } }),
+        prisma.scan.findFirst({
+          where: { websiteId },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            accessibilityScore: true,
+            uiHealthScore: true,
+            totalIssues: true,
+          },
+        }),
+        prisma.scan.findFirst({
+          where: { websiteId, status: { in: ['COMPLETED', 'PARTIAL'] } },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            createdAt: true,
+            accessibilityScore: true,
+            uiHealthScore: true,
+            totalIssues: true,
+            status: true,
+          },
+        }),
+        prisma.trackedIssue.groupBy({
+          by: ['status'],
+          where: { websiteId },
+          _count: { _all: true },
+        }),
+      ]);
+      const count = (status: string) =>
+        byStatus.find((row) => row.status === status)?._count._all ?? 0;
+      const shown = latestFinished ?? latest;
+      return {
+        totalScans,
+        latestScan: shown ? { ...shown, createdAt: shown.createdAt.toISOString() } : null,
+        latestFinishedScanId: latestFinished?.id ?? null,
+        issues: {
+          open: count('OPEN'),
+          resolved: count('RESOLVED'),
+          ignored: count('IGNORED'),
+          falsePositive: count('FALSE_POSITIVE'),
+        },
+      };
+    },
+
+    /** Problems tracked across scans for this website (one row per identity). */
+    async trackedIssues(
+      user: AuthUser,
+      websiteId: string,
+      query: ListQuery & { status?: string; category?: string; severity?: string },
+    ): Promise<Paginated<TrackedIssueDto>> {
+      await loadWebsite(user, websiteId, 'VIEWER', 'view its issues');
+      const where: Prisma.TrackedIssueWhereInput = {
+        websiteId,
+        ...(query.status ? { status: query.status as never } : {}),
+        ...(query.category ? { category: query.category as never } : {}),
+        ...(query.severity ? { severity: query.severity as never } : {}),
+        ...(query.q
+          ? {
+              OR: [
+                { title: { contains: query.q, mode: 'insensitive' } },
+                { ruleId: { contains: query.q, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      };
+      const [total, rows] = await Promise.all([
+        prisma.trackedIssue.count({ where }),
+        prisma.trackedIssue.findMany({
+          where,
+          orderBy: [{ severity: 'asc' }, { lastSeenAt: 'desc' }],
+          ...toSkipTake(query.page, query.pageSize),
+          include: {
+            issues: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { id: true, scanId: true, pageUrl: true, viewport: true, selector: true },
+            },
+          },
+        }),
+      ]);
+      return {
+        data: rows.map((t) => ({
+          id: t.id,
+          status: t.status,
+          category: t.category,
+          severity: t.severity,
+          ruleId: t.ruleId,
+          title: t.title,
+          occurrenceCount: t.occurrenceCount,
+          firstSeenAt: t.firstSeenAt.toISOString(),
+          lastSeenAt: t.lastSeenAt.toISOString(),
+          resolvedAt: t.resolvedAt?.toISOString() ?? null,
+          latest: t.issues[0]
+            ? {
+                issueId: t.issues[0].id,
+                scanId: t.issues[0].scanId,
+                pageUrl: t.issues[0].pageUrl,
+                viewport: t.issues[0].viewport,
+                selector: t.issues[0].selector,
+              }
+            : null,
+        })),
+        meta: pageMeta(query.page, query.pageSize, total),
+      };
+    },
+
+    /** Real scan history, newest first. */
     async listScans(
       user: AuthUser,
       websiteId: string,

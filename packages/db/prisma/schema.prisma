@@ -198,6 +198,8 @@ model User {
   role         UserRole  @default(USER)
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
+  /// Which notifications the user wants (merged with defaults by the API).
+  notificationPreferences Json @default("{}")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -403,6 +405,7 @@ model Scan {
   @@index([websiteId, createdAt(sort: Desc)])
   @@index([status])
   @@index([triggeredById])
+  @@index([createdAt]) // dashboard: scans in a date range
 }
 
 model ScanPage {
@@ -562,6 +565,8 @@ model TrackedIssue {
 
   @@unique([websiteId, fingerprint])
   @@index([websiteId, status])
+  @@index([websiteId, firstSeenAt]) // dashboard: newly detected per day
+  @@index([websiteId, resolvedAt]) // dashboard: resolved per day
 }
 
 // ----------------------------------------------------------------------------

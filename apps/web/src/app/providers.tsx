@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { ThemeProvider } from './theme';
 
@@ -10,7 +11,7 @@ export function createQueryClient(): QueryClient {
   });
 }
 
-/** Everything the whole app needs: server-data cache, theme, signed-in user, toasts. */
+/** Everything the whole app needs: server-data cache, theme, signed-in user, tooltips, toasts. */
 export function AppProviders({
   children,
   queryClient,
@@ -23,8 +24,10 @@ export function AppProviders({
     <QueryClientProvider client={client}>
       <ThemeProvider>
         <AuthProvider>
-          {children}
-          <Toaster position="bottom-right" richColors closeButton />
+          <TooltipProvider delayDuration={200}>
+            {children}
+            <Toaster position="bottom-right" richColors closeButton />
+          </TooltipProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

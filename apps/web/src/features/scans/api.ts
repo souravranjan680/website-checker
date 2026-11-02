@@ -38,6 +38,10 @@ export function useScans(params: {
   pageSize?: number;
   status?: string;
   websiteId?: string;
+  projectId?: string;
+  from?: string;
+  to?: string;
+  q?: string;
 }) {
   return useQuery({
     queryKey: scanKeys.list(params),
@@ -58,7 +62,14 @@ export function useScanPages(id: string, enabled = true) {
 
 export function useScanIssues(
   id: string,
-  params: { category?: string; severity?: string; viewport?: string; page?: number },
+  params: {
+    category?: string;
+    severity?: string;
+    viewport?: string;
+    page?: number;
+    q?: string;
+    trackedStatus?: string;
+  },
   enabled = true,
 ) {
   return useQuery({
@@ -72,10 +83,12 @@ export function useScanIssues(
   });
 }
 
-export function useScanComparison(id: string, enabled = true) {
+/** Compares a scan with its previous one, or with `withId` (same website only). */
+export function useScanComparison(id: string, enabled = true, withId?: string) {
   return useQuery({
-    queryKey: scanKeys.compare(id),
-    queryFn: () => apiData<ScanComparisonDto>(`/api/scans/${id}/compare`),
+    queryKey: [...scanKeys.compare(id), withId ?? null],
+    queryFn: () =>
+      apiData<ScanComparisonDto>(`/api/scans/${id}/compare${toQueryString({ with: withId })}`),
     enabled,
   });
 }
@@ -120,7 +133,12 @@ export function useUpdateTrackedIssue(scanId: string) {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'OPEN' | 'IGNORED' | 'FALSE_POSITIVE' }) =>
       apiData(`/api/tracked-issues/${id}`, { method: 'PATCH', body: { status } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scans', 'issues', scanId] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['scans', 'issues', scanId] });
+      void queryClient.invalidateQueries({ queryKey: ['issues'] });
+      void queryClient.invalidateQueries({ queryKey: ['websites'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }
 

@@ -8,12 +8,14 @@ import {
   Images,
   LayoutDashboard,
   LogOut,
+  Menu,
   Monitor,
   Moon,
   ScanSearch,
   Settings,
   ShieldCheck,
   Sun,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
@@ -41,14 +43,14 @@ interface NavItem {
 
 // Sections not built yet are shown disabled with the phase that delivers them.
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, phase: 5 },
+  { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
   { label: 'Projects', icon: FolderKanban, to: '/projects' },
   { label: 'Websites', icon: Globe, to: '/websites' },
   { label: 'Scan Center', icon: ScanSearch, to: '/scans' },
-  { label: 'History', icon: History, phase: 5 },
+  { label: 'History', icon: History, to: '/history' },
   { label: 'Visual regression', icon: Images, phase: 6 },
   { label: 'Bug reports', icon: Bug, phase: 6 },
-  { label: 'Settings', icon: Settings, phase: 5 },
+  { label: 'Settings', icon: Settings, to: '/settings' },
   { label: 'System status', icon: Activity, to: '/status' },
 ];
 
@@ -62,7 +64,7 @@ export function AppLayout() {
         Skip to content
       </a>
       <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
-        <Link to="/projects" className="flex h-14 items-center gap-2 border-b px-4 font-semibold">
+        <Link to="/dashboard" className="flex h-14 items-center gap-2 border-b px-4 font-semibold">
           <img src="/favicon.svg" alt="" className="size-6" />
           Health Checker
         </Link>
@@ -75,24 +77,9 @@ export function AppLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between gap-4 border-b px-4 md:px-6">
-          <nav aria-label="Main (mobile)" className="flex gap-1 md:hidden">
-            {NAV_ITEMS.filter((item) => item.to).map((item) => (
-              <NavLink
-                key={item.label}
-                to={item.to!}
-                className={({ isActive }) =>
-                  cn(
-                    'rounded-md px-2 py-1 text-sm',
-                    isActive ? 'bg-muted font-medium' : 'text-muted-foreground',
-                  )
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
+          <MobileNav />
           <span className="hidden text-sm text-muted-foreground md:block">
-            Phase 4 · scanning engine
+            Phase 5 · dashboard and reports
           </span>
           <div className="flex items-center gap-2">
             <ThemeSwitcher />
@@ -144,6 +131,34 @@ function SidebarLink({ item }: { item: NavItem }) {
   );
 }
 
+/** Below the md breakpoint the sidebar is hidden; the same links live in this menu. */
+function MobileNav() {
+  const navigate = useNavigate();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="md:hidden">
+          <Menu aria-hidden="true" /> Menu
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {NAV_ITEMS.map((item) => (
+          <DropdownMenuItem
+            key={item.label}
+            disabled={!item.to}
+            onSelect={() => item.to && navigate(item.to)}
+          >
+            <item.icon aria-hidden="true" /> {item.label}
+            {item.phase ? (
+              <span className="ml-auto text-xs text-muted-foreground">Phase {item.phase}</span>
+            ) : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function UserMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -180,6 +195,13 @@ function UserMenu() {
             </Badge>
           ) : null}
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => navigate('/profile')}>
+          <UserRound aria-hidden="true" /> Profile
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate('/settings')}>
+          <Settings aria-hidden="true" /> Settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => void signOut()}>
           <LogOut aria-hidden="true" /> Sign out

@@ -34,6 +34,7 @@ import { ScanStatusBadge } from '@/components/common/StatusBadges';
 import { useStartScan } from '@/features/scans/api';
 import { useDeleteWebsite, useWebsite, useWebsiteScans } from './api';
 import { VerificationBadge } from './VerificationBadge';
+import { TrackedIssuesCard, WebsiteActivityCard, WebsiteStatsRow } from './WebsiteInsights';
 
 export function WebsiteDetailsPage() {
   const { websiteId = '' } = useParams();
@@ -109,6 +110,8 @@ export function WebsiteDetailsPage() {
         }
       />
 
+      <WebsiteStatsRow website={data} />
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -126,7 +129,6 @@ export function WebsiteDetailsPage() {
                 ['Your role', <RoleBadge key="r" role={data.myRole} />],
                 ['Host name', data.hostname],
                 ['Authorization confirmed', formatDateTime(data.authorizationConfirmedAt)],
-                ['Domain verification', 'Optional; checking arrives with the scanner (Phase 4)'],
                 ['Added', formatDateTime(data.createdAt)],
               ]}
             />
@@ -153,6 +155,8 @@ export function WebsiteDetailsPage() {
       </div>
 
       <ScanHistory website={data} />
+      <TrackedIssuesCard website={data} />
+      <WebsiteActivityCard website={data} />
       <DeleteWebsiteDialog website={data} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>
   );
@@ -228,7 +232,8 @@ function ScanHistory({ website }: { website: WebsiteDto }) {
               Scan one page
             </Button>
             <Button onClick={() => void onStart('CRAWL')} disabled={start.isPending}>
-              <ScanSearch aria-hidden="true" /> {start.isPending ? 'Starting…' : 'Start scan'}
+              <ScanSearch aria-hidden="true" />{' '}
+              {start.isPending ? 'Starting…' : scans.data?.data.length ? 'Rescan' : 'Start scan'}
             </Button>
           </div>
         ) : null}
@@ -256,6 +261,7 @@ function ScanHistory({ website }: { website: WebsiteDto }) {
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Issues</TableHead>
                 <TableHead className="text-right">Accessibility</TableHead>
+                <TableHead className="text-right">Report</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -272,6 +278,18 @@ function ScanHistory({ website }: { website: WebsiteDto }) {
                   <TableCell className="text-right tabular-nums">{scan.totalIssues}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {scan.accessibilityScore ?? '-'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {scan.status === 'COMPLETED' || scan.status === 'PARTIAL' ? (
+                      <Link
+                        to={`/scans/${scan.id}/reports/accessibility`}
+                        className="text-sm underline-offset-4 hover:underline"
+                      >
+                        View
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">–</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

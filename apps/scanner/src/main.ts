@@ -1,6 +1,7 @@
 import { createPrismaClient } from '@whc/db';
 import { loadDomChecksBundle } from './checks/dom';
 import { loadScannerConfig } from './config';
+import { createPdfExportWorker } from './export/pdf-worker';
 import { createLogger } from './logger';
 import { createLocalStorage } from './storage';
 import { createScanWorker } from './worker';
@@ -10,13 +11,16 @@ const config = loadScannerConfig();
 const logger = createLogger(config.logLevel, config.nodeEnv === 'development');
 const prisma = createPrismaClient(config.databaseUrl);
 
+const storage = createLocalStorage(config.storageDir);
 const scanner = createScanWorker({
   config,
   prisma,
-  storage: createLocalStorage(config.storageDir),
+  storage,
   logger,
   domBundle: loadDomChecksBundle(),
 });
+// PDF reports for the API's export endpoint (same browser engine, separate queue).
+const pdfExports = createPdfExportWorker({ config, prisma, storage, logger });
 
 logger.info(
   { concurrency: config.concurrency, proxy: config.egressProxyUrl, storage: config.storageDir },
@@ -27,7 +31,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received: stopping (running scans are cancelled)`);
   const force = setTimeout(() => process.exit(1), 20_000);
   force.unref();
-  await scanner.close();
+  await Promise.allSettled([scanner.close(), pdfExports.close()]);
   await prisma.$disconnect();
   process.exit(0);
 }

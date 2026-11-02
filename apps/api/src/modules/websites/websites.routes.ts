@@ -2,6 +2,7 @@ import {
   createWebsiteSchema,
   idSchema,
   listQuerySchema,
+  trackedIssueQuerySchema,
   updateWebsiteSchema,
   websiteListQuerySchema,
 } from '@whc/shared';
@@ -43,6 +44,17 @@ export function createWebsitesRouter({ websites }: { websites: WebsitesService }
     const query = parseInput(listQuerySchema, req.query);
     res.json(
       await websites.listScans(currentUser(req), parseInput(idSchema, req.params.id), query),
+    );
+  });
+
+  router.get('/:id/stats', async (req, res) => {
+    res.json({ data: await websites.stats(currentUser(req), parseInput(idSchema, req.params.id)) });
+  });
+
+  router.get('/:id/issues', async (req, res) => {
+    const query = parseInput(trackedIssueQuerySchema, req.query);
+    res.json(
+      await websites.trackedIssues(currentUser(req), parseInput(idSchema, req.params.id), query),
     );
   });
 

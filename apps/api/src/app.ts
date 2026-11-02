@@ -23,8 +23,14 @@ import { createHealthRouter } from './modules/health/health.routes';
 import type { HealthService } from './modules/health/health.service';
 import { createProjectsRouter } from './modules/projects/projects.routes';
 import { createProjectsService } from './modules/projects/projects.service';
+import { createDashboardRouter } from './modules/dashboard/dashboard.routes';
+import { createDashboardService } from './modules/dashboard/dashboard.service';
+import { createIssuesRouter } from './modules/issues/issues.routes';
+import { createReportsRouter } from './modules/reports/reports.routes';
+import { createReportsService } from './modules/reports/reports.service';
 import { createWebsitesRouter } from './modules/websites/websites.routes';
 import { createWebsitesService } from './modules/websites/websites.service';
+import type { PdfRenderer } from './lib/pdf-renderer';
 import type { ScanEventHub } from './lib/scan-events';
 import type { ScanQueue } from './lib/scan-queue';
 import { createScansRouter } from './modules/scans/scans.routes';
@@ -44,6 +50,7 @@ export interface AppDependencies {
   resolveHostname: ResolveHostname;
   scanQueue: ScanQueue;
   scanEvents: ScanEventHub;
+  pdfRenderer: PdfRenderer;
 }
 
 /**
@@ -120,6 +127,8 @@ export function createApp(deps: AppDependencies): Express {
     events: deps.scanEvents,
     config,
   });
+  const dashboard = createDashboardService({ prisma });
+  const reports = createReportsService({ prisma });
   // Scans are expensive: at most 20 started per hour per user.
   const scanStartLimit = rateLimit({
     name: 'scan-start',
@@ -146,6 +155,13 @@ export function createApp(deps: AppDependencies): Express {
     createScreenshotsRouter({ prisma, storageDir: config.scans.storageDir }),
   );
   app.use('/api/tracked-issues', requireAuth, createTrackedIssuesRouter({ prisma }));
+  app.use('/api/issues', requireAuth, createIssuesRouter({ prisma }));
+  app.use('/api/dashboard', requireAuth, createDashboardRouter({ dashboard }));
+  app.use(
+    '/api/reports',
+    requireAuth,
+    createReportsRouter({ reports, prisma, pdf: deps.pdfRenderer }),
+  );
 
   // 8. Nothing matched → 404; any error → standard JSON error.
   app.use(notFoundHandler);
