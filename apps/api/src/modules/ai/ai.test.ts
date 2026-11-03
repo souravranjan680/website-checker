@@ -16,7 +16,14 @@ import {
   signUp,
   type Agent,
 } from '../../../test/helpers';
-import { buildIssuePrompt, redactHtml, redactText, safeUrl, type AiPromptIssue } from './prompt';
+import {
+  buildIssuePrompt,
+  ISSUE_EXPLAIN_PROMPT_VERSION,
+  redactHtml,
+  redactText,
+  safeUrl,
+  type AiPromptIssue,
+} from './prompt';
 
 const prisma = createTestPrisma();
 
@@ -234,6 +241,29 @@ describe('POST /api/ai/issues/:id/explain', () => {
       data: { reused: true, content: ANSWER },
     });
     expect(provider.prompts).toHaveLength(1);
+  });
+
+  it('does not reuse an answer made with an older prompt version; it is asked again and replaced', async () => {
+    const { agent } = await signUp(ctx.app);
+    const { issueId } = await seedIssue(agent);
+    await prisma.aiInsight.create({
+      data: {
+        issueId,
+        kind: 'EXPLANATION',
+        model: 'claude-sonnet-5-5',
+        promptVersion: 'issue-explain/v0',
+        content: { ...ANSWER, summary: 'Old answer.' },
+      },
+    });
+    expect((await agent.get(`/api/ai/issues/${issueId}`)).body.data).toBeNull();
+
+    const res = await agent.post(`/api/ai/issues/${issueId}/explain`).set(CSRF);
+    expect(res.status).toBe(201);
+    expect(res.body.data.content.summary).toBe(ANSWER.summary);
+    expect(provider.prompts).toHaveLength(1);
+    const rows = await prisma.aiInsight.findMany({ where: { issueId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.promptVersion).toBe(ISSUE_EXPLAIN_PROMPT_VERSION);
   });
 
   it('works for viewers, is invisible to outsiders, and validates the answer it stores', async () => {

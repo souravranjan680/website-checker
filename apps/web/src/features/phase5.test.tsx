@@ -244,9 +244,11 @@ const issueHistory: IssueHistoryDto = {
     screenshotId: null,
     pageScreenshotId: null,
     createdAt: '2026-11-02T10:01:00.000Z',
+    classification: 'DETECTED',
     tracked: {
       id: 't1',
       status: 'OPEN',
+      reviewStatus: 'UNREVIEWED',
       occurrenceCount: 3,
       firstSeenAt: '2026-10-20T10:00:00.000Z',
     },
@@ -269,6 +271,7 @@ const issueHistory: IssueHistoryDto = {
   tracking: {
     id: 't1',
     status: 'OPEN',
+    reviewStatus: 'UNREVIEWED',
     occurrenceCount: 3,
     firstSeenAt: '2026-10-20T10:00:00.000Z',
     lastSeenAt: '2026-11-02T10:00:00.000Z',
@@ -319,6 +322,43 @@ describe('issue details', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Ignore issue' }));
     await waitFor(() =>
       expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ status: 'IGNORED' }),
+    );
+  });
+
+  it('shows the automated evidence separately from the team decision, and records a review with a note (Phase 9)', async () => {
+    const calls = mockApi({
+      ...signedIn,
+      'GET /api/issues/i1': ok(issueHistory),
+      'GET /api/tracked-issues/t1/reviews': ok([
+        {
+          id: 'r1',
+          createdAt: '2026-11-02T11:00:00.000Z',
+          user: { id: 'u1', name: 'Asha' },
+          fromStatus: null,
+          toStatus: null,
+          fromReview: 'UNREVIEWED',
+          toReview: 'INTENTIONAL',
+          note: 'Decorative image, by design.',
+        },
+      ]),
+      'PATCH /api/tracked-issues/t1': ok({ id: 't1', status: 'OPEN', reviewStatus: 'CONFIRMED' }),
+    });
+    renderApp('/issues/i1');
+
+    expect(await screen.findByText('Team decision')).toBeInTheDocument();
+    expect(screen.getAllByText('Detected').length).toBeGreaterThan(0); // badge, not a decision
+    expect(screen.getByTestId('review-status')).toHaveTextContent('Not reviewed');
+    const history = await screen.findByRole('list', { name: 'Decision history' });
+    expect(history).toHaveTextContent('Asha set the review to “Intentional”');
+    expect(history).toHaveTextContent('Decorative image, by design.');
+
+    fireEvent.change(screen.getByLabelText(/Note/), { target: { value: 'Reproduced on Chrome.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm defect' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({
+        reviewStatus: 'CONFIRMED',
+        note: 'Reproduced on Chrome.',
+      }),
     );
   });
 });

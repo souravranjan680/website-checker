@@ -15,6 +15,7 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
 import { canEdit } from '@/components/common/RoleBadge';
 import {
+  ClassificationBadge,
   FindingLevelBadge,
   ScanStatusBadge,
   SeverityBadge,
@@ -37,10 +38,11 @@ import { ScreenshotPreview } from '@/features/scans/Screenshot';
 import { ApiError } from '@/lib/api-client';
 import { errorMessage } from '@/lib/form-errors';
 import { formatDateTime } from '@/lib/format';
-import { CATEGORY_LABEL, TRACKED_LABEL } from '@/lib/labels';
+import { CATEGORY_LABEL, REVIEW_LABEL, TRACKED_LABEL } from '@/lib/labels';
 import { AiExplanationCard } from '@/features/ai/AiExplanationCard';
 import { useCreateBugReport } from '@/features/bug-reports/api';
 import { useIssue } from './api';
+import { ReviewCard } from './ReviewCard';
 
 /** /issues/:issueId : everything about one detected problem, and its life across scans. */
 export function IssueDetailPage() {
@@ -105,7 +107,11 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
         badge={
           <>
             <SeverityBadge severity={issue.severity} />
+            <ClassificationBadge classification={issue.classification} />
             {tracking ? <Badge variant="secondary">{TRACKED_LABEL[tracking.status]}</Badge> : null}
+            {tracking && tracking.reviewStatus !== 'UNREVIEWED' ? (
+              <Badge variant="secondary">{REVIEW_LABEL[tracking.reviewStatus]}</Badge>
+            ) : null}
           </>
         }
         description={
@@ -282,6 +288,12 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
         </div>
 
         <div className="flex flex-col gap-6">
+          <ReviewCard
+            scanId={data.scan.id}
+            classification={issue.classification}
+            tracking={tracking}
+            editable={editable}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Tracking</CardTitle>
@@ -375,6 +387,11 @@ function Timeline({
                 'this scan'
               )}{' '}
               {item.scanStatus ? <ScanStatusBadge status={item.scanStatus} /> : null}
+            </p>
+          ) : item.type === 'REVIEWED' ? (
+            <p>
+              {item.user?.name ?? 'Someone'} set the review to{' '}
+              <span className="font-medium">{REVIEW_LABEL[item.to ?? ''] ?? item.to}</span>
             </p>
           ) : item.type === 'STATUS_CHANGED' ? (
             <p>

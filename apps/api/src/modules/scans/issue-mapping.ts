@@ -7,7 +7,15 @@ export const ISSUE_INCLUDE = {
   uiHealth: true,
   seo: true,
   security: true,
-  trackedIssue: { select: { id: true, status: true, occurrenceCount: true, firstSeenAt: true } },
+  trackedIssue: {
+    select: {
+      id: true,
+      status: true,
+      reviewStatus: true,
+      occurrenceCount: true,
+      firstSeenAt: true,
+    },
+  },
   scanPage: {
     select: {
       screenshots: {
@@ -46,6 +54,7 @@ export function toIssueDto(row: IssueRow): IssueDto {
     screenshotId: row.screenshotId,
     pageScreenshotId: pageShot?.id ?? null,
     createdAt: row.createdAt.toISOString(),
+    classification: row.classification,
     tracked: row.trackedIssue
       ? { ...row.trackedIssue, firstSeenAt: row.trackedIssue.firstSeenAt.toISOString() }
       : null,

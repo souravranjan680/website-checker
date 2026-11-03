@@ -1,0 +1,51 @@
+{
+  "fixture": "storyblok",
+  "startPath": "/storyblok/",
+  "scan": { "maxPages": 1, "maxDepth": 0, "responsivePageLimit": 0 },
+  "scoredCategories": ["UI_HEALTH"],
+  "expected": [
+    {
+      "id": "integration-missing-access-token",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/console-error",
+      "text": "You need to provide an access token",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "repeated-site-error-grouped",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/console-error",
+      "text": "Logged 2 times",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "integration-api-401",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/failed-request",
+      "resource": "api.storyblok.com",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "site-code-exception",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/js-error",
+      "text": "reading 'items'",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "third-party-widget-exception",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/js-error",
+      "text": "Widget failed to initialise",
+      "classification": ["OBSERVATION"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "deprecation-warning",
+      "reason": "a harmless browser deprecation notice",
+      "text": "[Deprecation]"
+    }
+  ],
+  "forbiddenTokens": ["storyblok", "Cart item", "Widget failed", "thirdparty-cdn"]
+}

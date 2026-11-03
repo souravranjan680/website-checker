@@ -66,7 +66,11 @@ export function createIssuesRouter({ prisma }: { prisma: PrismaClient }): Router
       : null;
     const statusChanges = tracked
       ? await prisma.activityLog.findMany({
-          where: { entityType: 'TrackedIssue', entityId: tracked.id },
+          where: {
+            entityType: 'TrackedIssue',
+            entityId: tracked.id,
+            action: { in: ['issue.status_changed', 'issue.reviewed'] },
+          },
           orderBy: { createdAt: 'desc' },
           take: 50,
           include: { user: { select: { id: true, name: true } } },
@@ -85,7 +89,8 @@ export function createIssuesRouter({ prisma }: { prisma: PrismaClient }): Router
       ...statusChanges.map((entry) => {
         const meta = (entry.metadata as { from?: string; to?: string } | null) ?? {};
         return {
-          type: 'STATUS_CHANGED' as const,
+          type:
+            entry.action === 'issue.reviewed' ? ('REVIEWED' as const) : ('STATUS_CHANGED' as const),
           at: entry.createdAt.toISOString(),
           from: meta.from,
           to: meta.to,
@@ -114,6 +119,7 @@ export function createIssuesRouter({ prisma }: { prisma: PrismaClient }): Router
         ? {
             id: tracked.id,
             status: tracked.status,
+            reviewStatus: tracked.reviewStatus,
             occurrenceCount: tracked.occurrenceCount,
             firstSeenAt: tracked.firstSeenAt.toISOString(),
             lastSeenAt: tracked.lastSeenAt.toISOString(),

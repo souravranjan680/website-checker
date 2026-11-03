@@ -1,0 +1,8 @@
+{
+  "fixture": "clean",
+  "startPath": "/clean/",
+  "scan": { "maxPages": 1, "maxDepth": 0, "responsivePageLimit": 1 },
+  "scoredCategories": ["UI_HEALTH", "RESPONSIVE", "ACCESSIBILITY"],
+  "expected": [],
+  "negativeControls": []
+}

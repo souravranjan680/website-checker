@@ -65,6 +65,65 @@ export interface IssueDraft {
   };
 }
 
+export type FindingClassification =
+  'DETECTED' | 'POTENTIAL_DEFECT' | 'OBSERVATION' | 'INCONCLUSIVE';
+
+/** UI checks whose result is objective (measured or rule-based), not a judgement. */
+const OBJECTIVE_UI_CHECKS = new Set<UiCheckType>([
+  'HORIZONTAL_SCROLL',
+  'EMPTY_BUTTON',
+  'EMPTY_LINK',
+]);
+/** Resource checks: objective only when the re-check confirmed the failure. */
+const RESOURCE_CHECKS = new Set<UiCheckType>([
+  'BROKEN_IMAGE',
+  'BROKEN_LINK',
+  'FAILED_STYLESHEET',
+  'FAILED_SCRIPT',
+  'FAILED_REQUEST',
+]);
+
+/**
+ * How strong the evidence for an issue is (Phase 9). Rules (the migration
+ * 20261103001300_phase9_m0_classification_review applies the same to older rows):
+ *   accessibility  axe violation → DETECTED; axe "needs review" → INCONCLUSIVE
+ *   security       CONFIRMED → DETECTED; WARNING → POTENTIAL_DEFECT; OBSERVATION → OBSERVATION
+ *   SEO            DETECTED (rule checks on page facts)
+ *   performance    POTENTIAL_DEFECT (lab measurement)
+ *   UI / responsive
+ *     confirmed resource failures, horizontal scroll, unnamed button/link → DETECTED
+ *     unconfirmed resource failures (scans before re-checks existed) → POTENTIAL_DEFECT
+ *     console: third-party or network messages → OBSERVATION; others → POTENTIAL_DEFECT
+ *     other layout heuristics → POTENTIAL_DEFECT
+ * Human decisions (confirmed, intentional) are separate: TrackedIssue.reviewStatus.
+ */
+export function classifyDraft(draft: IssueDraft): FindingClassification {
+  if (draft.accessibility) {
+    return draft.accessibility.detection === 'AUTOMATED' ? 'DETECTED' : 'INCONCLUSIVE';
+  }
+  if (draft.security) {
+    const level = draft.security.findingLevel;
+    return level === 'CONFIRMED'
+      ? 'DETECTED'
+      : level === 'WARNING'
+        ? 'POTENTIAL_DEFECT'
+        : 'OBSERVATION';
+  }
+  if (draft.category === 'SEO') return 'DETECTED';
+  if (draft.category === 'PERFORMANCE') return 'POTENTIAL_DEFECT';
+  const check = draft.uiHealth?.checkType;
+  if (!check) return 'POTENTIAL_DEFECT';
+  if (OBJECTIVE_UI_CHECKS.has(check)) return 'DETECTED';
+  if (RESOURCE_CHECKS.has(check)) {
+    return draft.uiHealth?.measurements?.verdict === 'CONFIRMED' ? 'DETECTED' : 'POTENTIAL_DEFECT';
+  }
+  if (check === 'CONSOLE_ERROR' || check === 'JS_ERROR') {
+    const kind = draft.uiHealth?.measurements?.kind;
+    return kind === 'THIRD_PARTY' || kind === 'NETWORK' ? 'OBSERVATION' : 'POTENTIAL_DEFECT';
+  }
+  return 'POTENTIAL_DEFECT';
+}
+
 export interface IssueContext {
   websiteId: string;
   pageUrl: string;

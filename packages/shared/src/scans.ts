@@ -43,6 +43,25 @@ export const scanListQuerySchema = listQuerySchema.extend({
   to: z.coerce.date().optional(),
 });
 
+/**
+ * How strong the evidence for an automated finding is (Phase 9):
+ *   DETECTED          a deterministic rule failed, with objective evidence
+ *   POTENTIAL_DEFECT  heuristic evidence suggests something is broken
+ *   OBSERVATION       a fact or difference worth reviewing, no evidence of breakage
+ *   INCONCLUSIVE      could not be verified, or a person must decide
+ */
+export const FINDING_CLASSIFICATIONS = [
+  'DETECTED',
+  'POTENTIAL_DEFECT',
+  'OBSERVATION',
+  'INCONCLUSIVE',
+] as const;
+export type FindingClassificationName = (typeof FINDING_CLASSIFICATIONS)[number];
+
+/** A person's verdict, separate from the lifecycle status (OPEN/RESOLVED/IGNORED/FALSE_POSITIVE). */
+export const REVIEW_STATUSES = ['UNREVIEWED', 'CONFIRMED', 'INTENTIONAL'] as const;
+export type ReviewStatusName = (typeof REVIEW_STATUSES)[number];
+
 export const issueListQuerySchema = listQuerySchema.extend({
   pageSize: z.coerce.number().int().min(1).max(200).default(100),
   category: z.enum(ISSUE_CATEGORIES).optional(),
@@ -54,11 +73,36 @@ export const issueListQuerySchema = listQuerySchema.extend({
   ruleId: z.string().max(80).optional(),
   detection: z.enum(['AUTOMATED', 'NEEDS_REVIEW']).optional(),
   trackedStatus: z.enum(['OPEN', 'RESOLVED', 'IGNORED', 'FALSE_POSITIVE']).optional(),
+  classification: z.enum(FINDING_CLASSIFICATIONS).optional(),
+  reviewStatus: z.enum(REVIEW_STATUSES).optional(),
 });
 
-export const updateTrackedIssueSchema = z.object({
-  status: z.enum(['OPEN', 'IGNORED', 'FALSE_POSITIVE']),
-});
+/**
+ * PATCH /api/tracked-issues/:id. `status` alone is the original (Phase 5) request and
+ * still works; `reviewStatus` and `note` were added in Phase 9.
+ */
+export const updateTrackedIssueSchema = z
+  .object({
+    status: z.enum(['OPEN', 'IGNORED', 'FALSE_POSITIVE']).optional(),
+    reviewStatus: z.enum(REVIEW_STATUSES).optional(),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .refine((v) => v.status !== undefined || v.reviewStatus !== undefined, {
+    message: 'Send a status, a review status, or both.',
+    path: ['status'],
+  });
+
+/** One entry of a tracked problem's review history (append-only). */
+export interface IssueReviewDto {
+  id: string;
+  createdAt: string;
+  user: { id: string; name: string } | null;
+  fromStatus: 'OPEN' | 'RESOLVED' | 'IGNORED' | 'FALSE_POSITIVE' | null;
+  toStatus: 'OPEN' | 'RESOLVED' | 'IGNORED' | 'FALSE_POSITIVE' | null;
+  fromReview: ReviewStatusName | null;
+  toReview: ReviewStatusName | null;
+  note: string | null;
+}
 
 /** Live progress message (Redis pub/sub → API → browser via Server-Sent Events). */
 export interface ScanProgressEvent {
@@ -177,9 +221,13 @@ export interface IssueDto {
   screenshotId: string | null;
   pageScreenshotId: string | null;
   createdAt: string;
+  /** Strength of the automated evidence (Phase 9). */
+  classification: FindingClassificationName;
   tracked: {
     id: string;
     status: 'OPEN' | 'RESOLVED' | 'IGNORED' | 'FALSE_POSITIVE';
+    /** A person's verdict (Phase 9). */
+    reviewStatus: ReviewStatusName;
     occurrenceCount: number;
     firstSeenAt: string;
   } | null;

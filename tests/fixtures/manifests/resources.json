@@ -1,0 +1,68 @@
+{
+  "fixture": "resources",
+  "startPath": "/resources/",
+  "scan": { "maxPages": 1, "maxDepth": 0, "responsivePageLimit": 0 },
+  "scoredCategories": ["UI_HEALTH", "ACCESSIBILITY"],
+  "expected": [
+    {
+      "id": "image-404",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/broken-image",
+      "resource": "/resources/missing.png",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "html-served-as-image",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/broken-image",
+      "resource": "/resources/not-an-image.png",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "image-on-missing-domain",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/broken-image",
+      "resource": "no-such-host.invalid",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "stylesheet-404",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/failed-stylesheet",
+      "resource": "/resources/missing.css",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "link-404",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/broken-link",
+      "resource": "/resources/gone",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "link-always-500",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/broken-link",
+      "resource": "/resources/always-500",
+      "classification": ["DETECTED"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "flaky-image",
+      "reason": "the download is cut off in the browser but works on a re-check",
+      "resource": "/resources/flaky.png"
+    },
+    {
+      "id": "unreachable-server",
+      "reason": "connection refused: cannot be verified, not proof of a broken site",
+      "resource": ":1/"
+    },
+    {
+      "id": "private-address",
+      "reason": "refused by the scanner's own security policy, not the site's fault",
+      "resource": "10.0.0.1"
+    }
+  ],
+  "forbiddenTokens": ["flaky.png", "not-an-image", "always-500", "no-such-host"]
+}

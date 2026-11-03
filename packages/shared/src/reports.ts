@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SeverityName } from './constants';
-import type { IssueCategoryName } from './scans';
+import { REVIEW_STATUSES, type IssueCategoryName, type ReviewStatusName } from './scans';
 import { idSchema, listQuerySchema } from './schemas/common';
 
 // ------------------------------------------------------------------ dashboard
@@ -523,6 +523,8 @@ export interface IssueHistoryDto {
   tracking: {
     id: string;
     status: 'OPEN' | 'RESOLVED' | 'IGNORED' | 'FALSE_POSITIVE';
+    /** A person's verdict (Phase 9). */
+    reviewStatus: ReviewStatusName;
     occurrenceCount: number;
     firstSeenAt: string;
     lastSeenAt: string;
@@ -533,7 +535,8 @@ export interface IssueHistoryDto {
   } | null;
   /** Newest first: every scan this problem appeared in, plus status changes. */
   timeline: {
-    type: 'DETECTED' | 'STATUS_CHANGED' | 'RESOLVED';
+    /** REVIEWED (Phase 9): a person set the review status (from/to are review statuses). */
+    type: 'DETECTED' | 'STATUS_CHANGED' | 'REVIEWED' | 'RESOLVED';
     at: string;
     scanId?: string;
     scanStatus?: string;
@@ -548,6 +551,8 @@ export interface IssueHistoryDto {
 export interface TrackedIssueDto {
   id: string;
   status: 'OPEN' | 'RESOLVED' | 'IGNORED' | 'FALSE_POSITIVE';
+  /** A person's verdict (Phase 9). */
+  reviewStatus: ReviewStatusName;
   category: IssueCategoryName;
   severity: SeverityName;
   ruleId: string;
@@ -567,6 +572,7 @@ export interface TrackedIssueDto {
 
 export const trackedIssueQuerySchema = listQuerySchema.extend({
   status: z.enum(['OPEN', 'RESOLVED', 'IGNORED', 'FALSE_POSITIVE']).optional(),
+  reviewStatus: z.enum(REVIEW_STATUSES).optional(),
   category: z
     .enum(['ACCESSIBILITY', 'UI_HEALTH', 'RESPONSIVE', 'PERFORMANCE', 'SEO', 'SECURITY'])
     .optional(),

@@ -95,6 +95,23 @@ enum IssueStatus {
   FALSE_POSITIVE
 }
 
+/// How strong the evidence for an automated finding is (Phase 9). Shared by the
+/// health scan and the website comparison. Human decisions live in ReviewStatus.
+enum FindingClassification {
+  DETECTED // a deterministic rule failed, with objective evidence (e.g. axe violation, confirmed 404)
+  POTENTIAL_DEFECT // heuristic evidence suggests something is broken (e.g. covered control)
+  OBSERVATION // a fact or difference worth reviewing, no evidence of breakage
+  INCONCLUSIVE // could not be verified, or needs a human to decide (e.g. axe "needs review")
+}
+
+/// A person's verdict on a tracked problem (Phase 9). Separate from the lifecycle
+/// status (OPEN/RESOLVED/IGNORED/FALSE_POSITIVE): a CONFIRMED issue can still be RESOLVED later.
+enum ReviewStatus {
+  UNREVIEWED
+  CONFIRMED // confirmed defect
+  INTENTIONAL // works as designed
+}
+
 enum DetectionType {
   AUTOMATED // axe "violations": confirmed failures
   NEEDS_REVIEW // axe "incomplete": a human must decide
@@ -248,6 +265,8 @@ model User {
   aiInsights          AiInsight[]
   notifications       Notification[]
   activityLogs        ActivityLog[]
+  issueReviews        IssueReview[]
+  reviewedIssues      TrackedIssue[]       @relation("TrackedIssueReviewedBy")
 }
 
 /// One row per login session. Only a SHA-256 hash of the token is stored.
@@ -483,7 +502,7 @@ model ScanPage {
 /// Every finding of every category. Category-specific fields live in the
 /// 1:1 detail tables below (AccessibilityIssue, UIHealthIssue, ...).
 model Issue {
-  id             String        @id @default(cuid())
+  id             String                @id @default(cuid())
   scanId         String
   scanPageId     String? // null for site-level findings (e.g. missing sitemap.xml)
   trackedIssueId String?
@@ -501,7 +520,9 @@ model Issue {
   details        Json?
   fingerprint    String // stable id of "the same problem" across scans
   screenshotId   String?
-  createdAt      DateTime      @default(now())
+  /// Set by the scanner for every new issue; older rows were backfilled by the migration.
+  classification FindingClassification @default(INCONCLUSIVE)
+  createdAt      DateTime              @default(now())
 
   scan          Scan                @relation(fields: [scanId], references: [id], onDelete: Cascade)
   scanPage      ScanPage?           @relation(fields: [scanPageId], references: [id], onDelete: Cascade)
@@ -591,19 +612,44 @@ model TrackedIssue {
   firstSeenAt      DateTime      @default(now())
   lastSeenAt       DateTime      @default(now())
   resolvedAt       DateTime?
+  reviewStatus     ReviewStatus  @default(UNREVIEWED)
+  reviewedAt       DateTime?
+  reviewedById     String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  website        Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
-  firstSeenScan  Scan?   @relation("TrackedFirstSeen", fields: [firstSeenScanId], references: [id], onDelete: SetNull)
-  lastSeenScan   Scan?   @relation("TrackedLastSeen", fields: [lastSeenScanId], references: [id], onDelete: SetNull)
-  resolvedInScan Scan?   @relation("TrackedResolvedIn", fields: [resolvedInScanId], references: [id], onDelete: SetNull)
+  website        Website       @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  reviewedBy     User?         @relation("TrackedIssueReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviews        IssueReview[]
+  firstSeenScan  Scan?         @relation("TrackedFirstSeen", fields: [firstSeenScanId], references: [id], onDelete: SetNull)
+  lastSeenScan   Scan?         @relation("TrackedLastSeen", fields: [lastSeenScanId], references: [id], onDelete: SetNull)
+  resolvedInScan Scan?         @relation("TrackedResolvedIn", fields: [resolvedInScanId], references: [id], onDelete: SetNull)
   issues         Issue[]
 
   @@unique([websiteId, fingerprint])
   @@index([websiteId, status])
   @@index([websiteId, firstSeenAt]) // dashboard: newly detected per day
   @@index([websiteId, resolvedAt]) // dashboard: resolved per day
+}
+
+/// Append-only history of human decisions on a tracked problem (Phase 9): review
+/// verdicts and lifecycle changes made by people. Rows are never edited (a database
+/// trigger refuses updates other than clearing userId when a user is deleted).
+model IssueReview {
+  id             String        @id @default(cuid())
+  trackedIssueId String
+  userId         String?
+  fromStatus     IssueStatus?
+  toStatus       IssueStatus?
+  fromReview     ReviewStatus?
+  toReview       ReviewStatus?
+  note           String?
+  createdAt      DateTime      @default(now())
+
+  trackedIssue TrackedIssue @relation(fields: [trackedIssueId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([trackedIssueId, createdAt])
 }
 
 // ----------------------------------------------------------------------------
@@ -756,15 +802,17 @@ model BugReport {
 
 /// Cached Claude responses: one per issue and kind, so repeat views cost nothing.
 model AiInsight {
-  id           String        @id @default(cuid())
-  issueId      String
-  kind         AiInsightKind
-  model        String
-  content      Json
-  inputTokens  Int?
-  outputTokens Int?
-  createdById  String?
-  createdAt    DateTime      @default(now())
+  id            String        @id @default(cuid())
+  issueId       String
+  kind          AiInsightKind
+  model         String
+  /// Which prompt produced this answer; a new prompt version is asked again (Phase 9).
+  promptVersion String        @default("issue-explain/v1")
+  content       Json
+  inputTokens   Int?
+  outputTokens  Int?
+  createdById   String?
+  createdAt     DateTime      @default(now())
 
   issue     Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
   createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)

@@ -32,6 +32,13 @@ export const AI_PROMPT_INCLUDE = {
 
 export type AiPromptIssue = Prisma.IssueGetPayload<{ include: typeof AI_PROMPT_INCLUDE }>;
 
+/**
+ * Version of the issue-explanation prompt (system prompt + buildIssuePrompt). Saved
+ * with every answer; change it whenever the prompt changes, so cached answers made
+ * with an older prompt are asked again instead of reused.
+ */
+export const ISSUE_EXPLAIN_PROMPT_VERSION = 'issue-explain/v1';
+
 export const SYSTEM_PROMPT = `You explain website quality issues (accessibility, UI, responsive layout, performance, SEO and security configuration) to beginners: junior developers, testers and content editors.
 
 Rules:

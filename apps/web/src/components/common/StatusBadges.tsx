@@ -4,7 +4,9 @@ import {
   Ban,
   CheckCircle2,
   CircleDashed,
+  HelpCircle,
   Info,
+  SearchCheck,
   Loader2,
   XCircle,
   type LucideIcon,
@@ -91,6 +93,32 @@ const LEVEL: Record<string, { label: string; icon: LucideIcon; className: string
   },
   OBSERVATION: { label: 'Observation', icon: Info, className: 'text-muted-foreground' },
 };
+
+const CLASSIFICATION: Record<string, { label: string; icon: LucideIcon; className: string }> = {
+  DETECTED: {
+    label: 'Detected',
+    icon: SearchCheck,
+    className: 'border-red-600/40 text-red-700 dark:text-red-400',
+  },
+  POTENTIAL_DEFECT: {
+    label: 'Potential defect',
+    icon: AlertTriangle,
+    className: 'border-amber-600/40 text-amber-700 dark:text-amber-400',
+  },
+  OBSERVATION: { label: 'Observation', icon: Info, className: 'text-muted-foreground' },
+  INCONCLUSIVE: { label: 'Inconclusive', icon: HelpCircle, className: 'text-muted-foreground' },
+};
+
+/** How strong the automated evidence is (not a human decision). */
+export function ClassificationBadge({ classification }: { classification: string }) {
+  const info = CLASSIFICATION[classification] ?? CLASSIFICATION.INCONCLUSIVE!;
+  return (
+    <Badge variant="outline" className={cn('font-normal', info.className)}>
+      <info.icon aria-hidden="true" />
+      {info.label}
+    </Badge>
+  );
+}
 
 /** How sure a security finding is. "Confirmed" = observed configuration, not an exploit. */
 export function FindingLevelBadge({ level }: { level: string }) {

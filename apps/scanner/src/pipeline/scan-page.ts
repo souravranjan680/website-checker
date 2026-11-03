@@ -1,29 +1,15 @@
-import {
-  unnamedControlSelectors,
-  type InsecureReference,
-  type LinkInfo,
-  type SeoSnapshot,
-} from '@whc/dom-checks';
-import { EGRESS_REASON_HEADER } from '@whc/shared';
-import { parseSetCookie, type CookieFacts } from '../audits/security';
+import type { InsecureReference, LinkInfo, SeoSnapshot } from '@whc/dom-checks';
 import type { Page } from 'playwright';
-import { BLOCKED_RESPONSE_HEADER, type ViewportSpec } from '../browser-types';
-import { axeSelector, boxesFor, runAxe } from '../checks/axe';
+import type { CookieFacts } from '../audits/security';
+import type { ViewportSpec } from '../browser-types';
 import { attachCollectors, type PageNetworkLog } from '../checks/collectors';
-import { classifyPageConsole } from '../checks/console-classify';
-import { runDomChecksInPage } from '../checks/dom';
-import { verifyPageResources, type ProbeFn } from '../checks/verify-resources';
-import { isSameSite, normalizeUrl } from '../crawler/urls';
-import {
-  axeToDrafts,
-  consoleToDrafts,
-  domToDrafts,
-  networkToDrafts,
-  SEVERITY_RANK,
-  type IssueDraft,
-} from '../issues';
+import type { ProbeFn } from '../checks/verify-resources';
+import { SEVERITY_RANK, type IssueDraft } from '../issues';
 import type { Logger } from '../logger';
 import { captureFullPage, captureHighlightedIssue, type CapturedImage } from '../screenshots';
+import { analyzePage, capturePage } from './capture-page';
+
+export { describeNavigationError } from './capture-page';
 
 export interface PageScanResult {
   outcome: 'DONE' | 'FAILED' | 'SKIPPED';
@@ -52,30 +38,12 @@ export interface PageScanResult {
   crops: Map<string, CapturedImage>;
 }
 
-/** Turns Playwright/Chromium navigation errors into messages a user can act on. */
-export function describeNavigationError(error: unknown, timeoutMs: number): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/Timeout/i.test(message))
-    return `The page did not finish loading within ${Math.round(timeoutMs / 1000)} seconds.`;
-  if (message.includes('ERR_TUNNEL_CONNECTION_FAILED')) {
-    return 'Could not connect. The address does not exist, is unreachable, or points to a private/internal network (blocked for security).';
-  }
-  if (message.includes('ERR_NAME_NOT_RESOLVED')) return 'The domain name could not be found.';
-  if (message.includes('ERR_CONNECTION_REFUSED')) return 'The server refused the connection.';
-  if (message.includes('ERR_CERT') || message.includes('SSL'))
-    return "The site's HTTPS certificate is not valid.";
-  if (message.includes('ERR_TOO_MANY_REDIRECTS')) return 'The page redirects in a loop.';
-  return 'The page could not be loaded.';
-}
-
 /**
- * Loads one page in the browser and runs every desktop check on it:
- *   1. navigate (wait for "load", then briefly for network quiet: JS-heavy pages)
- *   2. axe-core accessibility rules
- *   3. DOM/UI checks (layout, broken images, empty controls)
- *   4. failed resources re-checked through the egress proxy (only confirmed ones
- *      become issues); console messages and exceptions classified and grouped
- *   5. full-page screenshot + highlighted screenshots of the worst problems
+ * Health scan of one page at desktop size:
+ *   1. capturePage: navigate, axe-core, DOM/UI checks, re-check failed resources
+ *   2. analyzePage: the facts → issue drafts (confirmed failures only; console
+ *      messages classified and grouped)
+ *   3. full-page screenshot + highlighted screenshots of the worst problems
  */
 export async function scanPage(params: {
   page: Page;
@@ -92,156 +60,46 @@ export async function scanPage(params: {
   logger: Logger;
 }): Promise<PageScanResult> {
   const { page, url, viewport, logger } = params;
+  // Listening until the screenshots are done: lazy content they trigger is recorded too.
   const { log, detach } = attachCollectors(page);
-  const result: PageScanResult = {
-    outcome: 'FAILED',
-    finalUrl: url,
-    httpStatus: null,
-    contentType: null,
-    loadTimeMs: null,
-    errorMessage: null,
-    meta: null,
-    responseHeaders: null,
-    cookies: [],
-    insecureReferences: [],
-    network: log,
-    links: [],
-    drafts: [],
-    fullPage: null,
-    crops: new Map(),
-  };
-
   try {
-    const started = Date.now();
-    let response;
-    try {
-      response = await page.goto(url, { waitUntil: 'load', timeout: params.navTimeoutMs });
-    } catch (error) {
-      logger.info({ url, err: (error as Error).message }, 'navigation failed');
-      result.errorMessage = describeNavigationError(error, params.navTimeoutMs);
-      return result;
-    }
-    if (!response) {
-      result.errorMessage = 'The page returned no response.';
-      return result;
-    }
-
-    const headers = response.headers();
-    result.finalUrl = page.url();
-    result.httpStatus = response.status();
-    result.contentType = headers['content-type'] ?? null;
-    // Never store cookie values (they can be session tokens); the flags are kept below.
-    result.responseHeaders = Object.fromEntries(
-      Object.entries(headers).filter(([name]) => name.toLowerCase() !== 'set-cookie'),
-    );
-    // headersArray keeps each Set-Cookie separate; only the name and flags are kept.
-    result.cookies = (await response.headersArray())
-      .filter((h) => h.name.toLowerCase() === 'set-cookie')
-      .map((h) => parseSetCookie(h.value))
-      .filter((c): c is CookieFacts => c !== null)
-      .slice(0, 50);
-
-    if (headers[BLOCKED_RESPONSE_HEADER] === '1') {
-      const reason = headers[EGRESS_REASON_HEADER];
-      result.errorMessage =
-        reason === 'policy' || (!reason && response.status() === 403)
-          ? 'Blocked by the security proxy: this address (or a redirect it followed) points to a private or internal network.'
-          : reason === 'dns-not-found'
-            ? 'The domain name does not exist.'
-            : reason === 'dns-error'
-              ? 'The domain name could not be looked up (temporary DNS failure).'
-              : 'The site could not be reached.';
-      return result;
-    }
-    const skip = (message: string) => {
-      result.outcome = 'SKIPPED';
-      result.errorMessage = message;
-      return result;
+    const capture = await capturePage({ ...params, log });
+    const snapshot = capture.dom?.snapshot;
+    const result: PageScanResult = {
+      outcome: capture.outcome === 'DONE' ? 'FAILED' : capture.outcome, // DONE once screenshots ran
+      finalUrl: capture.finalUrl,
+      httpStatus: capture.httpStatus,
+      contentType: capture.contentType,
+      loadTimeMs: capture.loadTimeMs,
+      errorMessage: capture.errorMessage,
+      meta: snapshot
+        ? {
+            title: snapshot.title,
+            metaDescription: snapshot.metaDescription,
+            canonical: snapshot.canonical,
+            lang: snapshot.lang,
+            h1Count: snapshot.h1Count,
+            seo: snapshot.seo,
+          }
+        : null,
+      responseHeaders: capture.responseHeaders,
+      cookies: capture.cookies,
+      insecureReferences: snapshot?.insecureReferences ?? [],
+      network: log,
+      links: snapshot?.links ?? [],
+      drafts: [],
+      fullPage: null,
+      crops: new Map(),
     };
-    if (!isSameSite(result.finalUrl, params.siteHostname)) {
-      return skip(
-        `Redirects to another website (${new URL(result.finalUrl).hostname}); not scanned.`,
-      );
-    }
-    const finalNormalized = normalizeUrl(result.finalUrl);
-    if (
-      finalNormalized &&
-      finalNormalized !== normalizeUrl(url) &&
-      params.alreadyScanned(finalNormalized)
-    ) {
-      return skip(`Redirects to ${result.finalUrl}, which was already scanned.`);
-    }
-    if (response.status() >= 400) return skip(`The server answered HTTP ${response.status()}.`);
-    if (!(result.contentType ?? '').includes('html')) return skip('Not an HTML page.');
+    if (capture.outcome !== 'DONE') return result;
 
-    // JavaScript-heavy pages keep loading after "load"; give them a few seconds.
-    await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => {});
-    result.loadTimeMs =
-      ((await page
-        .evaluate(
-          `(() => { const n = performance.getEntriesByType('navigation')[0]; return n ? Math.round(n.loadEventEnd || n.duration) : null; })()`,
-        )
-        .catch(() => null)) as number | null) ?? Date.now() - started;
-
-    const ctx = { websiteId: params.websiteId, pageUrl: result.finalUrl, viewport: viewport.label };
-
-    // 1) accessibility
-    const axe = await runAxe(page);
-    // Elements axe already reported as unnamed controls are not reported again by the UI checks.
-    const skipSelectors = unnamedControlSelectors(axe);
-    const axeSelectors = [
-      ...new Set(
-        [...axe.violations, ...axe.incomplete]
-          .flatMap((rule) => rule.nodes.map((node) => axeSelector(node.target)))
-          .filter((s): s is string => Boolean(s)),
-      ),
-    ];
-    const boxList = await boxesFor(page, axeSelectors.slice(0, 300));
-    const boxes = new Map(axeSelectors.slice(0, 300).map((s, i) => [s, boxList[i] ?? null]));
-
-    // 2) UI checks inside the page
-    const dom = await runDomChecksInPage(page, params.domBundle, { mode: 'all', skipSelectors });
-    result.links = dom.snapshot.links;
-    result.meta = {
-      title: dom.snapshot.title,
-      metaDescription: dom.snapshot.metaDescription,
-      canonical: dom.snapshot.canonical,
-      lang: dom.snapshot.lang,
-      h1Count: dom.snapshot.h1Count,
-      seo: dom.snapshot.seo,
-    };
-    result.insecureReferences = dom.snapshot.insecureReferences;
-
-    // 3) re-check failed resources: only confirmed failures become issues
-    const imageVerdicts = await verifyPageResources(log, dom.findings, params.probe);
-    const domFindings = dom.findings.filter((finding) => {
-      if (finding.check !== 'BROKEN_IMAGE') return true;
-      const verdict = imageVerdicts.get(String(finding.measurements?.src ?? ''));
-      if (verdict?.verdict !== 'CONFIRMED') return false; // listed in the report as unverified
-      finding.measurements = {
-        ...finding.measurements,
-        verdict: verdict.verdict,
-        verdictReason: verdict.reason,
-      };
-      finding.message = `${finding.message} ${verdict.reason}`;
-      return true;
-    });
-    const brokenImageSrcs = new Set(
-      domFindings
-        .filter((f) => f.check === 'BROKEN_IMAGE')
-        .map((f) => String(f.measurements?.src ?? '')),
+    result.drafts = analyzePage(
+      capture,
+      { websiteId: params.websiteId, pageUrl: capture.finalUrl, viewport: viewport.label },
+      params.siteHostname,
     );
-    // 4) console messages and exceptions, classified after the requests have verdicts
-    const consoleGroups = classifyPageConsole(log, params.siteHostname);
 
-    result.drafts = [
-      ...axeToDrafts(axe, ctx, boxes),
-      ...domToDrafts(domFindings, ctx, 'UI_HEALTH'),
-      ...networkToDrafts(log, ctx, params.siteHostname, brokenImageSrcs),
-      ...consoleToDrafts(consoleGroups, ctx),
-    ];
-
-    // 5) screenshots (failures are logged, never fatal)
+    // Screenshots (failures are logged, never fatal)
     try {
       result.fullPage = await captureFullPage(page);
     } catch (error) {

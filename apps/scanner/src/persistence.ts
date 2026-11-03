@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient, SecurityCheckType, SeoCheckType } from '@whc/db';
-import type { IssueDraft } from './issues';
+import { classifyDraft, type IssueDraft } from './issues';
 import type { FileStorage } from './storage';
 
 /** Saves an image file and its Screenshot row. Returns the row ID. */
@@ -68,6 +68,7 @@ export async function saveIssues(
         details: json(d.details),
         fingerprint: d.fingerprint,
         screenshotId: d.screenshotId ?? null,
+        classification: classifyDraft(d),
       })),
     }),
     prisma.accessibilityIssue.createMany({

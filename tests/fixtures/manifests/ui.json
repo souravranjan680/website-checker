@@ -1,0 +1,122 @@
+{
+  "fixture": "ui",
+  "startPath": "/ui/",
+  "scan": { "maxPages": 1, "maxDepth": 0, "responsivePageLimit": 1 },
+  "scoredCategories": ["UI_HEALTH", "RESPONSIVE", "ACCESSIBILITY"],
+  "expected": [
+    {
+      "id": "wide-banner-overflow",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/content-overflow",
+      "selector": "main > div:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "page-scrolls-sideways",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/horizontal-scroll",
+      "selector": "html",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "clipped-text",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/text-clipping",
+      "selector": "div:nth-of-type(3)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "covered-button",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/overlapping-elements",
+      "selector": "div:nth-of-type(4) > button",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "stretched-image",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/image-sizing",
+      "selector": "img",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "unnamed-button",
+      "category": "ACCESSIBILITY",
+      "ruleId": "button-name",
+      "selector": ".empty",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "carousel-not-keyboard-scrollable",
+      "category": "ACCESSIBILITY",
+      "ruleId": "scrollable-region-focusable",
+      "selector": ".carousel",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "wide-banner-overflow-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/content-overflow",
+      "selector": "main > div:nth-of-type(1)",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "page-scrolls-sideways-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/horizontal-scroll",
+      "selector": "html",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "min-width-600-block-overflows-below-600",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/content-overflow",
+      "selector": "div:nth-of-type(2)",
+      "viewports": ["390x844", "320x568"],
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "clipped-text-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/text-clipping",
+      "selector": "div:nth-of-type(3)",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "covered-button-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/overlapping-elements",
+      "selector": "div:nth-of-type(4) > button",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "stretched-image-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/image-sizing",
+      "selector": "img",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "classification": ["POTENTIAL_DEFECT"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "ellipsis",
+      "reason": "text shortened on purpose with text-overflow: ellipsis",
+      "selectors": [".ellipsis", "div:nth-of-type(5)"]
+    },
+    {
+      "id": "screen-reader-only",
+      "reason": "visually hidden text for screen readers",
+      "selectors": [".sr-only", "span"]
+    },
+    {
+      "id": "carousel-scrolls-inside",
+      "reason": "a horizontally scrolling container, not page overflow (its keyboard access is a separate, real accessibility issue)",
+      "selectors": ["div:nth-of-type(6)", "div:nth-of-type(6) > span"]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import { AppError, notFound } from '../../lib/errors';
 import type { Logger } from '../../lib/logger';
 import type { AuthUser } from '../../types/express';
 import { requireProjectRole } from '../projects/project-access';
-import { AI_PROMPT_INCLUDE, buildIssuePrompt } from './prompt';
+import { AI_PROMPT_INCLUDE, buildIssuePrompt, ISSUE_EXPLAIN_PROMPT_VERSION } from './prompt';
 
 const startOfToday = () => {
   const day = new Date();
@@ -49,15 +49,23 @@ export function createAiService(deps: {
     return issue;
   }
 
-  /** An existing explanation for this issue, or for the same problem found in another scan. */
+  /**
+   * An existing explanation made with the current prompt version, for this issue or
+   * for the same problem found in another scan.
+   */
   async function cached(issueId: string, trackedIssueId: string | null) {
     const own = await prisma.aiInsight.findUnique({
       where: { issueId_kind: { issueId, kind: 'EXPLANATION' } },
     });
-    if (own) return { row: own, reused: false };
+    if (own && own.promptVersion === ISSUE_EXPLAIN_PROMPT_VERSION)
+      return { row: own, reused: false };
     if (!trackedIssueId) return null;
     const sibling = await prisma.aiInsight.findFirst({
-      where: { kind: 'EXPLANATION', issue: { trackedIssueId } },
+      where: {
+        kind: 'EXPLANATION',
+        promptVersion: ISSUE_EXPLAIN_PROMPT_VERSION,
+        issue: { trackedIssueId },
+      },
       orderBy: { createdAt: 'desc' },
     });
     return sibling ? { row: sibling, reused: true } : null;
@@ -143,19 +151,20 @@ export function createAiService(deps: {
       }
 
       const result = await provider.explain(buildIssuePrompt(issue));
+      const answer = {
+        model: provider.model,
+        promptVersion: ISSUE_EXPLAIN_PROMPT_VERSION,
+        content: result.content,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        createdById: user.id,
+      };
       const row = await prisma.aiInsight.upsert({
-        // Two people clicking at once: the second answer simply replaces the first.
+        // An answer from an older prompt version is replaced. (Two people clicking
+        // at once: the second answer replaces the first; both used the same prompt.)
         where: { issueId_kind: { issueId, kind: 'EXPLANATION' } },
-        create: {
-          issueId,
-          kind: 'EXPLANATION',
-          model: provider.model,
-          content: result.content,
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          createdById: user.id,
-        },
-        update: {},
+        create: { issueId, kind: 'EXPLANATION', ...answer },
+        update: { ...answer, createdAt: new Date() },
       });
       logger.info(
         {
@@ -163,6 +172,7 @@ export function createAiService(deps: {
           model: provider.model,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
+          promptVersion: ISSUE_EXPLAIN_PROMPT_VERSION,
         },
         'AI explanation created',
       );

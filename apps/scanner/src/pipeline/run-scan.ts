@@ -24,15 +24,9 @@ import {
 import { captureVisual, compareImages, parseIgnoreSettings } from '../audits/visual';
 import { collectSiteSecurityFacts, collectSiteSeoFacts, fetchSiteFile } from '../audits/site-files';
 import { checkLink, probeUrl } from '../audits/resource-check';
+import { crawlSite } from '../crawler/crawl';
 import { ALLOW_ALL, parseRobotsTxt, type RobotsRules } from '../crawler/robots';
-import {
-  compilePatterns,
-  isSameSite,
-  looksLikeHtml,
-  normalizeUrl,
-  pathAllowed,
-  pathOf,
-} from '../crawler/urls';
+import { compilePatterns, isSameSite, normalizeUrl } from '../crawler/urls';
 import { computeScore, trackIssues } from '../finalize';
 import { notifyScanFinished, type EmailJobQueue } from '../notifications';
 import { domToDrafts, uiDraft, type IssueDraft } from '../issues';
@@ -186,154 +180,157 @@ export async function runScan(
     const exclude = compilePatterns(website.excludePatterns);
 
     // ---------------------------------------------------------- crawl (BFS)
-    const queue: { url: string; depth: number }[] = [{ url: startUrl, depth: 0 }];
-    const visited = new Set<string>([startUrl]);
+    // The crawler keeps the queue and known addresses; each page is scanned here.
     const linkRefs = new Map<string, LinkRef[]>();
     const cropBudget = { remaining: config.maxIssueScreenshots };
 
-    while (queue.length > 0 && pages.length < maxPages && !timeLimitReached) {
-      checkpoint();
-      const target = queue.shift()!;
-      await progress.update({
-        step: `Scanning page ${pages.length + 1} of up to ${Math.min(maxPages, visited.size)}`,
-        currentUrl: target.url,
-        pagesDiscovered: visited.size,
-        progress: (pages.length / Math.max(1, Math.min(maxPages, visited.size))) * 60,
-        issuesFound,
-      });
-
-      const page = await context.newPage();
-      let result;
-      try {
-        result = await scanPage({
-          page,
-          url: target.url,
-          viewport: desktop,
-          websiteId: website.id,
-          siteHostname,
-          navTimeoutMs: config.navTimeoutMs,
-          domBundle: deps.domBundle,
-          cropBudget,
-          alreadyScanned: (u) =>
-            pages.some((p) => p.status === 'DONE' && normalizeUrl(p.url) === u),
-          // Same proxy-only client as the link checks: the egress policy applies to re-checks too.
-          probe: (resourceUrl) => probeUrl(api!, resourceUrl, 'GET', 8_000),
-          logger: log,
+    await crawlSite({
+      startUrl,
+      siteHostname,
+      maxPages,
+      maxDepth,
+      include,
+      exclude,
+      robots,
+      checkpoint,
+      shouldStop: () => timeLimitReached,
+      afterVisit: async (crawl) => {
+        await progress.update({
+          pagesScanned: pages.filter((p) => p.status !== 'FAILED').length,
+          pagesFailed: pages.filter((p) => p.status === 'FAILED').length,
+          pagesDiscovered: Math.min(crawl.discovered, maxPages),
+          progress: (pages.length / Math.max(1, Math.min(maxPages, crawl.discovered))) * 60,
+          issuesFound,
         });
-      } finally {
-        await page.close().catch(() => {});
-      }
-      checkpoint();
+      },
+      visit: async (target, crawl) => {
+        await progress.update({
+          step: `Scanning page ${pages.length + 1} of up to ${Math.min(maxPages, crawl.discovered)}`,
+          currentUrl: target.url,
+          pagesDiscovered: crawl.discovered,
+          progress: (pages.length / Math.max(1, Math.min(maxPages, crawl.discovered))) * 60,
+          issuesFound,
+        });
 
-      const scanPageRow = await prisma.scanPage.create({
-        data: {
-          scanId,
+        const page = await context.newPage();
+        let result;
+        try {
+          result = await scanPage({
+            page,
+            url: target.url,
+            viewport: desktop,
+            websiteId: website.id,
+            siteHostname,
+            navTimeoutMs: config.navTimeoutMs,
+            domBundle: deps.domBundle,
+            cropBudget,
+            alreadyScanned: (u) =>
+              pages.some((p) => p.status === 'DONE' && normalizeUrl(p.url) === u),
+            // Same proxy-only client as the link checks: the egress policy applies to re-checks too.
+            probe: (resourceUrl) => probeUrl(api!, resourceUrl, 'GET', 8_000),
+            logger: log,
+          });
+        } finally {
+          await page.close().catch(() => {});
+        }
+        checkpoint();
+
+        const scanPageRow = await prisma.scanPage.create({
+          data: {
+            scanId,
+            url: result.finalUrl,
+            normalizedUrl: target.url,
+            depth: target.depth,
+            status: result.outcome,
+            httpStatus: result.httpStatus,
+            contentType: result.contentType,
+            title: result.meta?.title || null,
+            metaDescription: result.meta?.metaDescription ?? null,
+            canonicalUrl: result.meta?.canonical ?? null,
+            language: result.meta?.lang ?? null,
+            h1Count: result.meta?.h1Count ?? null,
+            loadTimeMs: result.loadTimeMs,
+            responseHeaders: result.responseHeaders ?? undefined,
+            consoleErrors: result.network.consoleErrors as unknown as object[],
+            failedRequests: result.network.failedRequests as unknown as object[],
+            pageErrors: result.network.pageErrors as unknown as object[],
+            seoData: result.meta ? (result.meta.seo as unknown as object) : undefined,
+            errorMessage: result.errorMessage,
+          },
+        });
+        if (result.outcome === 'DONE' && result.meta) {
+          seoPages.push({
+            scanPageId: scanPageRow.id,
+            url: result.finalUrl,
+            title: result.meta.title,
+            metaDescription: result.meta.metaDescription,
+            canonical: result.meta.canonical,
+            h1Count: result.meta.h1Count,
+            xRobotsTag: result.responseHeaders?.['x-robots-tag'] ?? null,
+            seo: result.meta.seo,
+          });
+          securityPages.push({
+            scanPageId: scanPageRow.id,
+            url: result.finalUrl,
+            headers: result.responseHeaders ?? {},
+            cookies: result.cookies,
+            insecureReferences: result.insecureReferences,
+          });
+        }
+        pages.push({
+          id: scanPageRow.id,
           url: result.finalUrl,
           normalizedUrl: target.url,
-          depth: target.depth,
           status: result.outcome,
           httpStatus: result.httpStatus,
-          contentType: result.contentType,
-          title: result.meta?.title || null,
-          metaDescription: result.meta?.metaDescription ?? null,
-          canonicalUrl: result.meta?.canonical ?? null,
-          language: result.meta?.lang ?? null,
-          h1Count: result.meta?.h1Count ?? null,
-          loadTimeMs: result.loadTimeMs,
-          responseHeaders: result.responseHeaders ?? undefined,
-          consoleErrors: result.network.consoleErrors as unknown as object[],
-          failedRequests: result.network.failedRequests as unknown as object[],
-          pageErrors: result.network.pageErrors as unknown as object[],
-          seoData: result.meta ? (result.meta.seo as unknown as object) : undefined,
-          errorMessage: result.errorMessage,
-        },
-      });
-      if (result.outcome === 'DONE' && result.meta) {
-        seoPages.push({
-          scanPageId: scanPageRow.id,
-          url: result.finalUrl,
-          title: result.meta.title,
-          metaDescription: result.meta.metaDescription,
-          canonical: result.meta.canonical,
-          h1Count: result.meta.h1Count,
-          xRobotsTag: result.responseHeaders?.['x-robots-tag'] ?? null,
-          seo: result.meta.seo,
         });
-        securityPages.push({
-          scanPageId: scanPageRow.id,
-          url: result.finalUrl,
-          headers: result.responseHeaders ?? {},
-          cookies: result.cookies,
-          insecureReferences: result.insecureReferences,
-        });
-      }
-      pages.push({
-        id: scanPageRow.id,
-        url: result.finalUrl,
-        normalizedUrl: target.url,
-        status: result.outcome,
-        httpStatus: result.httpStatus,
-      });
-      const finalNormalized = normalizeUrl(result.finalUrl);
-      if (finalNormalized) visited.add(finalNormalized);
-
-      if (result.fullPage) {
-        await saveScreenshot(prisma, deps.storage, {
-          scanId,
-          scanPageId: scanPageRow.id,
-          kind: 'PAGE_FULL',
-          viewport: desktop.label,
-          key: `scans/${scanId}/pages/${scanPageRow.id}-${desktop.label}-full.jpg`,
-          ...result.fullPage,
-        });
-      }
-      for (const draft of result.drafts) {
-        const crop = result.crops.get(draft.id);
-        if (!crop) continue;
-        draft.screenshotId = await saveScreenshot(prisma, deps.storage, {
-          scanId,
-          scanPageId: scanPageRow.id,
-          kind: 'ISSUE_CROP',
-          viewport: desktop.label,
-          key: `scans/${scanId}/issues/${draft.id}.jpg`,
-          ...crop,
-        });
-      }
-      await storeIssues(scanPageRow.id, result.drafts);
-
-      // Queue new links from this page (same website, within depth/limits/rules).
-      if (result.outcome === 'DONE') {
-        for (const link of result.links) {
-          const href = normalizeUrl(link.href);
-          if (!href) continue;
-          const refs = linkRefs.get(href) ?? [];
-          if (refs.length < 5) {
-            refs.push({
-              scanPageId: scanPageRow.id,
-              pageUrl: result.finalUrl,
-              selector: link.selector,
-              html: link.html,
-            });
-          }
-          linkRefs.set(href, refs);
-
-          if (target.depth >= maxDepth || visited.has(href)) continue;
-          if (!isSameSite(href, siteHostname) || !looksLikeHtml(href)) continue;
-          if (!pathAllowed(href, include, exclude) || !robots.allows(pathOf(href))) continue;
-          if (visited.size >= maxPages * 3) continue; // keep the queue bounded
-          visited.add(href);
-          queue.push({ url: href, depth: target.depth + 1 });
+        if (result.fullPage) {
+          await saveScreenshot(prisma, deps.storage, {
+            scanId,
+            scanPageId: scanPageRow.id,
+            kind: 'PAGE_FULL',
+            viewport: desktop.label,
+            key: `scans/${scanId}/pages/${scanPageRow.id}-${desktop.label}-full.jpg`,
+            ...result.fullPage,
+          });
         }
-      }
+        for (const draft of result.drafts) {
+          const crop = result.crops.get(draft.id);
+          if (!crop) continue;
+          draft.screenshotId = await saveScreenshot(prisma, deps.storage, {
+            scanId,
+            scanPageId: scanPageRow.id,
+            kind: 'ISSUE_CROP',
+            viewport: desktop.label,
+            key: `scans/${scanId}/issues/${draft.id}.jpg`,
+            ...crop,
+          });
+        }
+        await storeIssues(scanPageRow.id, result.drafts);
 
-      await progress.update({
-        pagesScanned: pages.filter((p) => p.status !== 'FAILED').length,
-        pagesFailed: pages.filter((p) => p.status === 'FAILED').length,
-        pagesDiscovered: Math.min(visited.size, maxPages),
-        progress: (pages.length / Math.max(1, Math.min(maxPages, visited.size))) * 60,
-        issuesFound,
-      });
-    }
+        // Remember where each link appears (for broken-link issues); the crawler queues them.
+        if (result.outcome === 'DONE') {
+          for (const link of result.links) {
+            const href = normalizeUrl(link.href);
+            if (!href) continue;
+            const refs = linkRefs.get(href) ?? [];
+            if (refs.length < 5) {
+              refs.push({
+                scanPageId: scanPageRow.id,
+                pageUrl: result.finalUrl,
+                selector: link.selector,
+                html: link.html,
+              });
+            }
+            linkRefs.set(href, refs);
+          }
+        }
+        return {
+          finalUrl: result.finalUrl,
+          links: result.outcome === 'DONE' ? result.links.map((link) => link.href) : null,
+        };
+      },
+    });
 
     const scannedPages = pages.filter((p) => p.status === 'DONE');
 

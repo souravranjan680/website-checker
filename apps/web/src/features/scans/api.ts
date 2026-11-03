@@ -3,6 +3,7 @@ import {
   ACTIVE_SCAN_STATUSES,
   type IssueDto,
   type Paginated,
+  type ReviewStatusName,
   type ScanComparisonDto,
   type ScanDetailsDto,
   type ScanListItemDto,
@@ -131,8 +132,15 @@ export function useCancelScan(scanId: string) {
 export function useUpdateTrackedIssue(scanId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'OPEN' | 'IGNORED' | 'FALSE_POSITIVE' }) =>
-      apiData(`/api/tracked-issues/${id}`, { method: 'PATCH', body: { status } }),
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      status?: 'OPEN' | 'IGNORED' | 'FALSE_POSITIVE';
+      reviewStatus?: ReviewStatusName;
+      note?: string;
+    }) => apiData(`/api/tracked-issues/${id}`, { method: 'PATCH', body }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['scans', 'issues', scanId] });
       void queryClient.invalidateQueries({ queryKey: ['issues'] });

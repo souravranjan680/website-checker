@@ -20,6 +20,7 @@ Phase 1 (architecture & planning). Read in this order:
 | [13-phase-6-advanced-audits.md](13-phase-6-advanced-audits.md) | Phase 6 explained: Lighthouse, SEO, security levels, visual regression, bug reports, AI safety and costs, notifications, storage cleanup |
 | [14-scanner-reliability.md](14-scanner-reliability.md) | Fixes after Phase 6: re-checking failed resources and links (confirmed / inconclusive / blocked), proxy reason codes, console error classification and grouping |
 | [15-phase-7-chrome-extension.md](15-phase-7-chrome-extension.md) | Phase 7 explained: the Chrome extension, what it reuses from the scanner, permissions and privacy, install/load/test, parity tests |
+| [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md) | Phase 9 (in progress): Website Health Scan and Website Comparison, classification, review history, fixture acceptance harness |
 | [VERSIONS.md](VERSIONS.md) | Exact package and image versions, and why |
 
 Diagrams use Mermaid; they render on GitHub and in VS Code (with a Mermaid

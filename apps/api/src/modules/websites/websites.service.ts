@@ -349,12 +349,18 @@ export function createWebsitesService(deps: {
     async trackedIssues(
       user: AuthUser,
       websiteId: string,
-      query: ListQuery & { status?: string; category?: string; severity?: string },
+      query: ListQuery & {
+        status?: string;
+        reviewStatus?: string;
+        category?: string;
+        severity?: string;
+      },
     ): Promise<Paginated<TrackedIssueDto>> {
       await loadWebsite(user, websiteId, 'VIEWER', 'view its issues');
       const where: Prisma.TrackedIssueWhereInput = {
         websiteId,
         ...(query.status ? { status: query.status as never } : {}),
+        ...(query.reviewStatus ? { reviewStatus: query.reviewStatus as never } : {}),
         ...(query.category ? { category: query.category as never } : {}),
         ...(query.severity ? { severity: query.severity as never } : {}),
         ...(query.q
@@ -385,6 +391,7 @@ export function createWebsitesService(deps: {
         data: rows.map((t) => ({
           id: t.id,
           status: t.status,
+          reviewStatus: t.reviewStatus,
           category: t.category,
           severity: t.severity,
           ruleId: t.ruleId,

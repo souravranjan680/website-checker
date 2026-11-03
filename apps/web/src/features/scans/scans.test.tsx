@@ -106,9 +106,11 @@ const issue: IssueDto = {
   screenshotId: 'shot1',
   pageScreenshotId: null,
   createdAt: '2026-11-02T10:01:00.000Z',
+  classification: 'DETECTED',
   tracked: {
     id: 't1',
     status: 'OPEN',
+    reviewStatus: 'UNREVIEWED',
     occurrenceCount: 1,
     firstSeenAt: '2026-11-02T10:01:00.000Z',
   },

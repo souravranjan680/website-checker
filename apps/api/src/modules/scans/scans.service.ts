@@ -379,7 +379,15 @@ export function createScansService(deps: {
         ...(query.ruleId ? { ruleId: query.ruleId } : {}),
         ...(query.checkType ? { uiHealth: { checkType: query.checkType as never } } : {}),
         ...(query.detection ? { accessibility: { detection: query.detection } } : {}),
-        ...(query.trackedStatus ? { trackedIssue: { status: query.trackedStatus } } : {}),
+        ...(query.trackedStatus || query.reviewStatus
+          ? {
+              trackedIssue: {
+                ...(query.trackedStatus ? { status: query.trackedStatus } : {}),
+                ...(query.reviewStatus ? { reviewStatus: query.reviewStatus } : {}),
+              },
+            }
+          : {}),
+        ...(query.classification ? { classification: query.classification } : {}),
         ...(query.q
           ? {
               OR: [
