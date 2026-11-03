@@ -29,6 +29,19 @@ const schema = z.object({
   // Safe explorer (Phase 9): upper limits; each website can choose lower ones.
   SCAN_MAX_EXPLORATION_PAGES: z.coerce.number().int().min(0).max(10).default(5),
   SCAN_MAX_EXPLORATION_CONTROLS: z.coerce.number().int().min(0).max(50).default(30),
+  // Cross-browser checks (Phase 9, Milestone 3): which other engines this deployment
+  // allows (comma-separated; empty = none), and caps for each website's own settings.
+  SCAN_COMPAT_BROWSERS: z
+    .string()
+    .default('firefox,webkit')
+    .transform((v) =>
+      v
+        .split(',')
+        .map((b) => b.trim().toLowerCase())
+        .filter((b): b is 'firefox' | 'webkit' => b === 'firefox' || b === 'webkit'),
+    ),
+  SCAN_MAX_COMPAT_PAGES: z.coerce.number().int().min(0).max(10).default(10),
+  SCAN_COMPAT_BROWSER_TIMEOUT_MS: z.coerce.number().int().min(30_000).max(900_000).default(180_000),
   /** Days to keep page screenshots and raw Lighthouse files of old scans. 0 = keep forever. */
   SCAN_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(0),
   SCANNER_HEADLESS: z.stringbool().default(true),
@@ -58,6 +71,10 @@ export interface ScannerConfig {
   /** Safe explorer caps (Phase 9). */
   maxExplorationPages: number;
   maxExplorationControls: number;
+  /** Cross-browser caps (Phase 9, Milestone 3). */
+  compatBrowsers: ('firefox' | 'webkit')[];
+  maxCompatPages: number;
+  compatBrowserTimeoutMs: number;
   retentionDays: number;
   headless: boolean;
   browserChannel?: string;
@@ -102,6 +119,9 @@ export function loadScannerConfig(source: NodeJS.ProcessEnv = process.env): Scan
     visualPages: env.SCAN_VISUAL_PAGES,
     maxExplorationPages: env.SCAN_MAX_EXPLORATION_PAGES,
     maxExplorationControls: env.SCAN_MAX_EXPLORATION_CONTROLS,
+    compatBrowsers: env.SCAN_COMPAT_BROWSERS,
+    maxCompatPages: env.SCAN_MAX_COMPAT_PAGES,
+    compatBrowserTimeoutMs: env.SCAN_COMPAT_BROWSER_TIMEOUT_MS,
     retentionDays: env.SCAN_RETENTION_DAYS,
     headless: env.SCANNER_HEADLESS,
     browserChannel: env.SCANNER_BROWSER_CHANNEL,

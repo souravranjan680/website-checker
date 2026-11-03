@@ -110,6 +110,11 @@ export interface WebsiteDto {
   /** Keyboard and form probes (Phase 9, Milestone 2, Checkpoint 2). */
   keyboardProbeEnabled: boolean;
   formProbeMode: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
+  /** Cross-browser checks (Phase 9, Milestone 3). */
+  crossBrowserEnabled: boolean;
+  crossBrowserTargets: ('FIREFOX' | 'WEBKIT')[];
+  crossBrowserPageLimit: number;
+  crossBrowserMobile: boolean;
   verificationStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED';
   authorizationConfirmedAt: string;
   myRole: ProjectRole;

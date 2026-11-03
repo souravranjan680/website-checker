@@ -86,6 +86,9 @@ export function testScannerConfig(
     visualPages: 0,
     maxExplorationPages: 5,
     maxExplorationControls: 30,
+    compatBrowsers: ['firefox', 'webkit'],
+    maxCompatPages: 10,
+    compatBrowserTimeoutMs: 180_000,
     retentionDays: 0,
     headless: true,
     ...overrides,
@@ -130,6 +133,10 @@ export async function createScanFor(
     consistencyEnabled: boolean;
     keyboardProbeEnabled: boolean;
     formProbeMode: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
+    crossBrowserEnabled: boolean;
+    crossBrowserTargets: ('FIREFOX' | 'WEBKIT')[];
+    crossBrowserPageLimit: number;
+    crossBrowserMobile: boolean;
   }> = {},
   existingWebsiteId?: string,
 ): Promise<{ scanId: string; websiteId: string }> {
@@ -162,6 +169,10 @@ export async function createScanFor(
         consistencyEnabled: website.consistencyEnabled ?? true,
         keyboardProbeEnabled: website.keyboardProbeEnabled ?? true,
         formProbeMode: website.formProbeMode ?? 'BLUR',
+        crossBrowserEnabled: website.crossBrowserEnabled ?? false,
+        crossBrowserTargets: website.crossBrowserTargets ?? ['FIREFOX', 'WEBKIT'],
+        crossBrowserPageLimit: website.crossBrowserPageLimit ?? 3,
+        crossBrowserMobile: website.crossBrowserMobile ?? false,
       },
     });
     websiteId = created.id;

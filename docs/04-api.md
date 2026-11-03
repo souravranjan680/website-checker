@@ -368,3 +368,13 @@ Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website
 | `POST /api/websites` · `PUT /api/websites/:id` | Also accept `keyboardProbeEnabled` (default `true`) and `formProbeMode` (`OFF` | `STATIC` | `BLUR` | `SYNTHETIC`, default `BLUR`; `SYNTHETIC` only when sent explicitly). Clients that omit them keep the stored values |
 | `GET /api/reports/:scanId/functional` | Per page: `keyboard` and `forms` (probe results, skipped items with reasons; `null` for older scans). Totals: `pagesKeyboardChecked`, `formFieldsProbed`, `probesSkipped`. Existing fields unchanged |
 | Issue DTOs, filters, exports | 12 new `FUNCTIONAL` check types (`FOCUS_NOT_VISIBLE`, `FOCUS_ON_HIDDEN`, `FOCUS_LOST`, `KEYBOARD_TRAP`, `KEY_ACTIVATION_FAILED`, `CLICK_NOT_FOCUSABLE`, `FORM_REQUIRED_NOT_INDICATED`, `FORM_INDICATOR_WITHOUT_REQUIRED`, `FORM_DESCRIBEDBY_MISSING`, `FORM_PLACEHOLDER_ONLY_LABEL`, `FORM_ERROR_NOT_ASSOCIATED`, `FORM_NO_BLUR_FEEDBACK`) |
+
+## Phase 9, Milestone 3 (Checkpoint 1) changes (implemented)
+
+Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#8-milestone-3-checkpoint-1-browser-foundation-complete).
+
+| Method & path | Change |
+|---|---|
+| `POST /api/websites` · `PUT /api/websites/:id` | Also accept `crossBrowserEnabled` (default `false`), `crossBrowserTargets` (`FIREFOX` and/or `WEBKIT`, default both; no duplicates), `crossBrowserPageLimit` (1–10, default 3) and `crossBrowserMobile` (WebKit at 390×844, default `false`). Clients that omit them keep the stored values |
+
+The per-browser results (`ScanBrowserRun`, `ScanPage.compatibility`) are stored but not yet exposed by the API (Checkpoint 3).

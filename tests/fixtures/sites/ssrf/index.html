@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Network-isolation fixture (Phase 9, Milestone 3): a page that tries every way to reach a
+  private address (this fixture server's /secret, on 127.0.0.1 / localhost / [::1]) from
+  inside the browser. Loaded through the egress proxy, none of them may arrive: the
+  fixture server counts /secret requests and WebSocket upgrades. Used for each engine
+  (Chromium, Firefox, WebKit) by cross-browser-security.test.ts.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Isolation fixture page</title>
+    <link rel="stylesheet" href="http://[::1]:__PORT__/secret?stylesheet" />
+    <link rel="prefetch" href="http://127.0.0.1:__PORT__/secret?prefetch" />
+    <link rel="dns-prefetch" href="http://localhost:__PORT__/" />
+  </head>
+  <body>
+    <main>
+      <h1>Isolation</h1>
+      <img src="http://127.0.0.1:__PORT__/secret?image" alt="" />
+      <iframe src="http://localhost:__PORT__/secret?iframe" title="frame"></iframe>
+      <p id="webrtc">unknown</p>
+    </main>
+    <script>
+      const target = (what) => `http://127.0.0.1:__PORT__/secret?${what}`;
+      fetch(target('fetch')).catch(() => {});
+      fetch(`http://localhost:__PORT__/secret?fetch-localhost`).catch(() => {});
+      try { navigator.sendBeacon(target('beacon')); } catch {}
+      try { new WebSocket('ws://127.0.0.1:__PORT__/secret?websocket'); } catch {}
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', target('xhr'));
+      try { xhr.send(); } catch {}
+      // WebRTC: Firefox has it switched off; elsewhere an ICE attempt to a private address.
+      const status = document.getElementById('webrtc');
+      if (typeof RTCPeerConnection === 'undefined') status.textContent = 'unavailable';
+      else {
+        status.textContent = 'available';
+        try {
+          const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:127.0.0.1:__PORT__' }] });
+          pc.createDataChannel('probe');
+          pc.createOffer().then((offer) => pc.setLocalDescription(offer)).catch(() => {});
+        } catch {}
+      }
+      // Finally a redirect (the server answers 302 → http://127.0.0.1:…/secret).
+      setTimeout(() => { location.href = '/redirect-to-secret'; }, 800);
+    </script>
+  </body>
+</html>

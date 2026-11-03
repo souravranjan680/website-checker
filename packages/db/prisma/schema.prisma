@@ -141,6 +141,25 @@ enum FunctionalCheckType {
   FORM_NO_BLUR_FEEDBACK // no feedback when leaving an empty required field
 }
 
+/// Browser engines (Phase 9, Milestone 3). Chromium is the scan's own browser.
+enum BrowserEngine {
+  CHROMIUM
+  FIREFOX
+  WEBKIT
+}
+
+/// What happened to one other browser in one scan. Never changes the scan's own outcome.
+enum BrowserRunStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL // some pages could not be checked in this browser
+  FAILED // the browser crashed or stopped responding
+  UNAVAILABLE // not installed, could not start, or failed its security self-check
+  TIMED_OUT // ran out of its time budget (pages done so far are kept)
+  SKIPPED // not allowed on this deployment, or the scan's time limit was near
+  CANCELLED
+}
+
 /// How far the form probe goes (Phase 9, Milestone 2). Forms are never submitted.
 enum FormProbeMode {
   OFF // no form checks
@@ -421,6 +440,12 @@ model Website {
   /// Keyboard and form probes (Phase 9, Milestone 2): run on the pages the explorer opens.
   keyboardProbeEnabled     Boolean            @default(true)
   formProbeMode            FormProbeMode      @default(BLUR)
+  /// Cross-browser checks (Phase 9, Milestone 3): off by default; passive checks only.
+  crossBrowserEnabled      Boolean            @default(false)
+  crossBrowserTargets      BrowserEngine[]    @default([FIREFOX, WEBKIT])
+  crossBrowserPageLimit    Int                @default(3)
+  /// Also WebKit at 390x844 with mobile emulation (Firefox cannot emulate mobile).
+  crossBrowserMobile       Boolean            @default(false)
   verificationStatus       VerificationStatus @default(UNVERIFIED)
   verificationToken        String?            @unique
   verifiedAt               DateTime?
@@ -511,11 +536,32 @@ model Scan {
   firstSeenTracked   TrackedIssue[]      @relation("TrackedFirstSeen")
   lastSeenTracked    TrackedIssue[]      @relation("TrackedLastSeen")
   resolvedTracked    TrackedIssue[]      @relation("TrackedResolvedIn")
+  browserRuns        ScanBrowserRun[]
 
   @@index([websiteId, createdAt(sort: Desc)])
   @@index([status])
   @@index([triggeredById])
   @@index([createdAt]) // dashboard: scans in a date range
+}
+
+/// One other browser's run within a scan (Phase 9, Milestone 3): status, version, timing,
+/// and the checks or pages it skipped (with reasons).
+model ScanBrowserRun {
+  id            String           @id @default(cuid())
+  scanId        String
+  browser       BrowserEngine
+  version       String?
+  status        BrowserRunStatus
+  startedAt     DateTime         @default(now())
+  finishedAt    DateTime?
+  pagesPlanned  Int              @default(0)
+  pagesChecked  Int              @default(0)
+  errorMessage  String?
+  skippedChecks Json?
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, browser])
 }
 
 model ScanPage {
@@ -542,6 +588,8 @@ model ScanPage {
   exploration     Json?
   /// Usual look of each comparable component group (Phase 9, Milestone 2), compared across pages.
   components      Json?
+  /// Passive results per other browser (Phase 9, Milestone 3), keyed by engine.
+  compatibility   Json?
   errorMessage    String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt

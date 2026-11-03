@@ -23,6 +23,9 @@ const pathPatternSchema = z
 export const FORM_PROBE_MODES = ['OFF', 'STATIC', 'BLUR', 'SYNTHETIC'] as const;
 export type FormProbeModeName = (typeof FORM_PROBE_MODES)[number];
 
+/** Other browsers a website can be checked in (Chromium is always the scan's own). */
+export const CROSS_BROWSER_TARGETS = ['FIREFOX', 'WEBKIT'] as const;
+
 export const websiteSettingsSchema = z.object({
   maxDepth: z.number().int().min(0, 'Minimum is 0.').max(5, 'Maximum is 5.'),
   maxPages: z.number().int().min(1, 'Minimum is 1.').max(100, 'Maximum is 100.'),
@@ -40,6 +43,14 @@ export const websiteSettingsSchema = z.object({
   /** Keyboard and form probes (Phase 9, Milestone 2, Checkpoint 2). SYNTHETIC is opt-in only. */
   keyboardProbeEnabled: z.boolean(),
   formProbeMode: z.enum(FORM_PROBE_MODES),
+  /** Cross-browser checks (Phase 9, Milestone 3): off by default; passive checks only. */
+  crossBrowserEnabled: z.boolean(),
+  crossBrowserTargets: z
+    .array(z.enum(CROSS_BROWSER_TARGETS))
+    .max(2)
+    .refine((list) => new Set(list).size === list.length, 'Choose each browser once.'),
+  crossBrowserPageLimit: z.number().int().min(1, 'Minimum is 1.').max(10, 'Maximum is 10.'),
+  crossBrowserMobile: z.boolean(),
 });
 
 export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
@@ -56,6 +67,10 @@ export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
   consistencyEnabled: true,
   keyboardProbeEnabled: true,
   formProbeMode: 'BLUR',
+  crossBrowserEnabled: false,
+  crossBrowserTargets: ['FIREFOX', 'WEBKIT'],
+  crossBrowserPageLimit: 3,
+  crossBrowserMobile: false,
 };
 
 const authorizationSchema = z.literal(true, {

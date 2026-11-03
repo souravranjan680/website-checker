@@ -1,0 +1,15 @@
+# Used only by scanner-test.Dockerfile (it needs tests/, which the main .dockerignore leaves out).
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+packages/db/src/generated
+.git
+.env
+.env.*
+storage
+docs
+.scanner-test-storage
+**/dist-test
+**/dist-keyed
+**/release

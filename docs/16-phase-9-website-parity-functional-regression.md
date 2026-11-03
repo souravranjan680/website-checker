@@ -6,7 +6,8 @@ Status: **in progress.**
 - Milestone 2, Checkpoint 1 (layout, fonts and icons, component consistency) is complete
   (section 6).
 - Milestone 2, Checkpoint 2 (keyboard and form probes) is complete (section 7).
-- Milestones 3 to 8 are planned (see section 8).
+- Milestone 3, Checkpoint 1 (cross-browser foundation) is complete (section 8).
+- Milestone 3, Checkpoints 2 and 3, and Milestones 4 to 8 are planned (see section 9).
 - This document grows with each milestone.
 
 ## 1. Product purpose
@@ -875,18 +876,169 @@ database, shown by the Docker dashboard; no third-party site was used):
 - **Cost:** about 5 s per explored page on the W3C demo; more for pages with many
   proven controls (each key that works reloads the page).
 
-## 8. Remaining milestones
+## 8. Milestone 3, Checkpoint 1: browser foundation (complete)
+
+The foundation for checking websites in Firefox and WebKit as well as Chromium. This
+checkpoint runs the other browsers safely and records what they see. **Comparing** their
+results with Chromium, and any compatibility findings, come in Checkpoint 2; this
+checkpoint creates no issues.
+
+### 8.1 Decisions applied
+
+| Decision | How it is applied |
+|---|---|
+| Off by default; Firefox and WebKit preselected | `Website.crossBrowserEnabled` defaults to `false`, and `crossBrowserTargets` to `[FIREFOX, WEBKIT]`. |
+| First 3 pages, desktop; up to 10; WebKit mobile optional | `crossBrowserPageLimit` (1–10, default 3), and `crossBrowserMobile` (WebKit at 390×844). Firefox mobile is skipped with the recorded reason "Firefox cannot emulate mobile devices". |
+| Docker binaries first | The scanner image (`mcr.microsoft.com/playwright:v1.64.1-noble`) already contains Firefox and WebKit. **No browser was installed on the development PC.** Tests that need them run in a Docker test image (section 8.6). |
+| Passive checks only in Firefox and WebKit | The explorer, keyboard probe, form probe, component consistency, Lighthouse and visual baselines stay Chromium-only. Each run lists them as skipped, with a reason. |
+| Never changes the scan's outcome | Every engine has its own status. A failure is caught inside the stage. Scores and issues are untouched: a test compares a scan with and without the stage. |
+
+### 8.2 How another browser is run
+
+The stage is `apps/scanner/src/pipeline/compat-stage.ts`. It runs after Chromium's crawl,
+explorer and probes, and before the responsive pass. Engines run one after another, never
+at the same time. For each engine:
+
+1. **Allowed?** The server must allow it (`SCAN_COMPAT_BROWSERS`, default
+   `firefox,webkit`; empty disables the stage). If not, the run is `SKIPPED`, with the reason.
+2. **Launch** (`launchScanBrowser(config, { engine })`): its own browser process. A missing
+   binary or failed start means `UNAVAILABLE` ("… is not installed on this server"), and
+   there is no retry.
+3. **Egress self-check before any site is loaded.** Five private and reserved addresses
+   (`127.0.0.1`, `localhost`, `[::1]`, `169.254.169.254`, `10.255.255.1`) must each be
+   answered by the egress proxy itself (its `x-whc-egress-blocked` header).
+   - A connection error, any other answer, or a check that does not finish within 60 s
+     means the browser is `UNAVAILABLE` ("failed its network security self-check") and is
+     **not used**.
+4. **Pages:** for each of the first N pages (and size), a **new context**, so no cookies,
+   storage or cache are shared between pages, engines or scans.
+   - The same capture as Chromium's crawl runs: navigation, axe, DOM and layout checks,
+     font and icon checks, console messages, exceptions and failed requests.
+   - The result is stored in `ScanPage.compatibility[engine]`: status, HTTP status, load
+     time and compact facts, with element snippets for matching in Checkpoint 2.
+5. **Limits:**
+   - Each page: navigation timeout + 45 s. A page that takes longer is `FAILED`, and the
+     browser goes on to the next page.
+   - Each browser: `SCAN_COMPAT_BROWSER_TIMEOUT_MS` (default 180 s), then `TIMED_OUT`;
+     pages done so far are kept.
+   - The scan's own time limit applies; once reached, the next browser is `SKIPPED`.
+6. **A crash** (`disconnected`) ends whatever the browser is doing at once: `FAILED`.
+7. **Cancelling the scan** closes the running browser immediately: `CANCELLED`, and the
+   scan is cancelled as before.
+
+`ScanBrowserRun` records, per scan and engine: status, version, start and end, pages
+planned and checked, the error message, and the skipped checks with reasons.
+
+The page capture (`capturePage`) needed **no change**: it already uses only standard
+browser features. It is reused as is, so Chromium's crawl is unchanged.
+
+### 8.3 Network isolation, per browser
+
+| Layer | Chromium | Firefox | WebKit |
+|---|---|---|---|
+| Proxy setting | `bypass: '<-loopback>'` (localhost also through the proxy), QUIC off, WebRTC only through the proxy | Proxy with no exceptions; `network.proxy.allow_hijacking_localhost`; HTTP/3, WebRTC, DNS over HTTPS, prefetch and predictor off; Safe Browsing, telemetry and update checks off | Proxy with no exceptions |
+| Egress self-check at every launch | ✓ | ✓ | ✓ |
+| Security tests (section 8.6) | passed | passed (in Docker) | passed (in Docker) |
+| Container network | Only `scan-net` (internal): no route except the egress proxy | same | same |
+
+**Operator check.** `node dist/browser-check.js`, run in the scanner container, reports
+for each engine whether it starts and passes the self-check. It also reports whether the
+host can reach the internet without the proxy. Result on this stack:
+- Chromium 156, Firefox 157 and WebKit 27.2 all passed the self-check;
+- direct connections to `example.com:80` and `1.1.1.1:443` were impossible (`EAI_AGAIN`
+  and `ENETUNREACH`);
+- `"safe": true`.
+
+### 8.4 Settings, database and API (all additive)
+
+- **Migration** `20261103122843_phase9_m3_cp1_browser_foundation`:
+  - enums `BrowserEngine` and `BrowserRunStatus`;
+  - table `ScanBrowserRun`;
+  - `ScanPage.compatibility`;
+  - four `Website` settings.
+- **Scanner caps:** `SCAN_COMPAT_BROWSERS`, `SCAN_MAX_COMPAT_PAGES` (default 10) and
+  `SCAN_COMPAT_BROWSER_TIMEOUT_MS`.
+- **Websites API:** accepts `crossBrowserEnabled`, `crossBrowserTargets` (Firefox and/or
+  WebKit; no duplicates; Chromium is not a target), `crossBrowserPageLimit` (1–10) and
+  `crossBrowserMobile`.
+  - All are optional; clients that omit them keep the stored values.
+  - Nothing else in the API changed.
+- **Not yet:** the settings form and the reports are Checkpoint 3.
+
+### 8.5 Problems found while building it
+
+- **Probe pages could hang on close.** In the self-check, closing each probe page could
+  hang in a fresh browser; this appeared in the Docker tests as a 180-second time-out.
+  The check now uses one page for all addresses, bounds closing, and has an overall
+  60-second limit. A check that does not finish counts as failed: the browser is not used.
+- **Hung page loads.** A page in the other browser could stop responding. Each page now
+  has its own limit, so one page cannot use up the browser's whole budget.
+- **A fixture that varies by itself.** On the `/a11y/` fixture, axe's colour-contrast
+  verdict differs between runs. The "scan unchanged" test therefore uses the fully
+  deterministic `/ui/` fixture.
+
+### 8.6 Verification
+
+**Local** (Windows; Chromium only):
+- `npm run check` passes;
+- Firefox and WebKit tests show as "not installed here".
+
+**Docker test image** (`docker compose --profile test run --rm scanner-test`; real
+Chromium, Firefox and WebKit, test database only): 25 tests pass, and the 5 skips are the
+"not installed here" markers.
+- **Per engine:** the self-check passes; direct navigation to `127.0.0.1`, `localhost`
+  and `[::1]` is refused by the proxy.
+- **Every escape route, per engine:** a page that tries each way to reach a private
+  address reaches nothing. The `/secret` and WebSocket counters stay at 0. The routes
+  tried are: image, iframe, stylesheet, prefetch, `fetch`, XHR, beacon, WebSocket,
+  WebRTC/STUN, and a redirect to a private address. Firefox has no WebRTC at all.
+- **Stage behaviour:**
+  - off by default;
+  - missing binaries → `UNAVAILABLE`, with the scan unchanged;
+  - a crash → `FAILED`, while the other browser completes;
+  - a time budget used up → `TIMED_OUT`;
+  - a browser that goes around the proxy → `UNAVAILABLE` and never used;
+  - not allowed → `SKIPPED`;
+  - cancelling → `CANCELLED`;
+  - facts recorded per browser and size;
+  - Firefox mobile skipped with its reason.
+- **Real engines:** real Firefox and WebKit complete passively through the proxy, with
+  0 server writes.
+
+**Real site (W3C BAD demo, 6 pages, Docker)**, kept separate from the fixture results:
+
+| Run | Pages, rules, issues, scores, links | Browser runs | Time |
+|---|---|---|---|
+| Cross-browser **off** | Identical to Milestone 2 (23 rule groups, 378 issues, 62/91, 88 links checked / 4 broken) | none | 85 s (64–67 s before; network variance, same code path) |
+| Cross-browser **on** | Identical to Milestone 2 | Firefox 157.0 COMPLETED 3/3 (12 s); WebKit 27.2 COMPLETED 3/3 (13 s) | 110 s |
+
+### 8.7 Limitations
+
+- **No comparison or findings yet.** The stage only records; Checkpoint 2 compares and
+  reports.
+- **WebRTC in WebKit** cannot be switched off by a setting. Its traffic cannot leave the
+  internal network, and the WebRTC/STUN attempt in the security test reached nothing.
+  UDP itself is not observable from the test.
+- **Scope:** passive checks only, desktop by default, and WebKit mobile only when chosen.
+  The page's own scripts still run, as in Chromium's crawl.
+- **Cost:** about 12–13 s per browser for 3 pages on the W3C demo. The stage runs only
+  for websites that turn it on.
+- **Local development:** Firefox and WebKit are not installed on the development PC, so
+  their tests run in the Docker test image (or are skipped locally, with a visible marker).
+
+## 9. Remaining milestones
 
 | M | Scope |
 |---|---|
-| 3 | Mode 1: opt-in Firefox/WebKit compatibility |
+| 3 (Checkpoint 2) | Compare Firefox/WebKit with a fresh Chromium capture; confirm on reload; `COMPATIBILITY` findings (unscored) |
+| 3 (Checkpoint 3) | Cross-browser settings form, per-browser progress, Browsers report with side-by-side screenshots |
 | 4 | Mode 2: comparisons, routes, discovery and mapping, run job |
 | 5 | Mode 2: element, visual, style and open-state differences |
 | 6 | Scenarios (both modes), loading-state checks, QA case import and traceability |
 | 7 | Comparison tracking, AI for both modes, QA-style reports and exports |
 | 8 | Dashboards, hardening, Docker end to end, final documentation |
 
-## 9. Known limitations (so far)
+## 10. Known limitations (so far)
 
 - Classification of older issues uses the data they stored. Older resource failures were
   not re-checked, so they are `POTENTIAL_DEFECT`, not `DETECTED`.

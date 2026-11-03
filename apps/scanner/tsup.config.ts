@@ -3,7 +3,8 @@ import { createRequire } from 'node:module';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/main.ts'],
+  // browser-check: operator check of the other browsers (Phase 9, Milestone 3).
+  entry: ['src/main.ts', 'src/browser-check.ts'],
   format: ['esm'],
   platform: 'node',
   target: 'node22',

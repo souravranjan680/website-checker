@@ -80,6 +80,12 @@ function toWebsiteDto(website: WebsiteRow, user: AuthUser): WebsiteDto {
     consistencyEnabled: website.consistencyEnabled,
     keyboardProbeEnabled: website.keyboardProbeEnabled,
     formProbeMode: website.formProbeMode,
+    crossBrowserEnabled: website.crossBrowserEnabled,
+    crossBrowserTargets: website.crossBrowserTargets.filter(
+      (b): b is 'FIREFOX' | 'WEBKIT' => b === 'FIREFOX' || b === 'WEBKIT',
+    ),
+    crossBrowserPageLimit: website.crossBrowserPageLimit,
+    crossBrowserMobile: website.crossBrowserMobile,
     verificationStatus: website.verificationStatus,
     authorizationConfirmedAt: website.authorizationConfirmedAt.toISOString(),
     myRole: user.role === 'ADMIN' ? 'OWNER' : (website.project.members[0]?.role ?? 'VIEWER'),
@@ -268,6 +274,10 @@ export function createWebsitesService(deps: {
         'consistencyEnabled',
         'keyboardProbeEnabled',
         'formProbeMode',
+        'crossBrowserEnabled',
+        'crossBrowserTargets',
+        'crossBrowserPageLimit',
+        'crossBrowserMobile',
       ] as const) {
         if (input[key] !== undefined) Object.assign(data, { [key]: input[key] });
       }

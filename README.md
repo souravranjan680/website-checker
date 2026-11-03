@@ -284,6 +284,7 @@ comments for every variable). Important ones:
 | `SCANNER_CONCURRENCY` | `1` | Scans at the same time per scanner process |
 | `SCAN_MAX_PAGES` / `SCAN_NAV_TIMEOUT_MS` / `SCAN_MAX_DURATION_MS` | `100` / `30000` / `900000` | Hard limits |
 | `SCAN_MAX_EXPLORATION_PAGES` / `SCAN_MAX_EXPLORATION_CONTROLS` | `5` / `30` | Caps for the safe interaction explorer (max 10 / 50); each website sets its own limits below these |
+| `SCAN_COMPAT_BROWSERS` / `SCAN_MAX_COMPAT_PAGES` / `SCAN_COMPAT_BROWSER_TIMEOUT_MS` | `firefox,webkit` / `10` / `180000` | Cross-browser checks (off unless a website turns them on): engines this server allows (empty = none), the most pages a website may ask for, each browser's time budget. `docker compose exec scanner node dist/browser-check.js` checks the engines' network isolation |
 | `SCANNER_HEADLESS` | `true` | `false` shows the browser (local debugging) |
 | `MAX_ACTIVE_SCANS_PER_USER` | `3` | Queued/running scans per user |
 | `CLAUDE_MODEL` | `claude-sonnet-5-5` | AI model (Phase 6), change any time |

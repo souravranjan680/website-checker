@@ -38,6 +38,7 @@ import { createProgressReporter, type ProgressReporter } from '../progress';
 import { captureHighlightedIssue, captureViewport } from '../screenshots';
 import { resolveKey, type FileStorage } from '../storage';
 import { runExploration, type ExploredPages } from '../explore/run-exploration';
+import { runCompatibility, type CompatOptions } from './compat-stage';
 import { scanPage } from './scan-page';
 
 export interface ScanDeps {
@@ -49,6 +50,8 @@ export interface ScanDeps {
   domBundle: string;
   /** Where e-mail jobs for notifications go (null = in-app notifications only). */
   emailQueue?: EmailJobQueue | null;
+  /** For tests only: replace how other browsers are launched (cross-browser stage). */
+  compat?: CompatOptions;
 }
 
 export type ScanOutcome = 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
@@ -131,11 +134,13 @@ export async function runScan(
 
   let browser: Browser | null = null;
   let lighthouseBrowser: Browser | null = null;
+  let compatBrowser: Browser | null = null;
   let api: APIRequestContext | null = null;
   // Cancelling closes the browser at once, which aborts any page load in progress.
   const onAbort = () => {
     void browser?.close().catch(() => {});
     void lighthouseBrowser?.close().catch(() => {});
+    void compatBrowser?.close().catch(() => {});
   };
   options.signal.addEventListener('abort', onAbort);
   const checkpoint = () => {
@@ -407,6 +412,38 @@ export async function runScan(
         shouldStop: () => timeLimitReached,
         log,
       });
+    }
+
+    // ----------------------------------------------------- other browsers
+    // Off unless the website turns it on (Phase 9, Milestone 3). Firefox and WebKit load
+    // the first pages and record what they see (passive checks only). Never changes this
+    // scan's outcome, issues or scores; each browser gets its own status.
+    if (website.crossBrowserEnabled && scannedPages.length > 0 && !timeLimitReached) {
+      try {
+        await runCompatibility({
+          deps,
+          scanId,
+          website,
+          siteHostname,
+          targets: scannedPages,
+          checkpoint,
+          shouldStop: () => timeLimitReached,
+          onPage: (engine, index, total, url) =>
+            progress.update({
+              step: `Checking in ${engine} (page ${index + 1} of ${total})`,
+              currentUrl: url,
+              issuesFound,
+            }),
+          log,
+          onBrowser: (b) => {
+            compatBrowser = b;
+          },
+          options: deps.compat,
+        });
+      } catch (error) {
+        checkpoint(); // a cancelled scan stops here
+        log.warn({ err: (error as Error).message }, 'cross-browser stage failed');
+      }
     }
 
     // ------------------------------------------------- other screen sizes
