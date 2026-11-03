@@ -1,4 +1,11 @@
-import type { InsecureReference, LinkInfo, SeoSnapshot } from '@whc/dom-checks';
+import {
+  EXTRA_CHECKS,
+  summarizeComponents,
+  type ComponentSummaryEntry,
+  type InsecureReference,
+  type LinkInfo,
+  type SeoSnapshot,
+} from '@whc/dom-checks';
 import type { Page } from 'playwright';
 import type { CookieFacts } from '../audits/security';
 import type { ViewportSpec } from '../browser-types';
@@ -33,6 +40,8 @@ export interface PageScanResult {
   insecureReferences: InsecureReference[];
   network: PageNetworkLog;
   links: LinkInfo[];
+  /** Usual look of each comparable component group (null: consistency not checked). */
+  components: ComponentSummaryEntry[] | null;
   drafts: IssueDraft[];
   fullPage: CapturedImage | null;
   crops: Map<string, CapturedImage>;
@@ -54,6 +63,10 @@ export async function scanPage(params: {
   navTimeoutMs: number;
   domBundle: string;
   cropBudget: { remaining: number };
+  /** Screenshots for the Milestone 2 checks: their own budget, so earlier issues keep theirs. */
+  extraCropBudget: { remaining: number };
+  /** Compare comparable components (the website's consistency setting). */
+  consistency: boolean;
   alreadyScanned: (normalizedUrl: string) => boolean;
   /** Re-checks a failed resource through the egress proxy; null = no re-checks. */
   probe: ProbeFn | null;
@@ -87,6 +100,8 @@ export async function scanPage(params: {
       insecureReferences: snapshot?.insecureReferences ?? [],
       network: log,
       links: snapshot?.links ?? [],
+      components:
+        params.consistency && capture.extra ? summarizeComponents(capture.extra.components) : null,
       drafts: [],
       fullPage: null,
       crops: new Map(),
@@ -105,29 +120,41 @@ export async function scanPage(params: {
     } catch (error) {
       logger.warn({ url, err: (error as Error).message }, 'full-page screenshot failed');
     }
+    const croppable = (d: IssueDraft) =>
+      Boolean(d.boundingBox && d.boundingBox.width > 0 && d.boundingBox.height > 0) &&
+      d.severity !== 'INFO';
+    const isExtra = (d: IssueDraft) =>
+      (EXTRA_CHECKS as readonly string[]).includes(d.uiHealth?.checkType ?? '');
+    const bySeverity = (a: IssueDraft, b: IssueDraft) =>
+      SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity];
+    // Earlier checks first, with the scan's budget (as before Milestone 2) ...
     const candidates = result.drafts
-      .filter(
-        (d) =>
-          d.boundingBox &&
-          d.boundingBox.width > 0 &&
-          d.boundingBox.height > 0 &&
-          d.severity !== 'INFO',
-      )
-      .sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity])
+      .filter((d) => croppable(d) && !isExtra(d))
+      .sort(bySeverity)
       .slice(0, Math.min(5, params.cropBudget.remaining));
-    for (const draft of candidates) {
-      try {
-        result.crops.set(
-          draft.id,
-          await captureHighlightedIssue(
-            page,
-            draft.boundingBox!,
-            `${draft.severity} · ${draft.title}`,
-          ),
-        );
-        params.cropBudget.remaining -= 1;
-      } catch (error) {
-        logger.debug({ url, err: (error as Error).message }, 'issue screenshot failed');
+    // ... then up to 2 of the Milestone 2 findings, with their own budget.
+    const extraCandidates = result.drafts
+      .filter((d) => croppable(d) && isExtra(d))
+      .sort(bySeverity)
+      .slice(0, Math.min(2, params.extraCropBudget.remaining));
+    for (const [list, budget] of [
+      [candidates, params.cropBudget],
+      [extraCandidates, params.extraCropBudget],
+    ] as const) {
+      for (const draft of list) {
+        try {
+          result.crops.set(
+            draft.id,
+            await captureHighlightedIssue(
+              page,
+              draft.boundingBox!,
+              `${draft.severity} · ${draft.title}`,
+            ),
+          );
+          budget.remaining -= 1;
+        } catch (error) {
+          logger.debug({ url, err: (error as Error).message }, 'issue screenshot failed');
+        }
       }
     }
 

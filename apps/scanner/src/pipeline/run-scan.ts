@@ -4,7 +4,8 @@ import type { Redis } from 'ioredis';
 import { request, type APIRequestContext, type Browser, type BrowserContext } from 'playwright';
 import { launchScanBrowser, newScanContext, SCANNER_UA_SUFFIX } from '../browser';
 import { BLOCKED_RESPONSE_HEADER, SCAN_VIEWPORTS, type ViewportSpec } from '../browser-types';
-import { runDomChecksInPage } from '../checks/dom';
+import { runDomChecksInPage, runExtraChecksInPage } from '../checks/dom';
+import type { ComponentSummaryEntry } from '@whc/dom-checks';
 import type { ScannerConfig } from '../config';
 import { duplicateSeoDrafts, pageSeoDrafts, siteSeoDrafts, type SeoPageInput } from '../audits/seo';
 import {
@@ -27,7 +28,8 @@ import { checkLink, probeUrl } from '../audits/resource-check';
 import { crawlSite } from '../crawler/crawl';
 import { ALLOW_ALL, parseRobotsTxt, type RobotsRules } from '../crawler/robots';
 import { compilePatterns, isSameSite, normalizeUrl } from '../crawler/urls';
-import { computeScore, trackIssues } from '../finalize';
+import { computeScore, countsTowardsUiScore, trackIssues } from '../finalize';
+import { crossPageConsistencyDrafts, extraFindingDrafts } from '../extra-issues';
 import { notifyScanFinished, type EmailJobQueue } from '../notifications';
 import { domToDrafts, uiDraft, type IssueDraft } from '../issues';
 import type { Logger } from '../logger';
@@ -53,6 +55,9 @@ export type ScanOutcome = 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
 
 /** Thrown inside the pipeline when the user cancelled; caught by runScan. */
 class ScanCancelled extends Error {}
+
+/** Screenshots per scan for the Milestone 2 findings (in addition to the scan's budget). */
+const EXTRA_CROP_BUDGET = 20;
 
 interface ScannedPage {
   id: string;
@@ -140,6 +145,13 @@ export async function runScan(
   const pages: ScannedPage[] = [];
   const fingerprints = new Set<string>();
   const responsiveChecked = new Set<string>();
+  // Pages whose components were compared (Phase 9, Milestone 2), and their summaries.
+  const consistencyChecked = new Set<string>();
+  const componentPages: {
+    ctx: { websiteId: string; pageUrl: string; viewport: string };
+    scanPageId: string;
+    components: ComponentSummaryEntry[];
+  }[] = [];
   let issuesFound = 0;
 
   /** Saves new issues (skipping any fingerprint already saved in this scan). */
@@ -184,6 +196,8 @@ export async function runScan(
     // The crawler keeps the queue and known addresses; each page is scanned here.
     const linkRefs = new Map<string, LinkRef[]>();
     const cropBudget = { remaining: config.maxIssueScreenshots };
+    // Screenshots of Milestone 2 findings: a separate budget, so earlier issues keep theirs.
+    const extraCropBudget = { remaining: EXTRA_CROP_BUDGET };
 
     await crawlSite({
       startUrl,
@@ -225,6 +239,8 @@ export async function runScan(
             navTimeoutMs: config.navTimeoutMs,
             domBundle: deps.domBundle,
             cropBudget,
+            extraCropBudget,
+            consistency: website.consistencyEnabled,
             alreadyScanned: (u) =>
               pages.some((p) => p.status === 'DONE' && normalizeUrl(p.url) === u),
             // Same proxy-only client as the link checks: the egress policy applies to re-checks too.
@@ -256,9 +272,22 @@ export async function runScan(
             failedRequests: result.network.failedRequests as unknown as object[],
             pageErrors: result.network.pageErrors as unknown as object[],
             seoData: result.meta ? (result.meta.seo as unknown as object) : undefined,
+            components: result.components
+              ? (result.components as unknown as Prisma.InputJsonArray)
+              : undefined,
             errorMessage: result.errorMessage,
           },
         });
+        if (result.outcome === 'DONE' && result.components) {
+          consistencyChecked.add(target.url);
+          const finalNormalized = normalizeUrl(result.finalUrl);
+          if (finalNormalized) consistencyChecked.add(finalNormalized);
+          componentPages.push({
+            ctx: { websiteId: website.id, pageUrl: result.finalUrl, viewport: desktop.label },
+            scanPageId: scanPageRow.id,
+            components: result.components,
+          });
+        }
         if (result.outcome === 'DONE' && result.meta) {
           seoPages.push({
             scanPageId: scanPageRow.id,
@@ -334,6 +363,11 @@ export async function runScan(
     });
 
     const scannedPages = pages.filter((p) => p.status === 'DONE');
+
+    // The same component styled differently on some pages (observations only).
+    for (const { scanPageId, draft } of crossPageConsistencyDrafts(componentPages)) {
+      await storeIssues(scanPageId, [draft]);
+    }
 
     // ------------------------------------------------------- safe explorer
     // Opens menus, tabs and expandable sections on the first pages (Phase 9). Its own
@@ -625,6 +659,7 @@ export async function runScan(
           ),
           responsivePages: responsiveChecked,
           exploredPages,
+          consistencyPages: consistencyChecked,
         },
       );
     }
@@ -709,6 +744,7 @@ async function finishScan(
       viewport: true,
       accessibility: { select: { detection: true } },
       security: { select: { checkType: true } },
+      uiHealth: { select: { checkType: true } },
       details: true,
     },
   });
@@ -721,7 +757,10 @@ async function finishScan(
       i.accessibility?.detection !== 'NEEDS_REVIEW' &&
       !(i.details as { interactionState?: unknown } | null)?.interactionState,
   );
-  const ui = issues.filter((i) => i.category === 'UI_HEALTH' || i.category === 'RESPONSIVE');
+  // Only the checks that existed before Milestone 2 count (see SCORED_UI_CHECKS).
+  const ui = issues.filter(
+    (i) => (i.category === 'UI_HEALTH' || i.category === 'RESPONSIVE') && countsTowardsUiScore(i),
+  );
   const seo = issues.filter((i) => i.category === 'SEO');
   const security = issues.filter((i) => i.security).map((i) => i.security!);
   const previous = await prisma.scan.findFirst({
@@ -889,11 +928,12 @@ async function scanViewport(args: {
       return;
     await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => {});
     const dom = await runDomChecksInPage(page, deps.domBundle, { mode: 'layout' });
-    const drafts = domToDrafts(
-      dom.findings,
-      { websiteId: args.websiteId, pageUrl: target.url, viewport: viewport.label },
-      'RESPONSIVE',
-    );
+    const ctx = { websiteId: args.websiteId, pageUrl: target.url, viewport: viewport.label };
+    const drafts = domToDrafts(dom.findings, ctx, 'RESPONSIVE');
+    // Milestone 2 layout checks at this screen size (not part of the score).
+    const extraDrafts = await runExtraChecksInPage(page, { layout: true })
+      .then((extra) => extraFindingDrafts(extra.findings, ctx, 'RESPONSIVE'))
+      .catch(() => []);
     const image = await captureViewport(page).catch(() => null);
     if (image) {
       await saveScreenshot(deps.prisma, deps.storage, {
@@ -929,7 +969,7 @@ async function scanViewport(args: {
         // a missing crop is not worth failing the page for
       }
     }
-    await args.storeIssues(target.id, drafts);
+    await args.storeIssues(target.id, [...drafts, ...extraDrafts]);
   } catch (error) {
     args.log.info(
       { url: target.url, viewport: viewport.label, err: (error as Error).message },

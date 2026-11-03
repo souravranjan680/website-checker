@@ -4,6 +4,36 @@ import { normalizeUrl } from './crawler/urls';
 const PENALTY: Record<string, number> = { CRITICAL: 10, HIGH: 5, MEDIUM: 2, LOW: 1, INFO: 0 };
 
 /**
+ * The UI checks that count towards the UI health score: those that existed before
+ * Phase 9, Milestone 2. Checks added since (layout measurements, fonts and icons,
+ * component consistency) are reported and tracked but never change the score, so
+ * scores stay comparable with earlier scans.
+ */
+export const SCORED_UI_CHECKS: ReadonlySet<string> = new Set([
+  'BROKEN_IMAGE',
+  'BROKEN_LINK',
+  'HORIZONTAL_SCROLL',
+  'CONTENT_OVERFLOW',
+  'OVERLAPPING_ELEMENTS',
+  'TEXT_CLIPPING',
+  'OUT_OF_VIEWPORT',
+  'FAILED_STYLESHEET',
+  'FAILED_SCRIPT',
+  'CONSOLE_ERROR',
+  'JS_ERROR',
+  'FAILED_REQUEST',
+  'EMPTY_BUTTON',
+  'EMPTY_LINK',
+  'BROKEN_NAVIGATION',
+  'IMAGE_SIZING',
+]);
+
+/** Whether a UI or responsive issue counts towards the UI health score. */
+export function countsTowardsUiScore(issue: { uiHealth: { checkType: string } | null }): boolean {
+  return !issue.uiHealth || SCORED_UI_CHECKS.has(issue.uiHealth.checkType);
+}
+
+/**
  * Score 0-100 (higher is better), as documented in docs/01-architecture.md §4:
  * each unique (rule, page, screen size) problem costs points by severity,
  * the cost is averaged over the scanned pages and subtracted from 100.
@@ -33,7 +63,8 @@ export function computeScore(
  *   was RESOLVED, seen again   → OPEN again (a regression)
  *   IGNORED / FALSE_POSITIVE   → the user's decision is kept
  *   OPEN, not seen, but its page WAS re-checked in this scan → RESOLVED
- *     (interaction findings: only if the explorer ran on that page again)
+ *     (interaction findings: only if the explorer ran on that page again;
+ *      component consistency: only if components were compared there again)
  */
 export async function trackIssues(
   prisma: PrismaClient,
@@ -43,6 +74,8 @@ export async function trackIssues(
     responsivePages: Set<string>;
     /** Pages the safe explorer opened menus/tabs on (Phase 9). */
     exploredPages?: Set<string>;
+    /** Pages whose components were compared (Phase 9, Milestone 2). */
+    consistencyPages?: Set<string>;
   },
 ): Promise<{
   newCount: number;
@@ -138,7 +171,7 @@ export async function trackIssues(
       issues: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        select: { pageUrl: true, category: true, details: true },
+        select: { pageUrl: true, category: true, ruleId: true, details: true },
       },
     },
   });
@@ -153,6 +186,10 @@ export async function trackIssues(
         last.category === 'FUNCTIONAL' ||
         Boolean((last.details as { interactionState?: unknown } | null)?.interactionState);
       if (fromExplorer) return checked.exploredPages?.has(page) ?? false;
+      // Consistency findings only where components were compared again.
+      if (last.ruleId === 'ui/component-inconsistent') {
+        return checked.consistencyPages?.has(page) ?? false;
+      }
       return last.category === 'RESPONSIVE'
         ? checked.responsivePages.has(page)
         : checked.pages.has(page);

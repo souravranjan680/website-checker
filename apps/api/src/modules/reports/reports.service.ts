@@ -34,6 +34,19 @@ export const LAYOUT_CHECKS = [
   'IMAGE_SIZING',
 ] as const;
 
+/** Checks of Phase 9, Milestone 2, by group (none of them counts towards a score). */
+const EXTRA_CHECK_GROUPS = {
+  layout: [
+    'TEXT_OVERFLOW_VISIBLE',
+    'TEXT_OVERLAP',
+    'FIXED_OUT_OF_VIEWPORT',
+    'CONTROL_LABEL_CLIPPED',
+  ],
+  fontsAndIcons: ['FONT_LOAD_FAILED', 'FONT_FALLBACK_RENDERED', 'ICON_BROKEN', 'ICON_MISSING'],
+  consistency: ['COMPONENT_INCONSISTENT'],
+} as const;
+const EXTRA_CHECKS = Object.values(EXTRA_CHECK_GROUPS).flat();
+
 export type ReportsService = ReturnType<typeof createReportsService>;
 
 /**
@@ -221,6 +234,35 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
     },
 
     async uiHealth(user: AuthUser, scanId: string): Promise<UiHealthReportDto> {
+      /** Milestone 2 checks at every screen size (the desktop list above is unchanged). */
+      async function extraChecksSummary(id: string): Promise<UiHealthReportDto['extraChecks']> {
+        const [extra, consistencyPages] = await Promise.all([
+          prisma.issue.findMany({
+            where: {
+              scanId: id,
+              category: { in: ['UI_HEALTH', 'RESPONSIVE'] },
+              uiHealth: { checkType: { in: [...EXTRA_CHECKS] } },
+            },
+            select: { classification: true, uiHealth: { select: { checkType: true } } },
+          }),
+          prisma.scanPage.count({ where: { scanId: id, components: { not: Prisma.AnyNull } } }),
+        ]);
+        const inGroup = (group: readonly string[]) =>
+          extra.filter((i) => group.includes(i.uiHealth?.checkType ?? '')).length;
+        const byClassification: UiHealthReportDto['extraChecks']['byClassification'] = {};
+        for (const issue of extra) {
+          byClassification[issue.classification] =
+            (byClassification[issue.classification] ?? 0) + 1;
+        }
+        return {
+          layout: inGroup(EXTRA_CHECK_GROUPS.layout),
+          fontsAndIcons: inGroup(EXTRA_CHECK_GROUPS.fontsAndIcons),
+          consistency: inGroup(EXTRA_CHECK_GROUPS.consistency),
+          consistencyPages,
+          byClassification,
+        };
+      }
+
       const { info, scan } = await scanInfo(user, scanId);
       const [issues, pages, perPage] = await Promise.all([
         prisma.issue.findMany({
@@ -348,6 +390,7 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
           failedRequests: asArray(p.failedRequests).length,
           issues: counts.get(p.id) ?? 0,
         })),
+        extraChecks: await extraChecksSummary(scanId),
       };
     },
 

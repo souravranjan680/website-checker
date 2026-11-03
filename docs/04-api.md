@@ -348,3 +348,13 @@ Details, safety rules and limits: [16-phase-9-website-parity-functional-regressi
 | `GET /api/reports/:scanId/functional` | Interactions report: findings per check, explored / skipped (with reasons) / blocked actions per page, open-state accessibility count |
 | `POST /api/websites` · `PUT /api/websites/:id` | Also accept `explorationEnabled` (default `true`), `explorationPageLimit` (0–10, default 5) and `explorationControlLimit` (1–50, default 30) |
 | Issue DTOs | New category `FUNCTIONAL` (filters, exports) and `functional: { checkType, controlName, controlRole, controlSelector, interaction }` |
+
+## Phase 9, Milestone 2 (Checkpoint 1) changes (implemented)
+
+Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#6-milestone-2-checkpoint-1-layout-fonts-and-icons-component-consistency-complete).
+
+| Method & path | Change |
+|---|---|
+| `POST /api/websites` · `PUT /api/websites/:id` | Also accept `consistencyEnabled` (default `true`); clients that omit it keep the stored value |
+| `GET /api/reports/:scanId/ui-health` | New field `extraChecks`: `{ layout, fontsAndIcons, consistency, consistencyPages, byClassification }` (all screen sizes; never part of the score). Existing fields unchanged |
+| `GET /api/scans/:id/issues?checkType=` | Also accepts the new UI check types (`TEXT_OVERFLOW_VISIBLE`, `TEXT_OVERLAP`, `FIXED_OUT_OF_VIEWPORT`, `CONTROL_LABEL_CLIPPED`, `FONT_LOAD_FAILED`, `FONT_FALLBACK_RENDERED`, `ICON_BROKEN`, `ICON_MISSING`, `COMPONENT_INCONSISTENT`) |

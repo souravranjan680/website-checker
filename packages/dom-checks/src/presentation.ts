@@ -24,7 +24,26 @@ export type UiCheckType =
   | 'FAILED_SCRIPT'
   | 'CONSOLE_ERROR'
   | 'JS_ERROR'
-  | 'FAILED_REQUEST';
+  | 'FAILED_REQUEST'
+  | ExtraCheckName;
+
+/**
+ * Checks added in Phase 9, Milestone 2 (layout, fonts and icons, component
+ * consistency). They run only when the scanner asks for them (never in the Chrome
+ * extension) and do not count towards any score.
+ */
+export const EXTRA_CHECKS = [
+  'TEXT_OVERFLOW_VISIBLE',
+  'TEXT_OVERLAP',
+  'FIXED_OUT_OF_VIEWPORT',
+  'CONTROL_LABEL_CLIPPED',
+  'FONT_LOAD_FAILED',
+  'FONT_FALLBACK_RENDERED',
+  'ICON_BROKEN',
+  'ICON_MISSING',
+  'COMPONENT_INCONSISTENT',
+] as const;
+export type ExtraCheckName = (typeof EXTRA_CHECKS)[number];
 
 export const truncate = (text: string | null | undefined, max: number): string | null =>
   text ? (text.length > max ? `${text.slice(0, max - 1)}…` : text) : null;
@@ -175,6 +194,42 @@ export const UI_CHECK_TEXT: Record<UiCheckType, { title: string; fix: string }> 
   FAILED_REQUEST: {
     title: 'Failed network request',
     fix: 'Check the request URL and the server response. Repeated failures can mean missing files or a broken API.',
+  },
+  TEXT_OVERFLOW_VISIBLE: {
+    title: 'Text spills out of its box onto other content',
+    fix: 'The box has a fixed or maximum height that is too small for its text. Let it grow (min-height instead of height), shorten the text, or let the container scroll.',
+  },
+  TEXT_OVERLAP: {
+    title: 'Text overlaps other text',
+    fix: 'Two pieces of text are drawn on top of each other. Check absolute positioning, negative margins and fixed heights around them, at this screen size.',
+  },
+  FIXED_OUT_OF_VIEWPORT: {
+    title: 'Fixed element partly off the screen',
+    fix: 'A fixed element does not scroll with the page, so its hidden part can never be reached. Limit its height (max-height: 100vh with overflow: auto) or reposition it.',
+  },
+  CONTROL_LABEL_CLIPPED: {
+    title: 'Control label does not fit',
+    fix: 'The button or link is too small for its label. Let it grow with its text (avoid fixed widths and heights), allow wrapping, or shorten the label.',
+  },
+  FONT_LOAD_FAILED: {
+    title: 'Web font failed to load',
+    fix: 'Check the @font-face src URL and that the font file is deployed and served with the right CORS headers. Until then, text uses a fallback font.',
+  },
+  FONT_FALLBACK_RENDERED: {
+    title: 'Text shown in a fallback font',
+    fix: 'The page asks for a web font that did not load, so the browser used another font. Fix the font loading, or choose a fallback stack that matches the design.',
+  },
+  ICON_BROKEN: {
+    title: 'Broken icon',
+    fix: 'The icon refers to an SVG symbol or icon font that is missing. Check the sprite file, the symbol id, or the icon font’s @font-face.',
+  },
+  ICON_MISSING: {
+    title: 'Icon-only control shows nothing',
+    fix: 'The control is labelled for screen readers but nothing is visible inside it. Check that its icon loads and has a size.',
+  },
+  COMPONENT_INCONSISTENT: {
+    title: 'Component styled differently from its siblings',
+    fix: 'Elements with the same classes in the same kind of place usually look the same. Check whether this difference is intended; if not, remove the overriding style.',
   },
 };
 

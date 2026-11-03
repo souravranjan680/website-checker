@@ -37,6 +37,22 @@ const CHECK_LABEL: Record<string, string> = {
   EMPTY_LINK: 'Empty links',
   BROKEN_NAVIGATION: 'Broken navigation',
   IMAGE_SIZING: 'Image sizing',
+  TEXT_OVERFLOW_VISIBLE: 'Text spilling out',
+  TEXT_OVERLAP: 'Overlapping text',
+  FIXED_OUT_OF_VIEWPORT: 'Fixed element off screen',
+  CONTROL_LABEL_CLIPPED: 'Labels that do not fit',
+  FONT_LOAD_FAILED: 'Failed web fonts',
+  FONT_FALLBACK_RENDERED: 'Fallback fonts',
+  ICON_BROKEN: 'Broken icons',
+  ICON_MISSING: 'Empty icon buttons',
+  COMPONENT_INCONSISTENT: 'Inconsistent components',
+};
+
+const CLASSIFICATION: Record<string, string> = {
+  DETECTED: 'Detected',
+  POTENTIAL_DEFECT: 'Potential defect',
+  OBSERVATION: 'Observation',
+  INCONCLUSIVE: 'Inconclusive',
 };
 
 const CONSOLE_KIND: Record<ConsoleKindName, string> = {
@@ -129,6 +145,54 @@ export function UiHealthReport() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Layout, fonts, icons and consistency</CardTitle>
+          <CardDescription>
+            Newer checks, listed with the others above. They are not part of the score, so scores
+            stay comparable with earlier scans. Observations may be intended.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MetricTile
+              label="Layout"
+              value={r.extraChecks.layout}
+              hint="Text spilling out or overlapping, fixed elements off screen, labels that do not fit (all screen sizes)"
+            />
+            <MetricTile
+              label="Fonts and icons"
+              value={r.extraChecks.fontsAndIcons}
+              hint="Web fonts that failed, text in fallback fonts, broken or empty icons"
+            />
+            <MetricTile
+              label="Inconsistent components"
+              value={r.extraChecks.consistency}
+              hint="Buttons and fields that look different from others with the same classes"
+            />
+            <MetricTile
+              label="Pages compared"
+              value={r.extraChecks.consistencyPages}
+              hint="Pages whose buttons and fields were compared (0 when switched off for this website)"
+            />
+          </dl>
+          {Object.keys(r.extraChecks.byClassification).length > 0 ? (
+            <ul
+              className="flex flex-wrap gap-1.5"
+              aria-label="Newer checks by strength of evidence"
+            >
+              {Object.entries(r.extraChecks.byClassification).map(([classification, n]) => (
+                <li key={classification}>
+                  <Badge variant="outline">
+                    {CLASSIFICATION[classification] ?? classification} × {n}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </CardContent>
       </Card>
 

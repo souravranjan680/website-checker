@@ -77,6 +77,7 @@ function toWebsiteDto(website: WebsiteRow, user: AuthUser): WebsiteDto {
     explorationEnabled: website.explorationEnabled,
     explorationPageLimit: website.explorationPageLimit,
     explorationControlLimit: website.explorationControlLimit,
+    consistencyEnabled: website.consistencyEnabled,
     verificationStatus: website.verificationStatus,
     authorizationConfirmedAt: website.authorizationConfirmedAt.toISOString(),
     myRole: user.role === 'ADMIN' ? 'OWNER' : (website.project.members[0]?.role ?? 'VIEWER'),
@@ -262,6 +263,7 @@ export function createWebsitesService(deps: {
         'explorationEnabled',
         'explorationPageLimit',
         'explorationControlLimit',
+        'consistencyEnabled',
       ] as const) {
         if (input[key] !== undefined) Object.assign(data, { [key]: input[key] });
       }

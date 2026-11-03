@@ -1,0 +1,63 @@
+{
+  "fixture": "magazine (corrected twin)",
+  "startPath": "/magazine/fixed.html",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 1
+  },
+  "scoredCategories": ["UI_HEALTH", "RESPONSIVE", "FUNCTIONAL"],
+  "expected": [],
+  "negativeControls": [
+    {
+      "id": "ellipsis-headline",
+      "reason": "truncated with text-overflow: ellipsis on purpose",
+      "selectors": ["main > a"]
+    },
+    {
+      "id": "line-clamped-teaser",
+      "reason": "clamped to two lines on purpose",
+      "selectors": [".teaser", "main > p:nth-of-type(2)"]
+    },
+    {
+      "id": "decorative-watermark",
+      "reason": "aria-hidden decoration drawn over a heading on purpose",
+      "selectors": [".watermark", "h3", ".marked > span"]
+    },
+    {
+      "id": "screen-reader-text",
+      "reason": "visually hidden label inside the search button",
+      "selectors": [".search", "main > button"]
+    },
+    {
+      "id": "peeking-sheet",
+      "reason": "bottom sheet mostly below the window on purpose (only its edge shows)",
+      "selectors": ["aside:nth-of-type(2)", ".peek"]
+    },
+    {
+      "id": "card-rail",
+      "reason": "horizontally scrolling rail of cards",
+      "selectors": [".rail", ".rail > div"]
+    },
+    {
+      "id": "image-badge",
+      "reason": "badge placed over an image on purpose",
+      "selectors": [".badge", ".photo > span"]
+    },
+    {
+      "id": "top-bar",
+      "reason": "fixed bar fully inside the window",
+      "selectors": ["header"]
+    },
+    {
+      "id": "off-screen-skip-links",
+      "reason": "stacked far off the screen until focused (found on a real site in the Docker regression)",
+      "selectors": [".skip a", "ul > li:nth-of-type(1) > a", "ul > li:nth-of-type(2) > a"]
+    },
+    {
+      "id": "responsive-navigation",
+      "reason": "replaced by a menu button on small screens",
+      "selectors": ["nav", "header > button"]
+    }
+  ]
+}

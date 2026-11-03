@@ -22,8 +22,11 @@ import {
 } from './fixture-server';
 import {
   evaluate,
+  evaluateDetectors,
+  formatDetectorTotals,
   formatResults,
   type CategoryResult,
+  type DetectorResult,
   type FixtureManifest,
 } from './harness/evaluate';
 import {
@@ -49,6 +52,7 @@ let publisher: Redis;
 let fixtures: FixtureServer;
 let proxy: Awaited<ReturnType<typeof startTestProxy>>;
 const report: { fixture: string; result: CategoryResult }[] = [];
+const detectorReport: { fixture: string; result: DetectorResult }[] = [];
 
 beforeAll(async () => {
   prisma = createTestPrisma();
@@ -59,7 +63,10 @@ beforeAll(async () => {
 afterAll(async () => {
   const out = path.join(ROOT, '.scanner-test-storage');
   mkdirSync(out, { recursive: true });
-  writeFileSync(path.join(out, 'fixture-acceptance.md'), `${formatResults(report)}\n`);
+  writeFileSync(
+    path.join(out, 'fixture-acceptance.md'),
+    `${formatResults(report)}\n\n## Per detector\n\n${formatDetectorTotals(detectorReport)}\n`,
+  );
   await fixtures.close();
   await proxy.close();
   await publisher.quit();
@@ -68,6 +75,7 @@ afterAll(async () => {
 
 describe.each(manifests.map((m) => [m.fixture, m] as const))('fixture %s', (_name, manifest) => {
   let results: CategoryResult[];
+  let detectors: DetectorResult[];
   let safety: ReturnType<FixtureServer['safetyHits']>;
   beforeAll(async () => {
     fixtures.resetSafetyHits();
@@ -78,24 +86,31 @@ describe.each(manifests.map((m) => [m.fixture, m] as const))('fixture %s', (_nam
       where: { scanId: ids.scanId },
       include: { uiHealth: { select: { resourceUrl: true } } },
     });
-    results = evaluate(
-      manifest,
-      issues.map((i) => ({
-        category: i.category,
-        ruleId: i.ruleId,
-        viewport: i.viewport,
-        selector: i.selector,
-        resourceUrl: i.uiHealth?.resourceUrl ?? null,
-        description: i.description,
-        classification: i.classification,
-      })),
-    );
+    const findings = issues.map((i) => ({
+      category: i.category,
+      ruleId: i.ruleId,
+      viewport: i.viewport,
+      selector: i.selector,
+      resourceUrl: i.uiHealth?.resourceUrl ?? null,
+      description: i.description,
+      classification: i.classification,
+    }));
+    results = evaluate(manifest, findings);
+    detectors = evaluateDetectors(manifest, findings);
+    detectorReport.push(...detectors.map((result) => ({ fixture: manifest.fixture, result })));
     report.push(...results.map((result) => ({ fixture: manifest.fixture, result })));
     safety = fixtures.safetyHits();
   }, 180_000);
 
   it('finds every seeded issue with the expected classification (recall 100%)', () => {
     for (const r of results) expect(r.missed, `${r.category} missed`).toEqual([]);
+  });
+
+  it('per detector: every seeded issue found, and nothing else (Milestone 2 detectors: not even observations)', () => {
+    for (const d of detectors) {
+      expect(d.missed, `${d.detector} missed`).toEqual([]);
+      expect(d.falsePositives, `${d.detector} false positives`).toEqual([]);
+    }
   });
 
   it('changes nothing on the server: no writes, no trap requests, no WebSockets', () => {

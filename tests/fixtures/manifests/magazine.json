@@ -1,0 +1,131 @@
+{
+  "fixture": "magazine",
+  "startPath": "/magazine/",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 1
+  },
+  "scoredCategories": ["UI_HEALTH", "RESPONSIVE", "FUNCTIONAL"],
+  "expected": [
+    {
+      "id": "standfirst-spills-onto-byline",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/text-overflow-visible",
+      "selector": "#news > p:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "standfirst-spills-onto-byline-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/text-overflow-visible",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "selector": "#news > p:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "kicker-drawn-over-headline",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/text-overlap",
+      "selector": "#culture > h2",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "kicker-drawn-over-headline-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/text-overlap",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "selector": "#culture > h2",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "newsletter-close-below-window",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/fixed-out-of-viewport",
+      "selector": "aside:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "newsletter-close-below-window-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/fixed-out-of-viewport",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "selector": "aside:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "archive-tag-label-does-not-fit",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/control-label-clipped",
+      "selector": "p:nth-of-type(1) > a",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "archive-tag-label-does-not-fit-small-screens",
+      "category": "RESPONSIVE",
+      "ruleId": "ui/control-label-clipped",
+      "viewports": ["1366x768", "768x1024", "390x844", "320x568"],
+      "selector": "p:nth-of-type(1) > a",
+      "classification": ["POTENTIAL_DEFECT"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "ellipsis-headline",
+      "reason": "truncated with text-overflow: ellipsis on purpose",
+      "selectors": ["main > a"]
+    },
+    {
+      "id": "line-clamped-teaser",
+      "reason": "clamped to two lines on purpose",
+      "selectors": [".teaser", "main > p:nth-of-type(2)"]
+    },
+    {
+      "id": "decorative-watermark",
+      "reason": "aria-hidden decoration drawn over a heading on purpose",
+      "selectors": [".watermark", "h3", ".marked > span"]
+    },
+    {
+      "id": "screen-reader-text",
+      "reason": "visually hidden label inside the search button",
+      "selectors": [".search", "main > button"]
+    },
+    {
+      "id": "peeking-sheet",
+      "reason": "bottom sheet mostly below the window on purpose (only its edge shows)",
+      "selectors": ["aside:nth-of-type(2)", ".peek"]
+    },
+    {
+      "id": "card-rail",
+      "reason": "horizontally scrolling rail of cards",
+      "selectors": [".rail", ".rail > div"]
+    },
+    {
+      "id": "image-badge",
+      "reason": "badge placed over an image on purpose",
+      "selectors": [".badge", ".photo > span"]
+    },
+    {
+      "id": "top-bar",
+      "reason": "fixed bar fully inside the window",
+      "selectors": ["header"]
+    },
+    {
+      "id": "off-screen-skip-links",
+      "reason": "stacked far off the screen until focused (found on a real site in the Docker regression)",
+      "selectors": [".skip a", "ul > li:nth-of-type(1) > a", "ul > li:nth-of-type(2) > a"]
+    },
+    {
+      "id": "responsive-navigation",
+      "reason": "replaced by a menu button on small screens",
+      "selectors": ["nav", "header > button"]
+    }
+  ],
+  "forbiddenTokens": [
+    "standfirst",
+    "newsletter",
+    "kicker",
+    "Long-form investigations",
+    "Harbour plans"
+  ]
+}

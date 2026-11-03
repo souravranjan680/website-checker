@@ -105,6 +105,8 @@ export interface WebsiteDto {
   explorationEnabled: boolean;
   explorationPageLimit: number;
   explorationControlLimit: number;
+  /** Component consistency check (Phase 9, Milestone 2). */
+  consistencyEnabled: boolean;
   verificationStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED';
   authorizationConfirmedAt: string;
   myRole: ProjectRole;

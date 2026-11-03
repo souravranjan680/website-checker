@@ -1,0 +1,51 @@
+{
+  "fixture": "studio (corrected twin)",
+  "startPath": "/studio/fixed.html",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0
+  },
+  "scoredCategories": ["UI_HEALTH", "FUNCTIONAL"],
+  "expected": [
+    {
+      "id": "unrelated-font-source-still-reported",
+      "category": "UI_HEALTH",
+      "ruleId": "ui/failed-request",
+      "resource": "/studio/fonts/sans-old.woff2",
+      "classification": ["DETECTED"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "working-sprite-icon",
+      "reason": "sprite file and symbol exist",
+      "selectors": ["p:nth-of-type(4) > svg"]
+    },
+    {
+      "id": "working-inline-symbol",
+      "reason": "the symbol exists in the page",
+      "selectors": ["p:nth-of-type(2) > svg"]
+    },
+    {
+      "id": "messages-button",
+      "reason": "icon-only button whose icon is visible",
+      "selectors": ["button:nth-of-type(2)"]
+    },
+    {
+      "id": "decorative-glyph",
+      "reason": "icon-font glyph whose font loaded",
+      "selectors": [".deco", "p:nth-of-type(1) > span"]
+    },
+    {
+      "id": "system-font-text",
+      "reason": "set in the system font on purpose",
+      "selectors": [".system", "main > p:nth-of-type(2)"]
+    },
+    {
+      "id": "cyrillic-subset",
+      "reason": "unicode-range subset never needed by the page (never requested)",
+      "resource": "sans-cyrillic"
+    }
+  ]
+}

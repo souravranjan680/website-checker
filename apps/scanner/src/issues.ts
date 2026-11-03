@@ -67,6 +67,8 @@ export interface IssueDraft {
     resourceUrl?: string | null;
     statusCode?: number | null;
     measurements?: Record<string, unknown>;
+    /** Set by the Milestone 2 checks, which decide the strength of their own evidence. */
+    classification?: FindingClassification;
   };
   seo?: { checkType: string; expected: string | null; actual: string | null };
   functional?: {
@@ -122,6 +124,8 @@ const RESOURCE_CHECKS = new Set<UiCheckType>([
 export function classifyDraft(draft: IssueDraft): FindingClassification {
   // Interaction findings are classified by the explorer, which has the evidence.
   if (draft.functional) return draft.functional.classification;
+  // So are the Milestone 2 checks (layout, fonts and icons, consistency).
+  if (draft.uiHealth?.classification) return draft.uiHealth.classification;
   if (draft.accessibility) {
     return draft.accessibility.detection === 'AUTOMATED' ? 'DETECTED' : 'INCONCLUSIVE';
   }
@@ -320,6 +324,7 @@ export function uiDraft(
     resourceUrl?: string | null;
     statusCode?: number | null;
     measurements?: Record<string, unknown>;
+    classification?: FindingClassification;
     target: string;
   },
 ): IssueDraft {
@@ -344,6 +349,7 @@ export function uiDraft(
       resourceUrl: values.resourceUrl ?? null,
       statusCode: values.statusCode ?? null,
       measurements: values.measurements,
+      ...(values.classification ? { classification: values.classification } : {}),
     },
   };
 }
@@ -466,12 +472,15 @@ export function consoleToDrafts(groups: ConsoleGroup[], ctx: IssueContext): Issu
 /**
  * Failed resources → issues. Only CONFIRMED failures (see checks/verify-resources.ts)
  * are reported; inconclusive and policy-blocked ones stay on the page record.
+ * `reportedElsewhere`: URLs a more specific issue already explains (a font face that
+ * failed, a missing icon sprite), verified to be the same file; all others stay.
  */
 export function networkToDrafts(
   log: PageNetworkLog,
   ctx: IssueContext,
   siteHostname: string,
   alreadyReportedImages: Set<string>,
+  reportedElsewhere: Set<string> = new Set(),
 ): IssueDraft[] {
   const drafts: IssueDraft[] = [];
   const seen = new Set<string>();
@@ -480,6 +489,7 @@ export function networkToDrafts(
     if (request.blockedByPolicy || request.verdict !== 'CONFIRMED') continue;
     const key = `${request.resourceType}|${request.url}`;
     if (seen.has(key) || request.resourceType === 'document') continue;
+    if (reportedElsewhere.has(request.url)) continue;
     seen.add(key);
     // "… could not be loaded. The server answered HTTP 404, and HTTP 404 again on a re-check."
     const problem =

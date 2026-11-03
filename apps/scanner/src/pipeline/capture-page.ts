@@ -3,6 +3,7 @@ import {
   type AxeOutput,
   type Box,
   type DomCheckResult,
+  type ExtraResult,
 } from '@whc/dom-checks';
 import { EGRESS_REASON_HEADER } from '@whc/shared';
 import type { Page } from 'playwright';
@@ -12,9 +13,10 @@ import { BLOCKED_RESPONSE_HEADER } from '../browser-types';
 import { axeSelector, boxesFor, runAxe } from '../checks/axe';
 import type { PageNetworkLog } from '../checks/collectors';
 import { classifyPageConsole } from '../checks/console-classify';
-import { runDomChecksInPage } from '../checks/dom';
+import { runDomChecksInPage, runExtraChecksInPage } from '../checks/dom';
 import { verifyPageResources, type ProbeFn } from '../checks/verify-resources';
 import { isSameSite, normalizeUrl } from '../crawler/urls';
+import { consistencyDrafts, extraFindingDrafts, fontAndIconDrafts } from '../extra-issues';
 import {
   axeToDrafts,
   consoleToDrafts,
@@ -47,6 +49,8 @@ export interface PageCapture {
   /** Page-coordinate boxes of the elements axe reported. */
   axeBoxes: Map<string, Box | null>;
   dom: DomCheckResult | null;
+  /** Milestone 2 checks (Phase 9): layout, fonts and icons, component styles. */
+  extra: ExtraResult | null;
   /** Re-check verdict per image the DOM check found broken. */
   imageVerdicts: Map<string, Classification>;
 }
@@ -86,6 +90,8 @@ export async function capturePage(params: {
   alreadyScanned: (normalizedUrl: string) => boolean;
   /** Re-checks a failed resource through the egress proxy; null = no re-checks. */
   probe: ProbeFn | null;
+  /** Compare comparable components (the website's consistency setting). */
+  consistency: boolean;
   logger: Logger;
 }): Promise<PageCapture> {
   const { page, url, logger } = params;
@@ -102,6 +108,7 @@ export async function capturePage(params: {
     axe: null,
     axeBoxes: new Map(),
     dom: null,
+    extra: null,
     imageVerdicts: new Map(),
   };
 
@@ -195,6 +202,18 @@ export async function capturePage(params: {
     skipSelectors: unnamedControlSelectors(capture.axe),
   });
 
+  // 2b) Milestone 2 checks (never fatal: the page keeps its other results)
+  try {
+    capture.extra = await runExtraChecksInPage(page, {
+      layout: true,
+      fonts: true,
+      icons: true,
+      consistency: params.consistency,
+    });
+  } catch (error) {
+    logger.info({ url, err: (error as Error).message }, 'layout/font/consistency checks failed');
+  }
+
   // 3) re-check failed resources (verdicts are stored on the failed requests)
   capture.imageVerdicts = await verifyPageResources(params.log, capture.dom.findings, params.probe);
 
@@ -235,10 +254,23 @@ export function analyzePage(
       .map((f) => String(f.measurements?.src ?? '')),
   );
   const consoleGroups = classifyPageConsole(capture.network, siteHostname);
+  const fontsAndIcons = capture.extra
+    ? fontAndIconDrafts(capture.extra, capture.network, ctx)
+    : { drafts: [], reportedElsewhere: new Set<string>() };
   return [
     ...axeToDrafts(capture.axe, ctx, capture.axeBoxes),
     ...domToDrafts(domFindings, ctx, 'UI_HEALTH'),
-    ...networkToDrafts(capture.network, ctx, siteHostname, brokenImageSrcs),
+    ...networkToDrafts(
+      capture.network,
+      ctx,
+      siteHostname,
+      brokenImageSrcs,
+      fontsAndIcons.reportedElsewhere,
+    ),
     ...consoleToDrafts(consoleGroups, ctx),
+    // Milestone 2 (Phase 9), last so the earlier drafts keep their order
+    ...(capture.extra ? extraFindingDrafts(capture.extra.findings, ctx, 'UI_HEALTH') : []),
+    ...fontsAndIcons.drafts,
+    ...(capture.extra ? consistencyDrafts(capture.extra.components, ctx) : []),
   ];
 }

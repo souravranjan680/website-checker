@@ -149,6 +149,16 @@ enum UiCheckType {
   EMPTY_LINK
   BROKEN_NAVIGATION
   IMAGE_SIZING
+  // Phase 9, Milestone 2 (not counted in the UI health score)
+  TEXT_OVERFLOW_VISIBLE // text spills out of a fixed-height box onto other content
+  TEXT_OVERLAP // two pieces of text drawn on top of each other
+  FIXED_OUT_OF_VIEWPORT // a fixed element partly outside the window (unreachable)
+  CONTROL_LABEL_CLIPPED // a button/link label does not fit its control
+  FONT_LOAD_FAILED // a web font face failed to load
+  FONT_FALLBACK_RENDERED // visible text uses a fallback instead of its web font
+  ICON_BROKEN // missing SVG symbol, missing sprite file, or icon font that failed
+  ICON_MISSING // icon-only control with nothing visible inside
+  COMPONENT_INCONSISTENT // a component styled differently from comparable ones
 }
 
 enum SeoCheckType {
@@ -384,6 +394,8 @@ model Website {
   explorationEnabled       Boolean            @default(true)
   explorationPageLimit     Int                @default(5)
   explorationControlLimit  Int                @default(30)
+  /// Component consistency check (Phase 9, Milestone 2): compares comparable buttons and fields.
+  consistencyEnabled       Boolean            @default(true)
   verificationStatus       VerificationStatus @default(UNVERIFIED)
   verificationToken        String?            @unique
   verifiedAt               DateTime?
@@ -503,6 +515,8 @@ model ScanPage {
   seoData         Json? // meta robots, Open Graph, heading outline, images without alt (Phase 6)
   /// Safe explorer summary (Phase 9): controls explored, skipped (with reasons), blocked actions.
   exploration     Json?
+  /// Usual look of each comparable component group (Phase 9, Milestone 2), compared across pages.
+  components      Json?
   errorMessage    String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt

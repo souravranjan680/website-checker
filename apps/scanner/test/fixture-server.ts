@@ -11,6 +11,31 @@ const TYPES: Record<string, string> = {
   '.js': 'text/javascript',
 };
 
+/**
+ * Real font files for the font and icon fixtures (Phase 9, Milestone 2), served from
+ * installed packages instead of copying third-party binaries into the repository:
+ * Geist (SIL Open Font License) and Codicon, an icon font whose glyphs are in the
+ * Private Use Area (shipped with Playwright).
+ */
+const GEIST =
+  '../../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2';
+const VENDOR_FONTS: Record<string, { file: string; type: string }> = {
+  'text.woff2': { file: GEIST, type: 'font/woff2' },
+  'icons.ttf': {
+    file: '../../../node_modules/playwright-core/lib/vite/recorder/assets/codicon-DCmgc-ay.ttf',
+    type: 'font/ttf',
+  },
+};
+
+/**
+ * Seeded page vs corrected twin: "{{a|b}}" in a fixture serves "a" on the seeded page
+ * and "b" on its twin (for differences CSS alone cannot switch, such as URLs).
+ */
+const variant = (body: string, fixed: boolean) =>
+  body.replace(/\{\{([^{}|]*)\|([^{}|]*)\}\}/g, (_m, seeded: string, twin: string) =>
+    fixed ? twin : seeded,
+  );
+
 export interface FixtureServer {
   port: number;
   /** Base URL under the test host name that the egress proxy maps to 127.0.0.1. */
@@ -174,7 +199,7 @@ export async function startFixtureServer(): Promise<FixtureServer> {
         const body = await readFile(path.join(SITES, twin[1]!, 'index.html'), 'utf8');
         return send(
           200,
-          body
+          variant(body, true)
             .replaceAll('__PORT__', String(port))
             .replace('<body data-variant="seeded">', '<body data-variant="fixed">'),
         );
@@ -182,12 +207,21 @@ export async function startFixtureServer(): Promise<FixtureServer> {
         /* no such site: fall through to the 404 below */
       }
     }
+    const vendor = /^\/vendor-fonts\/([\w.-]+)$/.exec(url.pathname);
+    if (vendor && VENDOR_FONTS[vendor[1]!]) {
+      const font = VENDOR_FONTS[vendor[1]!]!;
+      const data = await readFile(path.resolve(import.meta.dirname, font.file));
+      return void res.writeHead(200, { 'content-type': font.type }).end(data);
+    }
     let file = path.normalize(path.join(SITES, decodeURIComponent(url.pathname)));
     if (!file.startsWith(SITES)) return send(403, 'forbidden', 'text/plain');
     if (url.pathname.endsWith('/')) file = path.join(file, 'index.html');
     try {
       let body = await readFile(file, 'utf8');
-      body = body.replaceAll('__PORT__', String(port));
+      // "?fixed" serves the corrected variant of any page (subpages of a twin).
+      const fixed = url.searchParams.has('fixed');
+      body = variant(body, fixed).replaceAll('__PORT__', String(port));
+      if (fixed) body = body.replace('<body data-variant="seeded">', '<body data-variant="fixed">');
       return send(200, body, TYPES[path.extname(file)] ?? 'application/octet-stream');
     } catch {
       return send(

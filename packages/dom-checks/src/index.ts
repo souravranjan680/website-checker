@@ -22,3 +22,40 @@ export type {
   SkipReason,
   SkippedControl,
 } from './explore-rules';
+// Milestone 2 (Phase 9): pure rules and result types of the layout, font, icon and
+// consistency checks, and the side-effect watch's report type.
+export {
+  consistencyOutliers,
+  contentText,
+  crossPageDeviations,
+  formatStyleValue,
+  isPrivateUse,
+  parseUnicodeRange,
+  primaryFamily,
+  propertyLabel,
+  rangeCoversText,
+  styleDistance,
+  summarizeComponents,
+  usualValue,
+} from './extra-rules';
+export type {
+  ComponentContext,
+  ComponentDeviation,
+  ComponentKind,
+  ComponentMember,
+  ComponentStyle,
+  ComponentSummaryEntry,
+  ConsistencyOutlier,
+  CrossPageDeviation,
+  ExternalUseFact,
+  ExtraCheckOptions,
+  ExtraFinding,
+  ExtraResult,
+  FallbackFact,
+  FindingStrength,
+  FontFaceFact,
+  GlyphIconFact,
+  SideEffectBucket,
+  SideEffectReport,
+  StyleProperty,
+} from './extra-rules';

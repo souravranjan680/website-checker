@@ -127,6 +127,7 @@ export async function createScanFor(
     explorationEnabled: boolean;
     explorationPageLimit: number;
     explorationControlLimit: number;
+    consistencyEnabled: boolean;
   }> = {},
   existingWebsiteId?: string,
 ): Promise<{ scanId: string; websiteId: string }> {
@@ -156,6 +157,7 @@ export async function createScanFor(
         explorationEnabled: website.explorationEnabled ?? true,
         explorationPageLimit: website.explorationPageLimit ?? 5,
         explorationControlLimit: website.explorationControlLimit ?? 30,
+        consistencyEnabled: website.consistencyEnabled ?? true,
       },
     });
     websiteId = created.id;

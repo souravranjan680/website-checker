@@ -31,6 +31,8 @@ export const websiteSettingsSchema = z.object({
   explorationEnabled: z.boolean(),
   explorationPageLimit: z.number().int().min(0).max(10, 'Maximum is 10.'),
   explorationControlLimit: z.number().int().min(1, 'Minimum is 1.').max(50, 'Maximum is 50.'),
+  /** Component consistency (Phase 9, Milestone 2): compares comparable buttons and fields. */
+  consistencyEnabled: z.boolean(),
 });
 
 export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
@@ -44,6 +46,7 @@ export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
   explorationEnabled: true,
   explorationPageLimit: 5,
   explorationControlLimit: 30,
+  consistencyEnabled: true,
 };
 
 const authorizationSchema = z.literal(true, {

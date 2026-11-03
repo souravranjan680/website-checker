@@ -45,6 +45,16 @@ const UI_CHECK_TYPES = new Set([
   'EMPTY_LINK',
   'BROKEN_NAVIGATION',
   'IMAGE_SIZING',
+  // Phase 9, Milestone 2
+  'TEXT_OVERFLOW_VISIBLE',
+  'TEXT_OVERLAP',
+  'FIXED_OUT_OF_VIEWPORT',
+  'CONTROL_LABEL_CLIPPED',
+  'FONT_LOAD_FAILED',
+  'FONT_FALLBACK_RENDERED',
+  'ICON_BROKEN',
+  'ICON_MISSING',
+  'COMPONENT_INCONSISTENT',
 ]);
 type ScanQuery = z.output<typeof scanListQuerySchema>;
 

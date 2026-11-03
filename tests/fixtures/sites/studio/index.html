@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  Fonts and icons fixture (Phase 9, Milestone 2): a design studio's home page.
+  Seeded problems; /studio/fixed.html is the corrected twin ({{seeded|fixed}} switches URLs):
+    S1  the display font's file is missing: the face fails and the headline uses a fallback
+    S2  the icon font's file is missing: its icons (Private Use Area glyphs) cannot be drawn
+    S3  an inline SVG icon refers to a symbol that does not exist
+    S4  an icon refers to a sprite file that does not exist
+    S5  an icon-only button whose SVG has no size: nothing visible, only an aria-label
+  Negative controls (must stay silent):
+    a working text font, a working sprite icon and inline symbol, a Cyrillic subset face
+    (unicode-range) that is never needed, system font text, and a decorative icon-font
+    glyph whose font loaded. (font-display: optional is covered by extra-checks.test.ts,
+    which can keep a font loading on purpose.)
+  Unrelated failed request that must STILL be reported as a failed request:
+    the text font's first source is missing (the second one loads, so the face works).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Studio fixture page</title>
+    <style>
+      @font-face {
+        font-family: 'Studio Sans';
+        src: url(/studio/fonts/sans-old.woff2) format('woff2'), url(/vendor-fonts/text.woff2) format('woff2');
+        font-weight: 100 900;
+      }
+      @font-face {
+        font-family: 'Studio Sans';
+        src: url(/studio/fonts/sans-cyrillic.woff2) format('woff2');
+        unicode-range: U+0400-04FF;
+      }
+      @font-face {
+        font-family: 'Studio Display';
+        src: url({{/studio/fonts/display.woff2|/vendor-fonts/text.woff2}}) format('woff2');
+      }
+      @font-face {
+        font-family: 'Studio Icons';
+        src: url({{/studio/fonts/icons.ttf|/vendor-fonts/icons.ttf}}) format('truetype');
+      }
+      @font-face {
+        font-family: 'Studio Glyphs';
+        src: url(/vendor-fonts/icons.ttf) format('truetype');
+      }
+      body { margin: 0; padding: 24px; font: 16px/1.5 'Studio Sans', system-ui, sans-serif; color: #1d2433; }
+      h1 { font: 700 40px/1.2 'Studio Display', Georgia, serif; margin: 0 0 16px; }
+      .system { font-family: system-ui, sans-serif; }
+      .ico::before { font-family: 'Studio Icons'; font-style: normal; display: inline-block; width: 16px; }
+      .ico-home::before { content: '\ea60'; }
+      .ico-mail::before { content: '\ea61'; }
+      .deco::before { font-family: 'Studio Glyphs'; content: '\ea62'; display: inline-block; width: 16px; }
+      .icon { width: 20px; height: 20px; fill: #1d2433; vertical-align: middle; }
+      nav a { margin-right: 12px; }
+      .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #1d2433; background: #fff; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="i-cart" viewBox="0 0 16 16"><path d="M1 2h2l2 8h8l2-6H5" fill="none" stroke="currentColor" stroke-width="2" /></symbol>
+    </svg>
+    <header>
+      <nav aria-label="Main">
+        <a href="#work"><i class="ico ico-home" aria-hidden="true"></i> Work</a>
+        <a href="#contact"><i class="ico ico-mail" aria-hidden="true"></i> Contact</a>
+      </nav>
+    </header>
+    <main>
+      <h1>We design calm interfaces</h1>
+      <p>Studio Fixture is a small design studio. <span class="deco" aria-hidden="true"></span></p>
+      <p class="system">Set in the system font on purpose.</p>
+      <section id="work">
+        <h2>Work</h2>
+        <p>
+          <svg class="icon" aria-hidden="true"><use href="{{#i-cart-old|#i-cart}}" /></svg> Shop redesign
+        </p>
+        <p>
+          <svg class="icon" aria-hidden="true"><use href="#i-cart" /></svg> Checkout study
+        </p>
+        <p>
+          <svg class="icon" aria-hidden="true"><use href="{{/studio/icons-v1.svg#i-star|/studio/sprite.svg#i-star}}" /></svg> Featured
+        </p>
+        <p>
+          <svg class="icon" aria-hidden="true"><use href="/studio/sprite.svg#i-heart" /></svg> Favourites
+        </p>
+      </section>
+      <section id="contact">
+        <h2>Contact</h2>
+        <button class="icon-button" type="button" aria-label="Notifications">
+          <svg width="{{0|20}}" height="{{0|20}}" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a4 4 0 0 1 4 4v4l2 2H2l2-2V5a4 4 0 0 1 4-4z" /></svg>
+        </button>
+        <button class="icon-button" type="button" aria-label="Messages">
+          <svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="3" width="14" height="10" /></svg>
+        </button>
+      </section>
+    </main>
+  </body>
+</html>

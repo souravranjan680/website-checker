@@ -6,12 +6,19 @@
  *
  * Only findings classified DETECTED or POTENTIAL_DEFECT count as claims of a problem.
  * OBSERVATION and INCONCLUSIVE findings are listed but never count as false positives.
+ *
+ * evaluateDetectors() (Phase 9, Milestone 2) computes the same per detector (layout,
+ * fonts and icons, consistency, explorer...). The Milestone 2 detectors are strict: on
+ * every fixture, ANY of their findings that is not seeded counts as a false positive,
+ * observations included, because their negative controls must stay completely silent.
  */
 
 export interface ExpectedFinding {
   /** Short stable name, used in reports (e.g. "wide-banner-overflow"). */
   id: string;
   category: string;
+  /** Detector the finding belongs to; default: derived from the rule (see detectorOf). */
+  detector?: string;
   ruleId: string;
   /** One expected finding per listed viewport; omitted = any viewport, once. */
   viewports?: string[];
@@ -165,5 +172,122 @@ export function formatResults(rows: { fixture: string; result: CategoryResult }[
       ({ fixture, result: r }) =>
         `| ${fixture} | ${r.category} | ${r.expected} | ${r.found} | ${pct(r.recall)} | ${r.falsePositives.length} | ${pct(r.precision)} |`,
     ),
+  ].join('\n');
+}
+
+/** Detectors of Milestone 2, scored strictly (see the header). */
+export const STRICT_DETECTORS = ['layout', 'fonts-icons', 'consistency'] as const;
+
+const DETECTOR_OF_RULE: Record<string, string> = {
+  'ui/text-overflow-visible': 'layout',
+  'ui/text-overlap': 'layout',
+  'ui/fixed-out-of-viewport': 'layout',
+  'ui/control-label-clipped': 'layout',
+  'ui/font-load-failed': 'fonts-icons',
+  'ui/font-fallback-rendered': 'fonts-icons',
+  'ui/icon-broken': 'fonts-icons',
+  'ui/icon-missing': 'fonts-icons',
+  'ui/component-inconsistent': 'consistency',
+};
+
+/** "layout", "fonts-icons", "consistency", "explorer", or the category for older checks. */
+export function detectorOf(f: { category: string; ruleId: string }): string {
+  if (DETECTOR_OF_RULE[f.ruleId]) return DETECTOR_OF_RULE[f.ruleId]!;
+  if (f.ruleId.startsWith('functional/')) return 'explorer';
+  return f.category;
+}
+
+export interface DetectorResult extends Omit<CategoryResult, 'category'> {
+  detector: string;
+}
+
+export function evaluateDetectors(
+  manifest: FixtureManifest,
+  findings: Finding[],
+): DetectorResult[] {
+  const expectedDetector = (e: ExpectedFinding) => e.detector ?? detectorOf(e);
+  const isStrict = (d: string) => (STRICT_DETECTORS as readonly string[]).includes(d);
+  const detectors = [
+    ...new Set([
+      ...STRICT_DETECTORS,
+      ...manifest.scoredCategories.map((c) => (c === 'FUNCTIONAL' ? 'explorer' : c)),
+      ...manifest.expected.map(expectedDetector),
+      ...findings.filter((f) => manifest.scoredCategories.includes(f.category)).map(detectorOf),
+    ]),
+  ];
+  return detectors.map((detector) => {
+    const strict = isStrict(detector);
+    const pool = findings.filter(
+      (f) =>
+        detectorOf(f) === detector && (strict || manifest.scoredCategories.includes(f.category)),
+    );
+    const used = new Set<Finding>();
+    const missed: string[] = [];
+    let expectedCount = 0;
+    let found = 0;
+    for (const spec of manifest.expected.filter((e) => expectedDetector(e) === detector)) {
+      for (const viewport of spec.viewports ?? [null]) {
+        expectedCount += 1;
+        const match = findings.find(
+          (f) =>
+            !used.has(f) &&
+            f.ruleId === spec.ruleId &&
+            f.category === spec.category &&
+            (viewport === null || f.viewport === viewport) &&
+            matches(f, spec),
+        );
+        if (match) used.add(match);
+        if (match && spec.classification.includes(match.classification)) found += 1;
+        else {
+          missed.push(
+            `${spec.id}${viewport ? ` @ ${viewport}` : ''}${match ? ` (classified ${match.classification}, expected ${spec.classification.join('/')})` : ''}`,
+          );
+        }
+      }
+    }
+    const claims = pool.filter((f) => !used.has(f) && (strict || CLAIMS.has(f.classification)));
+    const negativeControlHits = claims
+      .filter((f) => manifest.negativeControls.some((n) => matches(f, n)))
+      .map(
+        (f) =>
+          `${label(f)} (negative control "${manifest.negativeControls.find((n) => matches(f, n))!.id}")`,
+      );
+    return {
+      detector,
+      expected: expectedCount,
+      found,
+      missed,
+      falsePositives: claims.map((f) => `${label(f)} [${f.classification}]`),
+      negativeControlHits,
+      recall: expectedCount === 0 ? 1 : found / expectedCount,
+      precision: found + claims.length === 0 ? 1 : found / (found + claims.length),
+    };
+  });
+}
+
+/** Totals per detector over all fixtures, for the milestone report. */
+export function formatDetectorTotals(rows: { fixture: string; result: DetectorResult }[]): string {
+  const totals = new Map<
+    string,
+    { fixtures: number; expected: number; found: number; fp: number }
+  >();
+  for (const { result: r } of rows) {
+    const t = totals.get(r.detector) ?? { fixtures: 0, expected: 0, found: 0, fp: 0 };
+    t.fixtures += 1;
+    t.expected += r.expected;
+    t.found += r.found;
+    t.fp += r.falsePositives.length;
+    totals.set(r.detector, t);
+  }
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  return [
+    '| Detector | Fixture pages | Expected | Found | Recall | False positives | Precision |',
+    '|---|---|---|---|---|---|---|',
+    ...[...totals.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(
+        ([d, t]) =>
+          `| ${d} | ${t.fixtures} | ${t.expected} | ${t.found} | ${pct(t.expected === 0 ? 1 : t.found / t.expected)} | ${t.fp} | ${pct(t.found + t.fp === 0 ? 1 : t.found / (t.found + t.fp))} |`,
+      ),
   ].join('\n');
 }

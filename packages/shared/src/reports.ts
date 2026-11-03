@@ -198,6 +198,18 @@ export interface UiHealthReportDto {
     failedRequests: number;
     issues: number;
   }[];
+  /**
+   * Checks added in Phase 9, Milestone 2 (layout measurements, fonts and icons,
+   * component consistency). Counted here; never part of the UI health score.
+   */
+  extraChecks: {
+    layout: number;
+    fontsAndIcons: number;
+    consistency: number;
+    /** Pages whose components were compared (0: switched off, or a scan from before). */
+    consistencyPages: number;
+    byClassification: Partial<Record<FindingClassificationName, number>>;
+  };
 }
 
 export interface ResponsiveViewportDto {

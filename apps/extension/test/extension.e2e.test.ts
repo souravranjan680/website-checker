@@ -11,6 +11,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { EXTRA_CHECKS, uiRuleId } from '@whc/dom-checks';
 import { loadDomChecksBundle } from '@whc/scanner/dom';
 import { scanPage } from '@whc/scanner/scan-page';
 import { chromium, type BrowserContext, type Page } from 'playwright';
@@ -88,6 +89,8 @@ async function checkWithScanner(url: string): Promise<Set<string>> {
       navTimeoutMs: 30_000,
       domBundle: loadDomChecksBundle(),
       cropBudget: { remaining: 0 },
+      extraCropBudget: { remaining: 0 },
+      consistency: false,
       alreadyScanned: () => false,
       probe: null,
       logger: pino({ level: 'silent' }),
@@ -96,7 +99,13 @@ async function checkWithScanner(url: string): Promise<Set<string>> {
     // Page-content checks only: network, console and link checks need the server
     // (the extension cannot see them without extra permissions).
     const serverOnly = /^ui\/(failed-|console-error|js-error|broken-link)/;
-    return new Set(result.drafts.map((d) => d.ruleId).filter((id) => !serverOnly.test(id)));
+    // The Milestone 2 checks (Phase 9) run in the scanner only, by design.
+    const scannerOnly = new Set<string>(EXTRA_CHECKS.map(uiRuleId));
+    return new Set(
+      result.drafts
+        .map((d) => d.ruleId)
+        .filter((id) => !serverOnly.test(id) && !scannerOnly.has(id)),
+    );
   } finally {
     await browser.close();
   }

@@ -3,7 +3,10 @@
 Status: **in progress.**
 - Milestone 0 (foundations) is complete.
 - Milestone 1 (generic interaction explorer) is complete (section 5).
-- Milestones 2 to 8 are planned (see section 6).
+- Milestone 2, Checkpoint 1 (layout, fonts and icons, component consistency) is complete
+  (section 6).
+- Milestone 2, Checkpoint 2 (keyboard and form probes) and Milestones 3 to 8 are planned
+  (see section 7).
 - This document grows with each milestone.
 
 ## 1. Product purpose
@@ -391,11 +394,251 @@ No third-party site was scanned.
 - **Heuristic thresholds.** The thresholds (5% cut off, an 80 px empty band) were tuned to avoid false positives, so subtler problems can be missed.
 - **Run time.** About 1 s per control, and more when the page has to be restored. On the W3C BAD demo, which has no eligible controls, the scan took about 9 s longer.
 
-## 6. Remaining milestones
+## 6. Milestone 2, Checkpoint 1: layout, fonts and icons, component consistency (complete)
+
+Checkpoint 1 adds three groups of static checks and the groundwork that Checkpoint 2
+(keyboard and form probes) will build on. The keyboard and form probes and dialog
+exploration are **not** part of this checkpoint.
+
+All new checks are generic: they rely on CSS, layout geometry, the `document.fonts` API
+and ARIA semantics. They contain no logic for a particular site, fixture or QA report;
+`harness.test.ts` checks this against every fixture's tokens.
+
+### 6.1 Decisions applied
+
+| Decision | How it is applied |
+|---|---|
+| New UI checks never change scores | `SCORED_UI_CHECKS` in `apps/scanner/src/finalize.ts` lists the 16 UI check types that existed before Milestone 2; only those count towards the UI health score. |
+| Consistency on by default, as an observation | `Website.consistencyEnabled` defaults to `true`. A finding is a potential defect only with strong evidence (section 6.4); it is never `DETECTED`. |
+| Existing behaviour unchanged | The new checks are a separate in-page entry point (`window.__whcDomChecks.extra`). `runDomChecks`, which the Chrome extension uses, is unchanged. Screenshots of new findings come from their own budget (20 per scan, at most 2 per page), so earlier issues keep theirs. |
+
+### 6.2 Layout measurements (`UI_HEALTH`, and `RESPONSIVE` at the other screen sizes)
+
+These add to the four existing layout checks, which are unchanged.
+
+| Check | How it is decided | Classification |
+|---|---|---|
+| `TEXT_OVERFLOW_VISIBLE` | Text is taller than its box (`overflow: visible`), and the part that spills out is drawn over another element's content: text, a background, an image or a control. Spilling into empty space is not reported. | Potential defect |
+| `TEXT_OVERLAP` | The drawn glyph boxes of two different text elements intersect, by at least 40 px² and 30% of the smaller one. Only the painted part of the text counts: text hidden by ellipsis, line-clamp or a scroll container is cut away first. | Potential defect |
+| `FIXED_OUT_OF_VIEWPORT` | A fixed element extends more than 4 px above or below the window while at least half of it is visible, and text or controls in it lie fully outside the window, where they can never be reached. | Potential defect (HIGH when a control is unreachable) |
+| `CONTROL_LABEL_CLIPPED` | The label of a button, block link, tab or menu item is more than 2 px wider or taller than the control's box, cut off or spilling out. | Potential defect |
+
+Not reported, so that intended designs and responsive layouts stay silent:
+- ellipsis and line-clamp;
+- content inside horizontal scrollers such as carousels;
+- `aria-hidden` and `role=presentation` decoration;
+- faint watermarks (opacity below 0.3);
+- screen-reader-only text;
+- off-canvas panels and "peeking" sheets (less than half visible);
+- inline links;
+- hidden responsive variants, such as a desktop navigation hidden on mobile;
+- fixed and sticky elements, for text overlap (their position depends on scrolling).
+
+The checks run on every scanned page at desktop size, on the extra screen sizes of the
+responsive pass, and on menus and panels the explorer opened (only problems not already
+on the page; marked with the opened control, and resolved only where the explorer runs
+again).
+
+### 6.3 Fonts and icons
+
+| Check | How it is decided | Classification |
+|---|---|---|
+| `FONT_LOAD_FAILED` | A face in `document.fonts` has status `error`. | `DETECTED` only when the failed request is verifiably one of that face's own `src` URLs and the re-check confirmed the failure; otherwise a potential defect |
+| `FONT_FALLBACK_RENDERED` | Visible text asks for a web font (its first `font-family`), but no face of that family that covers the text has loaded. Not reported for `font-display: optional`, for `unicode-range` subsets the text does not need, or for system fonts. | Potential defect if the font failed; otherwise an observation |
+| `ICON_BROKEN` | An `<svg><use href="#id">` whose symbol does not exist in the page. | `DETECTED` |
+| `ICON_BROKEN` | An `<svg><use href="file.svg#id">` whose sprite file failed. | `DETECTED` if the re-check confirmed the failure |
+| `ICON_BROKEN` | An external sprite that loaded but whose icon draws nothing. | Potential defect |
+| `ICON_BROKEN` | Icon-font glyphs (Private Use Area characters) whose font failed and has no loaded face. | Potential defect |
+| `ICON_MISSING` | A control named for screen readers (`aria-label`, `aria-labelledby` or `title`) with nothing visible inside it: no text, no image or SVG with a size, and no background or pseudo-element icon. | Observation |
+
+**Font request correlation (requirement 1).** A generic "failed request" issue is
+replaced only when the failed URL is exactly one of the `src` URLs of a font face that
+**failed**, or the sprite file of a broken icon, **and** the re-check confirmed it.
+Every other failed request is still reported as before. This covers, for example, a
+missing first `src` whose second source loads, a stylesheet that cannot be read from
+another origin, or an unconfirmed failure. Unit tests and the `studio` fixture check
+this.
+
+### 6.4 Component consistency
+
+**Members.** These elements are collected per page, up to 400:
+- buttons, including `role=button` and button-type inputs;
+- links drawn as buttons (a box with padding and a background or border);
+- text inputs, selects and textareas.
+
+**What makes members comparable.** They are compared only if they share all of:
+- the kind and tag (and input type);
+- the **exact class list**, so variants such as `btn-primary` and `btn-danger` are separate groups;
+- the **kind of container**: form, navigation, toolbar, table cell, header, footer, aside, open dialog, or main content;
+- the **screen size**: desktop only.
+
+**Members left out.** Elements in a state that is meant to look different:
+- disabled;
+- `aria-current`, `aria-pressed`, `aria-selected`, `aria-expanded`, `aria-checked` or `aria-invalid`;
+- focused or hovered;
+- carrying a state class such as `active`, `is-selected` or `btn--disabled`.
+
+**Properties compared.**
+- Padding, font family, size and weight, border radius and width, and text, background and border colours.
+- Height only for text fields, selects and single-line text-only buttons, where content cannot decide it.
+- Width never.
+
+**When a difference is reported.**
+- **Observation.** Groups of at least 4 members. A property counts only if at least 75% of the members agree on its value, and a member differs by more than the tolerance (4 px, 1 px of font size, 100 of weight, 2 px of radius, or a visibly different colour).
+- **Potential defect (strong evidence).** All of the following:
+  - at least 6 members, with at least 85% agreeing;
+  - a large difference: 8 px or more of padding or height, or 2 px of font size;
+  - the outlier sets that property itself, in its `style` attribute or in a rule for its `#id` only.
+
+**Across pages.** Each page stores the usual look of each group in `ScanPage.components`.
+When the same group appears on at least 3 pages and at least 75% of them agree, a page
+that differs gets an observation.
+
+### 6.5 Groundwork for Checkpoint 2
+
+- **Side-effect watch** (`packages/dom-checks/src/side-effects.ts`, requirement 3). It
+  records every DOM change while a probe step runs and puts each one in a bucket:
+
+  | Bucket | Meaning |
+  |---|---|
+  | expected | Inside the probed component: the element, its wrapper (ancestors that contain no other control), its labels, and the elements it points to (`aria-controls`, `-owns`, `-describedby`, `-errormessage`, `-activedescendant`). |
+  | announcement | Inside a live region. |
+  | ambient | An attribute change on `<html>` or `<body>`. |
+  | background | An element that also changed during a quiet baseline (clocks, carousels). |
+  | unrelated | Anything else. |
+
+  Checkpoint 2 marks a probe step inconclusive on unrelated changes. Browser tests cover
+  every bucket.
+- **Per-detector acceptance harness.** `evaluateDetectors()` reports recall and
+  precision per detector. The Milestone 2 detectors are strict: on every fixture page,
+  any finding of theirs that is not seeded counts as a false positive, observations
+  included.
+- **Fixture twins.** A fixture may write `{{seeded|fixed}}` where CSS alone cannot
+  switch a difference (URLs, attributes). `?fixed` serves the corrected variant of any
+  page, so twins of multi-page fixtures crawl corrected subpages.
+- **Fonts for fixtures.** The fixture server serves real fonts from installed packages:
+  Geist (SIL Open Font License) and Codicon, an icon font shipped with Playwright. No
+  third-party font files are added to the repository.
+
+### 6.6 Storage, API and UI (all additive)
+
+- **Migration** `20261103061324_phase9_m2_cp1_layout_fonts_consistency`. It adds:
+  - 9 `UiCheckType` values;
+  - `ScanPage.components` (JSON);
+  - `Website.consistencyEnabled` (default `true`).
+- **Website API.** `consistencyEnabled` is optional on input; clients that do not send
+  it keep the stored value.
+- **Issue filters.** `checkType` accepts the new types.
+- **`GET /api/reports/:scanId/ui-health`** gains `extraChecks`:
+  - counts for layout, fonts and icons, and consistency, at all screen sizes;
+  - the number of pages compared;
+  - counts by classification.
+
+  All existing fields are unchanged.
+- **UI health report.** A "Layout, fonts, icons and consistency" card says these checks
+  are not part of the score. The new checks also appear as filter buttons.
+- **Website form.** A "Compare similar buttons and fields" setting.
+
+### 6.7 Fixtures and results
+
+| Fixture | Seeded problems | Negative controls |
+|---|---|---|
+| `magazine` (layout; scanned at all 5 screen sizes) | Text spilling from a fixed-height box onto the byline; a kicker drawn over its headline; a fixed newsletter panel whose Close button is below the window; a tag whose label does not fit | Ellipsis, line-clamp, an `aria-hidden` watermark over a heading, screen-reader text in a search button, a peeking bottom sheet, a card rail, a badge over an image, a fixed top bar, a navigation replaced by a menu button on small screens, two skip links parked far off the screen |
+| `studio` (fonts and icons) | A missing display font (and the headline in a fallback font); a missing icon font (and its glyphs); a missing inline symbol; a missing sprite file; an icon button whose SVG has no size | A working text font, a working sprite, a working symbol, a Cyrillic `unicode-range` subset, system-font text, a glyph whose font loaded, an icon button with a visible icon. The text font's missing first source (the second loads) **must still be reported** as a failed request. |
+| `admin` (consistency; 4 pages) | A button with its own inline padding (potential defect); a field rounded differently by a page rule (observation); one page restyling all buttons (cross-page observation) | Primary and danger variants, a pressed and a disabled button, buttons in a table, three chips (too few), a two-line button, the current navigation item |
+
+Each has a corrected twin, so there are 6 new manifests.
+
+**Fixture acceptance.** 16 fixture pages; 64 tests in `fixture-acceptance.test.ts`.
+
+| Detector | Fixture pages | Expected | Found | Recall | False positives |
+|---|---|---|---|---|---|
+| layout | 16 | 20 | 20 | 100% | 0 |
+| fonts-icons | 16 | 7 | 7 | 100% | 0 |
+| consistency | 16 | 3 | 3 | 100% | 0 |
+| explorer (M1) | 16 | 15 | 15 | 100% | 0 |
+| UI_HEALTH (earlier checks) | 16 | 18 | 18 | 100% | 0 |
+| ACCESSIBILITY | 9 | 3 | 3 | 100% | 0 |
+| RESPONSIVE (earlier checks) | 4 | 22 | 22 | 100% | 0 |
+
+- For the three new detectors, observations count as false positives too.
+- The 10 fixture pages from Milestones 0 and 1 produce **no** finding from the new
+  checks at all.
+- The server-side safety counters stayed at 0 for every fixture.
+- **These targets apply to these deterministic fixtures only, not to arbitrary
+  websites.**
+
+### 6.8 Verification
+
+**Docker before and after** (W3C BAD demo, 6 pages, the same settings as Milestones 0 and 1):
+- **Identical to Milestone 1:**
+  - the same pages and crawl order;
+  - the same 22 rule groups and counts (374 issues);
+  - the same scores (accessibility 62, UI health 91);
+  - the same links (88 checked, 4 broken).
+- **The new checks ran:** all 6 pages stored their component summaries (18 groups).
+- **They reported nothing** on this site.
+
+**A false positive this run found and fixed:**
+- **Problem:** the first run reported `ui/text-overlap` between two skip links. Both were
+  parked at the same place far off the screen (`left: -14400px`) until focused. The new
+  checks had not yet treated such off-screen content as visually hidden.
+- **Fix:** they now do, as the earlier checks already did. Text at negative page
+  coordinates (where no one can scroll) is ignored.
+- **Coverage:** the `magazine` fixture gained the same skip links as a negative control.
+- **Result:** the rerun matched Milestone 1 exactly.
+
+**Demo** (this repository's scanner on the local fixtures, results in the development
+database, shown by the Docker dashboard; no third-party site was scanned):
+- `magazine`, `studio` and `admin` all completed, with **0** server writes, trap
+  requests or WebSockets.
+- **UI health scores:** 100, 99 (an earlier check's failed font source) and 100. The
+  newer findings did not change them.
+- **Browser check of the dashboard, 7 of 7 passed:**
+  - the report card with its "not part of the score" note;
+  - filtering by a new check;
+  - the consistency issue with its deviation and evidence;
+  - the website setting, on by default;
+  - no horizontal scroll at 390 px;
+  - no page errors or failed API calls.
+
+### 6.9 Screenshots
+
+![UI health report with the newer checks](images/phase9-m2-1-ui-health-newer-checks.png)
+![A component consistency finding](images/phase9-m2-2-issue-component-inconsistent.png)
+![Website setting for component consistency](images/phase9-m2-3-website-consistency-setting.png)
+
+### 6.10 Limitations
+
+- **Heuristic thresholds.** The cut-offs (40 px² and 30% overlap, 4 px spill, 2 px
+  label, the consistency tolerances) favour silence over false positives, so subtler
+  problems are missed.
+- **Fonts.**
+  - Stylesheets from another origin without CORS cannot be read. Their faces are still
+    reported if they fail, but only as potential defects, and the generic failed
+    request is kept.
+  - A fallback font is only detected by family. A font whose glyphs are missing for
+    some characters (a partial font) is not detected.
+- **Icons.**
+  - Icon-font glyphs are judged by whether their font loaded, not by drawing them.
+  - CSS `mask`/background icons are only checked for "nothing visible" in labelled
+    controls.
+- **Consistency.**
+  - Desktop only; class lists must match exactly.
+  - A design system whose variants differ only by attributes (not classes) may give
+    observations.
+  - Comparisons across pages need the component on at least 3 crawled pages.
+- **Cost.**
+  - The W3C demo scan took 43 s, against 49 s for Milestone 1. That is within the
+    run-to-run variance of a scan over the internet, so the added cost is small there.
+  - Pages whose fonts are still loading wait up to 3 s for them.
+  - Each explored page adds up to 10 layout runs on opened menus and panels.
+
+## 7. Remaining milestones
 
 | M | Scope |
 |---|---|
-| 2 | Mode 1: forms and validation probe, keyboard probe, page metrics, fonts and icons, consistency across pages |
+| 2 (Checkpoint 2) | Mode 1: keyboard probe (Tab walk, Enter/Space on controls with established safe behaviour) and form probe (`BLUR` by default, `SYNTHETIC` only when opted in per website). Dialogs stay skipped. |
 | 3 | Mode 1: opt-in Firefox/WebKit compatibility |
 | 4 | Mode 2: comparisons, routes, discovery and mapping, run job |
 | 5 | Mode 2: element, visual, style and open-state differences |
@@ -403,7 +646,7 @@ No third-party site was scanned.
 | 7 | Comparison tracking, AI for both modes, QA-style reports and exports |
 | 8 | Dashboards, hardening, Docker end to end, final documentation |
 
-## 7. Known limitations (so far)
+## 8. Known limitations (so far)
 
 - Classification of older issues uses the data they stored. Older resource failures were
   not re-checked, so they are `POTENTIAL_DEFECT`, not `DETECTED`.

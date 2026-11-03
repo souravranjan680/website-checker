@@ -67,6 +67,7 @@ function buildSchema(needsAuthorization: (baseUrl: string) => boolean) {
       explorationControlLimit: z
         .number(numberError)
         .pipe(websiteSettingsSchema.shape.explorationControlLimit),
+      consistencyEnabled: z.boolean(),
       includePatterns: patternsText,
       excludePatterns: patternsText,
       authorizationConfirmed: z.boolean(),
@@ -96,6 +97,7 @@ export interface WebsiteSubmitValues {
   explorationEnabled: boolean;
   explorationPageLimit: number;
   explorationControlLimit: number;
+  consistencyEnabled: boolean;
   includePatterns: string[];
   excludePatterns: string[];
   authorizationConfirmed: boolean;
@@ -150,6 +152,7 @@ export function WebsiteForm({
       explorationEnabled: settings.explorationEnabled,
       explorationPageLimit: settings.explorationPageLimit,
       explorationControlLimit: settings.explorationControlLimit,
+      consistencyEnabled: settings.consistencyEnabled,
       includePatterns: settings.includePatterns.join('\n'),
       excludePatterns: settings.excludePatterns.join('\n'),
       authorizationConfirmed: false,
@@ -288,6 +291,12 @@ export function WebsiteForm({
               max={50}
             />
           </div>
+          <CheckboxField
+            control={form.control}
+            name="consistencyEnabled"
+            label="Compare similar buttons and fields"
+            description="Points out buttons and fields that look different from others with the same classes, on a page or across pages. Reported as observations unless the difference is clearly set on that element alone; never part of the score."
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextareaField
               control={form.control}

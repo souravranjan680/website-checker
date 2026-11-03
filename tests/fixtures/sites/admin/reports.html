@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- Admin fixture, reports page (see index.html for what is seeded). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin fixture reports</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+  </head>
+  <body data-variant="seeded">
+    <header>
+      <nav aria-label="Main">
+        <a class="nav-link" href="{{./|fixed.html}}">Dashboard</a>
+        <a class="nav-link" href="{{users.html|users.html?fixed}}">Users</a>
+        <a class="nav-link" href="{{billing.html|billing.html?fixed}}">Billing</a>
+        <a class="nav-link" href="{{reports.html|reports.html?fixed}}" aria-current="page">Reports</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Reports</h1>
+      <section class="card" aria-labelledby="list-title">
+        <h2 id="list-title">Reports list</h2>
+        <div class="row">
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

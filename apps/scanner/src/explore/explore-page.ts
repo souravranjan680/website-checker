@@ -15,6 +15,8 @@ import axe from 'axe-core';
 import type { Page } from 'playwright';
 import { STABILIZE_CSS } from '../audits/visual';
 import type { PageNetworkLog } from '../checks/collectors';
+import { runExtraChecksInPage } from '../checks/dom';
+import { extraFindingDrafts } from '../extra-issues';
 import { classifyConsoleMessage } from '../checks/console-classify';
 import {
   axeToDrafts,
@@ -55,6 +57,8 @@ export interface ExplorationResult {
 const SETTLE_MS = 300;
 const MAX_RELOADS = 5;
 const MAX_LAYER_AXE_RUNS = 10;
+/** Milestone 2 layout checks on opened layers (same cap as the accessibility runs). */
+const MAX_LAYER_LAYOUT_RUNS = 10;
 
 /** Calls window.__whcDomChecks.explore.<fn>(...args) inside the page. */
 function call<T>(page: Page, fn: string, ...args: unknown[]): Promise<T> {
@@ -150,6 +154,13 @@ export async function explorePage(params: {
       rule.nodes.map((node) => `${rule.id}|${axeSelector(node.target)}`),
     ),
   );
+  // Likewise for the Milestone 2 layout problems already on the page.
+  const knownLayout = new Set(
+    (
+      await runExtraChecksInPage(page, { layout: true }).catch(() => ({ findings: [] }))
+    ).findings.map((f) => `${f.check}|${f.selector}`),
+  );
+  let layerLayoutRuns = 0;
 
   // ---------------------------------------------------------- navigation facts
   const nav = await call<{ brokenAnchors: BrokenAnchor[]; navMismatches: NavMismatch[] }>(
@@ -426,6 +437,36 @@ export async function explorePage(params: {
           knownViolations.add(`${draft.ruleId}|${draft.selector}`);
           drafts.push(draft);
         }
+      }
+    }
+
+    // Layout of the opened content (Milestone 2; only problems not already on the page).
+    // Cut-off layers are LAYER_CLIPPED above, so FIXED_OUT_OF_VIEWPORT is not repeated.
+    for (const layer of layers) {
+      if (layerLayoutRuns >= MAX_LAYER_LAYOUT_RUNS) break;
+      layerLayoutRuns += 1;
+      const layout = await runExtraChecksInPage(
+        page,
+        { layout: true },
+        `window.__whcDomChecks.explore.element(${layer.id})`,
+      ).catch(() => null);
+      const fresh = (layout?.findings ?? []).filter(
+        (f) => f.check !== 'FIXED_OUT_OF_VIEWPORT' && !knownLayout.has(`${f.check}|${f.selector}`),
+      );
+      for (const draft of extraFindingDrafts(fresh, ctx, 'UI_HEALTH')) {
+        draft.description = `${draft.description} Found after opening ${label}.`;
+        draft.details = {
+          ...(draft.details ?? {}),
+          interactionState: { opened: control.name, controlSelector: control.selector },
+        };
+        draft.fingerprint = fingerprint({
+          ...ctx,
+          category: 'UI_HEALTH',
+          ruleId: draft.ruleId,
+          target: `${draft.selector ?? ''}|opened:${control.selector}`,
+        });
+        knownLayout.add(`${draft.uiHealth?.checkType}|${draft.selector}`);
+        drafts.push(draft);
       }
     }
 

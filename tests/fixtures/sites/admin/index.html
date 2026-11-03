@@ -1,0 +1,90 @@
+<!doctype html>
+<!--
+  Component consistency fixture (Phase 9, Milestone 2): an admin dashboard (4 pages).
+  Seeded problems; /admin/fixed.html is the corrected twin (its links go to the
+  corrected subpages, "?fixed"):
+    A1  one "Open" button in the queue has its own inline padding (strong evidence)
+    A2  the "City" filter field is rounded differently by a page rule (an observation)
+    A3  billing.html restyles every .btn on that page (different from the other pages)
+  Negative controls (must stay silent):
+    primary and danger variants, a pressed and a disabled button, buttons in a table,
+    three chips of different sizes (a group too small to compare), a button whose label
+    wraps to two lines, and the current item of the navigation.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin fixture page</title>
+    <link rel="stylesheet" href="/admin/styles.css" />
+    <style>
+      body[data-variant='seeded'] .field[name='city'] { border-radius: 14px; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <header>
+      <nav aria-label="Main">
+        <a class="nav-link" href="{{./|fixed.html}}" aria-current="page">Dashboard</a>
+        <a class="nav-link" href="{{users.html|users.html?fixed}}">Users</a>
+        <a class="nav-link" href="{{billing.html|billing.html?fixed}}">Billing</a>
+        <a class="nav-link" href="{{reports.html|reports.html?fixed}}">Reports</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Dashboard</h1>
+      <form class="filters" role="search" aria-label="Filter the queue">
+        <div><label for="f-name">Name</label><input class="field" id="f-name" name="name" /></div>
+        <div><label for="f-team">Team</label><input class="field" id="f-team" name="team" /></div>
+        <div><label for="f-role">Role</label><input class="field" id="f-role" name="role" /></div>
+        <div><label for="f-city">City</label><input class="field" id="f-city" name="city" /></div>
+        <div><label for="f-tag">Tag</label><input class="field" id="f-tag" name="tag" /></div>
+      </form>
+
+      <section class="card" aria-labelledby="queue-title">
+        <h2 id="queue-title">Review queue</h2>
+        <div class="row">
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button" style="{{padding: 18px 30px|}}">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button">Open</button>
+          <button class="btn" type="button" style="max-width: 120px">Open the full review history</button>
+          <button class="btn" type="button" aria-pressed="true">Pinned</button>
+          <button class="btn" type="button" disabled>Locked</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="actions-title">
+        <h2 id="actions-title">Actions</h2>
+        <div class="row">
+          <button class="btn btn-primary" type="button">Invite</button>
+          <button class="btn btn-primary" type="button">Assign</button>
+          <button class="btn btn-primary" type="button">Review</button>
+          <button class="btn btn-primary" type="button">Share</button>
+          <button class="btn btn-danger" type="button">Remove</button>
+          <button class="btn btn-danger" type="button">Revoke</button>
+          <button class="btn btn-danger" type="button">Block</button>
+          <button class="btn btn-danger" type="button">Delete</button>
+        </div>
+        <div class="row" style="margin-top: 12px">
+          <button class="chip small" type="button">tiny</button>
+          <button class="chip" type="button">normal</button>
+          <button class="chip large" type="button">large</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="table-title">
+        <h2 id="table-title">Recent members</h2>
+        <table>
+          <tr><th>Name</th><th>Details</th></tr>
+          <tr><td>Ada</td><td><button class="btn" type="button">View</button></td></tr>
+          <tr><td>Grace</td><td><button class="btn" type="button">View</button></td></tr>
+          <tr><td>Linus</td><td><button class="btn" type="button">View</button></td></tr>
+          <tr><td>Margaret</td><td><button class="btn" type="button">View</button></td></tr>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
