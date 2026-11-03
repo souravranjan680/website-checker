@@ -2,7 +2,7 @@
   "fixture": "storyblok",
   "startPath": "/storyblok/",
   "scan": { "maxPages": 1, "maxDepth": 0, "responsivePageLimit": 0 },
-  "scoredCategories": ["UI_HEALTH"],
+  "scoredCategories": ["UI_HEALTH", "FUNCTIONAL"],
   "expected": [
     {
       "id": "integration-missing-access-token",

@@ -84,6 +84,8 @@ export function testScannerConfig(
     lighthouseTimeoutMs: 90_000,
     // Visual snapshots add a few seconds per page; tests that need them turn them on.
     visualPages: 0,
+    maxExplorationPages: 5,
+    maxExplorationControls: 30,
     retentionDays: 0,
     headless: true,
     ...overrides,
@@ -122,6 +124,9 @@ export async function createScanFor(
     maxDepth: number;
     responsivePageLimit: number;
     respectRobotsTxt: boolean;
+    explorationEnabled: boolean;
+    explorationPageLimit: number;
+    explorationControlLimit: number;
   }> = {},
   existingWebsiteId?: string,
 ): Promise<{ scanId: string; websiteId: string }> {
@@ -148,6 +153,9 @@ export async function createScanFor(
         maxDepth: website.maxDepth ?? 2,
         responsivePageLimit: website.responsivePageLimit ?? 1,
         respectRobotsTxt: website.respectRobotsTxt ?? true,
+        explorationEnabled: website.explorationEnabled ?? true,
+        explorationPageLimit: website.explorationPageLimit ?? 5,
+        explorationControlLimit: website.explorationControlLimit ?? 30,
       },
     });
     websiteId = created.id;

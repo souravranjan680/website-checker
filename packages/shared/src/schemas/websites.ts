@@ -27,6 +27,10 @@ export const websiteSettingsSchema = z.object({
   respectRobotsTxt: z.boolean(),
   responsivePageLimit: z.number().int().min(0).max(10, 'Maximum is 10.'),
   lighthousePageLimit: z.number().int().min(0).max(5, 'Maximum is 5.'),
+  /** Safe explorer (Phase 9): opens menus, tabs and expandable sections. */
+  explorationEnabled: z.boolean(),
+  explorationPageLimit: z.number().int().min(0).max(10, 'Maximum is 10.'),
+  explorationControlLimit: z.number().int().min(1, 'Minimum is 1.').max(50, 'Maximum is 50.'),
 });
 
 export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
@@ -37,6 +41,9 @@ export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
   respectRobotsTxt: true,
   responsivePageLimit: 3,
   lighthousePageLimit: 1,
+  explorationEnabled: true,
+  explorationPageLimit: 5,
+  explorationControlLimit: 30,
 };
 
 const authorizationSchema = z.literal(true, {

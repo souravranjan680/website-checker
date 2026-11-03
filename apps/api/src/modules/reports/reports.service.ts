@@ -1,9 +1,10 @@
-import type { Prisma, PrismaClient } from '@whc/db';
+import { Prisma, type PrismaClient } from '@whc/db';
 import {
   SEVERITIES,
   VIEWPORTS,
   WCAG_CRITERIA,
   type AccessibilityReportDto,
+  type FunctionalReportDto,
   type ConsoleKindName,
   type ManualCheckState,
   type PerformanceReportDto,
@@ -551,6 +552,98 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
      * We return whatever REAL rows exist (none yet) and say so plainly.
      */
     /** Passive security configuration: findings by level, TLS / redirect facts, header matrix. */
+    /**
+     * What the safe explorer (Phase 9) did and found: findings per check, and per page
+     * the controls it explored, what it skipped (and why) and what it blocked.
+     */
+    async functional(user: AuthUser, scanId: string): Promise<FunctionalReportDto> {
+      const { info } = await scanInfo(user, scanId);
+      const [issues, openState, pages] = await Promise.all([
+        prisma.issue.findMany({
+          where: { scanId, category: 'FUNCTIONAL' },
+          select: {
+            severity: true,
+            classification: true,
+            functional: { select: { checkType: true } },
+          },
+        }),
+        prisma.issue.count({
+          where: {
+            scanId,
+            category: 'ACCESSIBILITY',
+            details: { path: ['interactionState'], not: Prisma.AnyNull },
+          },
+        }),
+        prisma.scanPage.findMany({
+          where: { scanId, exploration: { not: Prisma.AnyNull } },
+          orderBy: { createdAt: 'asc' },
+          select: { url: true, exploration: true },
+        }),
+      ]);
+      const checks = new Map<string, FunctionalReportDto['checks'][number]>();
+      for (const issue of issues) {
+        const type = issue.functional?.checkType ?? 'OTHER';
+        const entry = checks.get(type) ?? {
+          checkType: type,
+          count: 0,
+          highestSeverity: issue.severity,
+          byClassification: {},
+        };
+        entry.count += 1;
+        if (RANK[issue.severity] > RANK[entry.highestSeverity])
+          entry.highestSeverity = issue.severity;
+        entry.byClassification[issue.classification] =
+          (entry.byClassification[issue.classification] ?? 0) + 1;
+        checks.set(type, entry);
+      }
+      type Summary = Partial<{
+        explored: number;
+        eligible: number;
+        error: string;
+        stoppedEarly: string | null;
+        controls: { name: string; kind: string; result: string }[];
+        skipped: { name: string; role: string; reason: string }[];
+        skippedCounts: Record<string, number>;
+        blocked: { kind: string; method?: string; url?: string; detail?: string }[];
+      }>;
+      const rows = pages.map((page) => {
+        const summary = (page.exploration ?? {}) as Summary;
+        return {
+          url: page.url,
+          explored: summary.explored ?? 0,
+          eligible: summary.eligible ?? 0,
+          error: summary.error ?? null,
+          stoppedEarly: summary.stoppedEarly ?? null,
+          controls: summary.controls ?? [],
+          // Selectors stay in the database; the report shows names and reasons.
+          skipped: (summary.skipped ?? []).map(({ name, role, reason }) => ({
+            name,
+            role,
+            reason,
+          })),
+          skippedCounts: summary.skippedCounts ?? {},
+          blocked: summary.blocked ?? [],
+        };
+      });
+      return {
+        scan: info,
+        checks: [...checks.values()].sort(
+          (a, b) => RANK[b.highestSeverity] - RANK[a.highestSeverity] || b.count - a.count,
+        ),
+        openStateAccessibilityIssues: openState,
+        totals: {
+          pagesExplored: rows.filter((r) => !r.error).length,
+          controlsExplored: rows.reduce((n, r) => n + r.explored, 0),
+          controlsSkipped: rows.reduce(
+            (n, r) => n + Object.values(r.skippedCounts).reduce((a, b) => a + b, 0),
+            0,
+          ),
+          actionsBlocked: rows.reduce((n, r) => n + r.blocked.length, 0),
+        },
+        pages: rows,
+      };
+    },
+
     async security(user: AuthUser, scanId: string): Promise<SecurityReportDto> {
       const { scan, info } = await scanInfo(user, scanId);
       const [issues, pages] = await Promise.all([

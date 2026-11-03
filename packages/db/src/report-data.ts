@@ -5,7 +5,14 @@ export async function loadReportData(
   prisma: PrismaClient,
   scanId: string,
   options: {
-    category?: 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
+    category?:
+      | 'ACCESSIBILITY'
+      | 'UI_HEALTH'
+      | 'RESPONSIVE'
+      | 'PERFORMANCE'
+      | 'SEO'
+      | 'SECURITY'
+      | 'FUNCTIONAL';
     maxIssues?: number;
   } = {},
 ) {

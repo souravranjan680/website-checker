@@ -20,7 +20,20 @@ import { pathOf } from './crawler/urls';
 export { SEVERITY_RANK, wcagFromTags } from '@whc/dom-checks';
 export type { Severity, UiCheckType } from '@whc/dom-checks';
 export type Category =
-  'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
+  'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY' | 'FUNCTIONAL';
+
+/** Interaction and navigation checks of the safe explorer (Phase 9, Milestone 1). */
+export type FunctionalCheck =
+  | 'CONTROL_NO_EFFECT'
+  | 'LAYER_CLIPPED'
+  | 'LAYER_OCCLUDED'
+  | 'LAYER_BLANK_AREA'
+  | 'LAYER_NOT_DISMISSIBLE'
+  | 'ESCAPE_NOT_SUPPORTED'
+  | 'TAB_PANEL_NOT_SHOWN'
+  | 'INTERACTION_ERROR'
+  | 'BROKEN_ANCHOR'
+  | 'NAV_CURRENT_MISMATCH';
 
 /** An issue found during a scan, before it is saved. */
 export interface IssueDraft {
@@ -56,6 +69,15 @@ export interface IssueDraft {
     measurements?: Record<string, unknown>;
   };
   seo?: { checkType: string; expected: string | null; actual: string | null };
+  functional?: {
+    checkType: FunctionalCheck;
+    /** Set by the explorer for every functional finding (see classifyDraft). */
+    classification: FindingClassification;
+    controlName: string | null;
+    controlRole: string | null;
+    controlSelector: string | null;
+    interaction: Record<string, unknown> | null;
+  };
   security?: {
     checkType: string;
     findingLevel: 'OBSERVATION' | 'WARNING' | 'CONFIRMED';
@@ -98,6 +120,8 @@ const RESOURCE_CHECKS = new Set<UiCheckType>([
  * Human decisions (confirmed, intentional) are separate: TrackedIssue.reviewStatus.
  */
 export function classifyDraft(draft: IssueDraft): FindingClassification {
+  // Interaction findings are classified by the explorer, which has the evidence.
+  if (draft.functional) return draft.functional.classification;
   if (draft.accessibility) {
     return draft.accessibility.detection === 'AUTOMATED' ? 'DETECTED' : 'INCONCLUSIVE';
   }
@@ -198,6 +222,90 @@ export function axeToDrafts(
 }
 
 // ------------------------------------------------------------- UI checks
+
+const FUNCTIONAL_TEXT: Record<FunctionalCheck, { title: string; fix: string }> = {
+  CONTROL_NO_EFFECT: {
+    title: 'Control does nothing when used',
+    fix: 'Check the control’s click handler and what it should open. If it opens a menu or section, make sure that content becomes visible and aria-expanded reflects the state.',
+  },
+  LAYER_CLIPPED: {
+    title: 'Opened menu or panel is cut off',
+    fix: 'A container with overflow: hidden, or the window edge, cuts the opened content. Position the layer outside the clipping container (e.g. render it at the end of <body>) or let it flip/shift to stay inside the window.',
+  },
+  LAYER_OCCLUDED: {
+    title: 'Items of an opened menu are hidden behind other content',
+    fix: 'Another element covers part of the opened layer. Give the layer a higher stacking order (z-index in the right stacking context) or move the covering element.',
+  },
+  LAYER_BLANK_AREA: {
+    title: 'Opened menu or panel has a large empty area',
+    fix: 'Check for missing content (failed data, an empty list) or a fixed height that is too large for its contents.',
+  },
+  LAYER_NOT_DISMISSIBLE: {
+    title: 'Opened menu cannot be closed',
+    fix: 'Let users close the menu with Escape, by clicking outside it, and by using the control again.',
+  },
+  ESCAPE_NOT_SUPPORTED: {
+    title: 'Opened menu does not close with Escape',
+    fix: 'Close menus and pop-ups when Escape is pressed and return focus to the control that opened them (WAI-ARIA menu pattern).',
+  },
+  TAB_PANEL_NOT_SHOWN: {
+    title: 'Selected tab does not show its panel',
+    fix: 'When a tab becomes selected, show the panel named by its aria-controls (and hide the others).',
+  },
+  INTERACTION_ERROR: {
+    title: 'JavaScript error while using a control',
+    fix: 'Open developer tools, use the control and fix the error. Errors during interactions often leave menus or panels half-working.',
+  },
+  BROKEN_ANCHOR: {
+    title: 'Link points to a section that does not exist',
+    fix: 'Add an element with the matching id to the page, or correct the link’s #fragment.',
+  },
+  NAV_CURRENT_MISMATCH: {
+    title: 'Navigation marks the wrong page as current',
+    fix: 'Mark the item of the page being shown as current (aria-current="page" and the "active" style), not another item.',
+  },
+};
+
+/** A finding of the safe explorer (Phase 9). Fingerprinted by check + control. */
+export function functionalDraft(
+  check: FunctionalCheck,
+  ctx: IssueContext,
+  values: {
+    severity: Severity;
+    classification: FindingClassification;
+    description: string;
+    control: { name: string; role: string; selector: string; html?: string | null } | null;
+    box?: Box | null;
+    interaction?: Record<string, unknown> | null;
+    target: string;
+  },
+): IssueDraft {
+  const ruleId = `functional/${check.toLowerCase().replace(/_/g, '-')}`;
+  return {
+    id: randomUUID(),
+    category: 'FUNCTIONAL',
+    severity: values.severity,
+    ruleId,
+    title: FUNCTIONAL_TEXT[check].title,
+    description: values.description,
+    pageUrl: ctx.pageUrl,
+    viewport: ctx.viewport,
+    selector: values.control?.selector ?? null,
+    htmlSnippet: truncate(values.control?.html, 2000),
+    boundingBox: values.box ?? null,
+    suggestedFix: FUNCTIONAL_TEXT[check].fix,
+    details: values.interaction ?? null,
+    fingerprint: fingerprint({ ...ctx, category: 'FUNCTIONAL', ruleId, target: values.target }),
+    functional: {
+      checkType: check,
+      classification: values.classification,
+      controlName: values.control?.name ?? null,
+      controlRole: values.control?.role ?? null,
+      controlSelector: values.control?.selector ?? null,
+      interaction: values.interaction ?? null,
+    },
+  };
+}
 
 export function uiDraft(
   check: UiCheckType,

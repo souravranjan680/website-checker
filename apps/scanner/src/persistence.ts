@@ -97,6 +97,18 @@ export async function saveIssues(
           measurements: json(d.uiHealth!.measurements),
         })),
     }),
+    prisma.functionalIssue.createMany({
+      data: drafts
+        .filter((d) => d.functional)
+        .map((d) => ({
+          issueId: d.id,
+          checkType: d.functional!.checkType,
+          controlName: d.functional!.controlName,
+          controlRole: d.functional!.controlRole,
+          controlSelector: d.functional!.controlSelector,
+          interaction: json(d.functional!.interaction),
+        })),
+    }),
     prisma.sEOIssue.createMany({
       data: drafts
         .filter((d) => d.seo)

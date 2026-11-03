@@ -68,6 +68,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   PERFORMANCE: 'Performance',
   SEO: 'SEO',
   SECURITY: 'Security',
+  FUNCTIONAL: 'Interactions',
 };
 
 const CATEGORY_CONFIG = {

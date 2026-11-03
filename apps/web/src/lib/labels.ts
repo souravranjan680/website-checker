@@ -29,6 +29,21 @@ export const CATEGORY_LABEL: Record<string, string> = {
   PERFORMANCE: 'Performance',
   SEO: 'SEO',
   SECURITY: 'Security',
+  FUNCTIONAL: 'Interactions',
+};
+
+/** Interaction and navigation checks of the safe explorer (Phase 9). */
+export const FUNCTIONAL_CHECK_LABEL: Record<string, string> = {
+  CONTROL_NO_EFFECT: 'Control does nothing',
+  LAYER_CLIPPED: 'Opened menu cut off',
+  LAYER_OCCLUDED: 'Menu items covered',
+  LAYER_BLANK_AREA: 'Large empty area',
+  LAYER_NOT_DISMISSIBLE: 'Menu cannot be closed',
+  ESCAPE_NOT_SUPPORTED: 'Escape does not close',
+  TAB_PANEL_NOT_SHOWN: 'Tab panel not shown',
+  INTERACTION_ERROR: 'Error while interacting',
+  BROKEN_ANCHOR: 'Link to missing section',
+  NAV_CURRENT_MISMATCH: 'Wrong current page in navigation',
 };
 
 export const BUG_STATUS_LABEL: Record<string, string> = {

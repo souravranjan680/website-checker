@@ -101,6 +101,10 @@ export interface WebsiteDto {
   respectRobotsTxt: boolean;
   responsivePageLimit: number;
   lighthousePageLimit: number;
+  /** Safe explorer settings (Phase 9). */
+  explorationEnabled: boolean;
+  explorationPageLimit: number;
+  explorationControlLimit: number;
   verificationStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED';
   authorizationConfirmedAt: string;
   myRole: ProjectRole;

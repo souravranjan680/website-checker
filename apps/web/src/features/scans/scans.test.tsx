@@ -124,6 +124,7 @@ const issue: IssueDto = {
   },
   uiHealth: null,
   seo: null,
+  functional: null,
   security: null,
 };
 

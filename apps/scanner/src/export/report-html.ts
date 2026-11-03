@@ -20,6 +20,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   PERFORMANCE: 'Performance',
   SEO: 'SEO',
   SECURITY: 'Security',
+  FUNCTIONAL: 'Interactions and navigation',
 };
 
 /** Security finding levels in words (passive checks; nothing was exploited). */

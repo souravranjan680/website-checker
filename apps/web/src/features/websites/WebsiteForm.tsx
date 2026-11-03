@@ -60,6 +60,13 @@ function buildSchema(needsAuthorization: (baseUrl: string) => boolean) {
         .number(numberError)
         .pipe(websiteSettingsSchema.shape.lighthousePageLimit),
       respectRobotsTxt: z.boolean(),
+      explorationEnabled: z.boolean(),
+      explorationPageLimit: z
+        .number(numberError)
+        .pipe(websiteSettingsSchema.shape.explorationPageLimit),
+      explorationControlLimit: z
+        .number(numberError)
+        .pipe(websiteSettingsSchema.shape.explorationControlLimit),
       includePatterns: patternsText,
       excludePatterns: patternsText,
       authorizationConfirmed: z.boolean(),
@@ -86,6 +93,9 @@ export interface WebsiteSubmitValues {
   responsivePageLimit: number;
   lighthousePageLimit: number;
   respectRobotsTxt: boolean;
+  explorationEnabled: boolean;
+  explorationPageLimit: number;
+  explorationControlLimit: number;
   includePatterns: string[];
   excludePatterns: string[];
   authorizationConfirmed: boolean;
@@ -137,6 +147,9 @@ export function WebsiteForm({
       responsivePageLimit: settings.responsivePageLimit,
       lighthousePageLimit: settings.lighthousePageLimit,
       respectRobotsTxt: settings.respectRobotsTxt,
+      explorationEnabled: settings.explorationEnabled,
+      explorationPageLimit: settings.explorationPageLimit,
+      explorationControlLimit: settings.explorationControlLimit,
       includePatterns: settings.includePatterns.join('\n'),
       excludePatterns: settings.excludePatterns.join('\n'),
       authorizationConfirmed: false,
@@ -166,6 +179,8 @@ export function WebsiteForm({
           'maxPages',
           'responsivePageLimit',
           'lighthousePageLimit',
+          'explorationPageLimit',
+          'explorationControlLimit',
           'includePatterns',
           'excludePatterns',
           'authorizationConfirmed',
@@ -251,6 +266,28 @@ export function WebsiteForm({
             label="Respect robots.txt"
             description="Skip pages the site asks crawlers not to visit."
           />
+          <CheckboxField
+            control={form.control}
+            name="explorationEnabled"
+            label="Explore menus, tabs and expandable sections"
+            description="Opens them on the first pages to find menus that are cut off, covered or cannot be closed. It never submits forms or uses controls that could change data, and blocks sending data while it works."
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <NumberField
+              control={form.control}
+              name="explorationPageLimit"
+              label="Pages explored"
+              min={0}
+              max={10}
+            />
+            <NumberField
+              control={form.control}
+              name="explorationControlLimit"
+              label="Controls opened per page"
+              min={1}
+              max={50}
+            />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <TextareaField
               control={form.control}

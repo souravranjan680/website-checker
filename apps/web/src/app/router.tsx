@@ -29,6 +29,7 @@ import { PerformanceReport } from '@/features/reports/PerformanceReport';
 import { ReportsLayout } from '@/features/reports/ReportsLayout';
 import { ResponsiveReport } from '@/features/reports/ResponsiveReport';
 import { SecurityReport } from '@/features/reports/SecurityReport';
+import { FunctionalReport } from '@/features/reports/FunctionalReport';
 import { SeoReport } from '@/features/reports/SeoReport';
 import { UiHealthReport } from '@/features/reports/UiHealthReport';
 import { ScanCenterPage } from '@/features/scans/ScanCenterPage';
@@ -92,6 +93,7 @@ export const routes: RouteObject[] = [
                   { path: 'performance', element: <PerformanceReport /> },
                   { path: 'seo', element: <SeoReport /> },
                   { path: 'security', element: <SecurityReport /> },
+                  { path: 'interactions', element: <FunctionalReport /> },
                   { path: 'visual', element: <VisualReport /> },
                 ],
               },

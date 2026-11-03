@@ -1,0 +1,61 @@
+{
+  "fixture": "shop",
+  "startPath": "/shop/",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0
+  },
+  "scoredCategories": ["FUNCTIONAL", "ACCESSIBILITY", "UI_HEALTH"],
+  "expected": [
+    {
+      "id": "reviews-link-to-missing-section",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/broken-anchor",
+      "selector": "a:nth-of-type(2)",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "size-options-under-promotion-bar",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-occluded",
+      "selector": "#size-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "sort-list-large-empty-area",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-blank-area",
+      "selector": "#sort-btn",
+      "classification": ["OBSERVATION"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "colour-panel",
+      "reason": "overlaps the product grid on purpose, on top of it",
+      "selectors": ["#colour-btn"]
+    },
+    {
+      "id": "mini-cart",
+      "reason": "a working panel",
+      "selectors": ["#cart-btn"]
+    },
+    {
+      "id": "specifications-link",
+      "reason": "points to an existing section",
+      "selectors": ["a:nth-of-type(1)"]
+    },
+    {
+      "id": "back-to-top",
+      "reason": "#top is valid by the HTML standard",
+      "selectors": ["a:nth-of-type(3)"]
+    },
+    {
+      "id": "shipping-details",
+      "reason": "a working <details> section",
+      "selectors": ["details > summary", "summary"]
+    }
+  ],
+  "forbiddenTokens": ["Trail runner", "Free delivery this week", "Running shoes"]
+}

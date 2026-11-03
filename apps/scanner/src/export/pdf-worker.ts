@@ -18,7 +18,14 @@ export interface CopyBaselineJobData {
 
 export interface PdfJobData {
   scanId: string;
-  category?: 'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY';
+  category?:
+    | 'ACCESSIBILITY'
+    | 'UI_HEALTH'
+    | 'RESPONSIVE'
+    | 'PERFORMANCE'
+    | 'SEO'
+    | 'SECURITY'
+    | 'FUNCTIONAL';
 }
 
 /** Issues loaded into a PDF, and how many of them get an embedded screenshot. */

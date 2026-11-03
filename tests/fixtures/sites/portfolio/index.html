@@ -1,0 +1,109 @@
+<!doctype html>
+<!--
+  Generic fixture: a personal portfolio (Phase 9). data-variant="seeded" on <body>
+  switches on the seeded defects; /portfolio/fixed.html is the corrected twin.
+
+  Seeded defects (seeded variant only):
+    P1 the "Contact" navigation link points to #contact, which does not exist
+    P2 "Read more" says it expanded (aria-expanded="true") but its text stays hidden
+    P3 the "Filter projects" panel opens past the right edge of the window
+  Negative controls (both variants): the "Menu" toggle, the "Awards" <details>, the
+  "Show more projects" disclosure that pushes content down, "Skip to content" (#main).
+  Safety trap (both variants): "Send message" in the contact form.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: Portfolio of Sam Lee</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #111; background: #fff; }
+      header { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; }
+      header nav a { margin-right: 12px; color: #1d4ed8; }
+      main { padding: 0 16px 16px; }
+      button { font: inherit; color: #111; }
+      .wrap { position: relative; }
+      .filters { position: absolute; top: 100%; right: 0; width: 280px; background: #fff; border: 1px solid #555; padding: 8px; z-index: 10; }
+      [data-variant='seeded'] .filters { right: auto; left: 0; }
+      .toolbar { display: flex; justify-content: flex-end; }
+      .menu-panel { border: 1px solid #555; padding: 8px; }
+      .skip { position: absolute; left: -999px; }
+      .skip:focus { left: 8px; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <a class="skip" href="#main">Skip to content</a>
+    <header>
+      <nav aria-label="Sections">
+        <a href="#work">Work</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+      </nav>
+      <div>
+        <button type="button" id="menu-btn" aria-expanded="false" aria-controls="menu-panel">Menu</button>
+        <div class="menu-panel" id="menu-panel" hidden><p>Résumé, talks and writing.</p></div>
+      </div>
+    </header>
+    <main id="main">
+      <h1>Sam Lee, product designer</h1>
+      <section id="work">
+        <h2>Work</h2>
+        <div class="toolbar">
+          <div class="wrap">
+            <button type="button" id="filter-btn" aria-expanded="false" aria-controls="filter-panel">Filter projects</button>
+            <div class="filters" id="filter-panel" role="group" aria-label="Project filters" hidden>
+              <label><input type="checkbox" /> Mobile apps</label>
+              <label><input type="checkbox" /> Websites</label>
+            </div>
+          </div>
+        </div>
+        <article>
+          <h3>Banking app redesign</h3>
+          <p>A calmer way to manage money.</p>
+          <button type="button" id="read-btn" aria-expanded="false" aria-controls="read-panel">Read more</button>
+          <div id="read-panel" hidden><p>Research with 40 users led to a simpler home screen.</p></div>
+        </article>
+        <button type="button" id="projects-btn" aria-expanded="false" aria-controls="projects-panel">Show more projects</button>
+        <div id="projects-panel" hidden>
+          <article><h3>Museum website</h3><p>Accessible ticketing.</p></article>
+        </div>
+      </section>
+      <section id="about">
+        <h2>About</h2>
+        <details>
+          <summary>Awards</summary>
+          <p>Design award 2025.</p>
+        </details>
+      </section>
+      <section id="get-in-touch">
+        <h2>Get in touch</h2>
+        <form action="/trap/message" method="post">
+          <label for="msg">Message</label>
+          <textarea id="msg" name="msg"></textarea>
+          <button type="submit">Send message</button>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const seeded = document.body.dataset.variant === 'seeded';
+      const $ = (id) => document.getElementById(id);
+      // P1: the fixed variant names the contact section the way the link expects.
+      if (!seeded) $('get-in-touch').id = 'contact';
+      const toggle = (button, panel) => {
+        const open = panel.hidden;
+        button.setAttribute('aria-expanded', String(open));
+        panel.hidden = !open;
+      };
+      $('menu-btn').addEventListener('click', () => toggle($('menu-btn'), $('menu-panel')));
+      $('filter-btn').addEventListener('click', () => toggle($('filter-btn'), $('filter-panel')));
+      $('projects-btn').addEventListener('click', () => toggle($('projects-btn'), $('projects-panel')));
+      // P2: the seeded variant only flips aria-expanded
+      $('read-btn').addEventListener('click', () => {
+        const open = $('read-btn').getAttribute('aria-expanded') !== 'true';
+        $('read-btn').setAttribute('aria-expanded', String(open));
+        if (!seeded) $('read-panel').hidden = !open;
+      });
+    </script>
+  </body>
+</html>

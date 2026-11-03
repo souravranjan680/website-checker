@@ -5,6 +5,7 @@ import type {
   PerformanceReportDto,
   ResponsiveReportDto,
   SecurityReportDto,
+  FunctionalReportDto,
   SeoReportDto,
   UiHealthReportDto,
 } from '@whc/shared';
@@ -39,6 +40,13 @@ export function useSeoReport(scanId: string) {
   return useQuery({
     queryKey: reportKeys.report(scanId, 'seo'),
     queryFn: () => apiData<SeoReportDto>(`/api/reports/${scanId}/seo`),
+  });
+}
+
+export function useFunctionalReport(scanId: string) {
+  return useQuery({
+    queryKey: reportKeys.report(scanId, 'functional'),
+    queryFn: () => apiData<FunctionalReportDto>(`/api/reports/${scanId}/functional`),
   });
 }
 

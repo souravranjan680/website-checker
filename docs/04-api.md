@@ -338,3 +338,13 @@ Details, rules and limits: [13-phase-6-advanced-audits.md](13-phase-6-advanced-a
 | `GET/PATCH/DELETE /api/bug-reports/:id` · `GET /api/bug-reports/:id/export?format=markdown|jira|json` | Read, edit, delete, export |
 | `GET /api/ai/status` · `GET /api/ai/issues/:id` · `POST /api/ai/issues/:id/explain` | AI status, saved explanation, explain (rate limited) |
 | `GET /api/notifications` · `GET …/unread-count` · `POST …/:id/read` · `POST …/read-all` | The user's notifications |
+
+## Phase 9, Milestone 1 endpoints (implemented)
+
+Details, safety rules and limits: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#5-milestone-1-the-safe-interaction-explorer-complete).
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/reports/:scanId/functional` | Interactions report: findings per check, explored / skipped (with reasons) / blocked actions per page, open-state accessibility count |
+| `POST /api/websites` · `PUT /api/websites/:id` | Also accept `explorationEnabled` (default `true`), `explorationPageLimit` (0–10, default 5) and `explorationControlLimit` (1–50, default 30) |
+| Issue DTOs | New category `FUNCTIONAL` (filters, exports) and `functional: { checkType, controlName, controlRole, controlSelector, interaction }` |

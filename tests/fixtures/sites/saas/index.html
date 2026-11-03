@@ -1,0 +1,220 @@
+<!doctype html>
+<!--
+  Generic fixture: a SaaS dashboard (Phase 9). data-variant="seeded" switches on the
+  seeded defects; /saas/fixed.html serves this same page with data-variant="fixed"
+  (the corrected twin). Every control wired to /trap/* must never be used by the
+  explorer: the fixture server counts those requests.
+
+  Seeded defects (seeded variant only):
+    S1 navigation marks "Reports" as current on the dashboard page
+    S2 the Account menu is cut off by its header (overflow: hidden)
+    S3 the Account menu contains an icon button without a name (seen only when open)
+    S4 the Workspace menu cannot be closed (no Escape, no outside click, no toggle)
+    S5 the Notifications menu does not close with Escape (closes by clicking outside)
+    S6 the "Billing" tab does not show its panel
+    S7 "More filters" does nothing
+    S8 opening "Insights" throws a JavaScript error
+  Negative controls (both variants): Help menu (overlaps the page on purpose, closes with
+  Escape), "Activity" tab, "What's new" details, "Show more" disclosure.
+  Safety traps (both variants): Delete workspace (POST), Log out (navigation),
+  "Recent activity" (opening it sends a POST, a beacon and a cross-site fetch),
+  "Resources" (opening it tries a pop-up, a download and a WebSocket).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: SaaS dashboard</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #111; background: #fff; }
+      .topbar { display: flex; gap: 12px; align-items: center; padding: 8px 16px; background: #f3f4f6; position: relative; }
+      [data-variant='seeded'] .topbar { height: 48px; overflow: hidden; }
+      .wrap { position: relative; }
+      .menu { position: absolute; top: 100%; left: 0; z-index: 10; margin: 4px 0 0; padding: 8px; list-style: none; background: #fff; border: 1px solid #555; min-width: 200px; }
+      .menu button { display: block; width: 100%; text-align: left; padding: 6px 8px; background: none; border: 0; font: inherit; color: #111; }
+      .layout { display: flex; }
+      nav.side { width: 200px; padding: 16px; }
+      nav.side a { display: block; padding: 4px 0; color: #1d4ed8; }
+      nav.side a[aria-current='page'] { font-weight: 700; }
+      main { flex: 1; padding: 16px; }
+      button { font: inherit; color: #111; }
+      [role='tablist'] { display: flex; gap: 8px; }
+      .panel { border: 1px solid #555; padding: 8px; margin: 8px 0; }
+      .help-menu { position: absolute; top: 100%; right: 0; left: auto; width: 260px; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <header>
+      <div class="topbar">
+        <div class="wrap">
+          <button type="button" id="account-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu">Account</button>
+          <ul class="menu" id="account-menu" role="menu" hidden>
+            <li role="none"><button type="button" role="menuitem">Profile</button></li>
+            <li role="none"><button type="button" role="menuitem">Preferences</button></li>
+            <li role="none"><button type="button" role="menuitem" id="icon-item"><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" /></svg></button></li>
+          </ul>
+        </div>
+        <div class="wrap">
+          <button type="button" id="workspace-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-menu">Workspace</button>
+          <ul class="menu" id="workspace-menu" role="menu" hidden>
+            <li role="none"><button type="button" role="menuitem">Team</button></li>
+            <li role="none"><button type="button" role="menuitem">Members</button></li>
+          </ul>
+        </div>
+        <div class="wrap">
+          <button type="button" id="notify-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="notify-menu">Notifications</button>
+          <ul class="menu" id="notify-menu" role="menu" hidden>
+            <li role="none"><button type="button" role="menuitem">Mentions</button></li>
+            <li role="none"><button type="button" role="menuitem">Comments</button></li>
+          </ul>
+        </div>
+        <button type="button" id="delete-btn">Delete workspace</button>
+        <button type="button" id="logout-btn">Log out</button>
+      </div>
+    </header>
+    <div class="layout">
+      <nav class="side" aria-label="Main">
+        <a href="/saas/" id="nav-dashboard">Dashboard</a>
+        <a href="/saas/reports.html" id="nav-reports">Reports</a>
+        <a href="/saas/settings.html" id="nav-settings">Settings</a>
+      </nav>
+      <main>
+        <h1>Dashboard</h1>
+        <div class="wrap" style="display: inline-block">
+          <button type="button" id="help-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">Help</button>
+          <ul class="menu help-menu" id="help-menu" role="menu" hidden>
+            <li role="none"><button type="button" role="menuitem">Guides</button></li>
+            <li role="none"><button type="button" role="menuitem">Keyboard shortcuts</button></li>
+          </ul>
+        </div>
+
+        <h2>Projects</h2>
+        <div role="tablist" aria-label="Project views">
+          <button type="button" role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview">Overview</button>
+          <button type="button" role="tab" id="tab-activity" aria-selected="false" aria-controls="panel-activity">Activity</button>
+          <button type="button" role="tab" id="tab-billing" aria-selected="false" aria-controls="panel-billing">Billing</button>
+        </div>
+        <div class="panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview">Three active projects.</div>
+        <div class="panel" role="tabpanel" id="panel-activity" aria-labelledby="tab-activity" hidden>Two deployments today.</div>
+        <div class="panel" role="tabpanel" id="panel-billing" aria-labelledby="tab-billing" hidden>Plan: Team, renews monthly.</div>
+
+        <h2>Filters</h2>
+        <button type="button" id="filters-btn" aria-expanded="false" aria-controls="filters-panel">More filters</button>
+        <div class="panel" id="filters-panel" hidden>Owner, status and date filters.</div>
+
+        <button type="button" id="insights-btn" aria-expanded="false" aria-controls="insights-panel">Insights</button>
+        <div class="panel" id="insights-panel" hidden>Usage is up 4% this week.</div>
+
+        <button type="button" id="activity-btn" aria-expanded="false" aria-controls="activity-panel">Recent activity</button>
+        <div class="panel" id="activity-panel" hidden>Alex updated the roadmap.</div>
+
+        <button type="button" id="resources-btn" aria-expanded="false" aria-controls="resources-panel">Resources</button>
+        <div class="panel" id="resources-panel" hidden>Templates and examples.</div>
+
+        <details>
+          <summary>What's new</summary>
+          <p>Dark mode is available in Preferences.</p>
+        </details>
+
+        <button type="button" id="more-btn" aria-expanded="false" aria-controls="more-panel">Show more</button>
+        <div class="panel" id="more-panel" hidden>Archived projects: 4.</div>
+      </main>
+    </div>
+    <footer><p>Fixture SaaS footer.</p></footer>
+
+    <script>
+      const seeded = document.body.dataset.variant === 'seeded';
+      const $ = (id) => document.getElementById(id);
+      const show = (button, panel, open) => {
+        button.setAttribute('aria-expanded', String(open));
+        panel.hidden = !open;
+      };
+      const toggle = (button, panel) => show(button, panel, panel.hidden);
+
+      // S1: which navigation item is marked as the current page
+      (seeded ? $('nav-reports') : $('nav-dashboard')).setAttribute('aria-current', 'page');
+      // S3: the icon-only menu item has a name only in the fixed variant
+      if (!seeded) $('icon-item').setAttribute('aria-label', 'Sign-in history');
+
+      // Menus that close with Escape and by clicking outside (S2's Account menu, Help menu)
+      const closableMenu = (buttonId, menuId) => {
+        const button = $(buttonId);
+        const menu = $(menuId);
+        button.addEventListener('click', () => toggle(button, menu));
+        document.addEventListener('keydown', (e) => e.key === 'Escape' && show(button, menu, false));
+        document.addEventListener('click', (e) => {
+          if (!button.contains(e.target) && !menu.contains(e.target)) show(button, menu, false);
+        });
+      };
+      closableMenu('account-btn', 'account-menu');
+      closableMenu('help-btn', 'help-menu');
+
+      // S4: Workspace menu only opens (seeded); toggles and closes with Escape (fixed)
+      $('workspace-btn').addEventListener('click', () =>
+        seeded ? show($('workspace-btn'), $('workspace-menu'), true) : toggle($('workspace-btn'), $('workspace-menu')),
+      );
+      if (!seeded) {
+        document.addEventListener('keydown', (e) => e.key === 'Escape' && show($('workspace-btn'), $('workspace-menu'), false));
+      }
+
+      // S5: Notifications closes by clicking outside; Escape only in the fixed variant
+      $('notify-btn').addEventListener('click', () => toggle($('notify-btn'), $('notify-menu')));
+      document.addEventListener('click', (e) => {
+        if (!$('notify-btn').contains(e.target) && !$('notify-menu').contains(e.target)) show($('notify-btn'), $('notify-menu'), false);
+      });
+      if (!seeded) {
+        document.addEventListener('keydown', (e) => e.key === 'Escape' && show($('notify-btn'), $('notify-menu'), false));
+      }
+
+      // Tabs (S6: Billing's panel stays hidden in the seeded variant)
+      const tabs = ['overview', 'activity', 'billing'];
+      for (const name of tabs) {
+        $(`tab-${name}`).addEventListener('click', () => {
+          for (const other of tabs) {
+            $(`tab-${other}`).setAttribute('aria-selected', String(other === name));
+            $(`panel-${other}`).hidden = other !== name || (seeded && name === 'billing');
+          }
+        });
+      }
+
+      // S7: More filters does nothing in the seeded variant
+      if (!seeded) $('filters-btn').addEventListener('click', () => toggle($('filters-btn'), $('filters-panel')));
+
+      // S8: Insights opens, then throws (seeded)
+      $('insights-btn').addEventListener('click', () => {
+        toggle($('insights-btn'), $('insights-panel'));
+        if (seeded) {
+          const report = undefined;
+          report.render();
+        }
+      });
+
+      // Negative control: Show more
+      $('more-btn').addEventListener('click', () => toggle($('more-btn'), $('more-panel')));
+
+      // Safety traps: none of these may ever reach the server.
+      $('delete-btn').addEventListener('click', () => fetch('/trap/delete', { method: 'POST' }).catch(() => {}));
+      $('logout-btn').addEventListener('click', () => { location.href = '/trap/logout'; });
+      $('activity-btn').addEventListener('click', () => {
+        toggle($('activity-btn'), $('activity-panel'));
+        fetch('/trap/track', { method: 'POST', body: 'opened' }).catch(() => {});
+        navigator.sendBeacon('/trap/beacon', 'opened');
+        fetch('http://analytics.example.test/collect?e=open').catch(() => {});
+      });
+      $('resources-btn').addEventListener('click', () => {
+        toggle($('resources-btn'), $('resources-panel'));
+        window.open('/trap/popup', '_blank');
+        const link = document.createElement('a');
+        link.href = '/trap/report.csv';
+        link.download = 'report.csv';
+        document.body.append(link);
+        link.click();
+        link.remove();
+        try {
+          const socket = new WebSocket(`ws://${location.host}/trap/socket`);
+          socket.addEventListener('error', () => {});
+        } catch {}
+      });
+    </script>
+  </body>
+</html>

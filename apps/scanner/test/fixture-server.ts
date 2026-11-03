@@ -17,6 +17,13 @@ export interface FixtureServer {
   url: (pathname: string) => string;
   /** How many requests reached /secret (must stay 0: SSRF protection). */
   secretHits: () => number;
+  /**
+   * Safety counters for the explorer (Phase 9): every request that is not
+   * GET/HEAD/OPTIONS, every request to /trap/*, and every WebSocket upgrade.
+   * All must stay empty: fixture pages wire destructive actions to these.
+   */
+  safetyHits: () => { writes: string[]; traps: string[]; websockets: string[] };
+  resetSafetyHits: () => void;
   setToggleFixed: (fixed: boolean) => void;
   /** /visual/ shows a big banner when true (a real visual change). */
   setVisualChanged: (changed: boolean) => void;
@@ -31,11 +38,19 @@ export const THIRD_PARTY_HOST = 'widgets.thirdparty-cdn.test';
 
 export async function startFixtureServer(): Promise<FixtureServer> {
   let secretHits = 0;
+  const safety = { writes: [] as string[], traps: [] as string[], websockets: [] as string[] };
   let toggleFixed = false;
   let visualChanged = false;
   let port = 0;
 
   const server = http.createServer(async (req, res) => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET')) {
+      safety.writes.push(`${req.method} ${req.url}`);
+    }
+    if ((req.url ?? '').startsWith('/trap/')) {
+      safety.traps.push(`${req.method} ${req.url}`);
+      return void res.writeHead(200, { 'content-type': 'text/plain' }).end('trap');
+    }
     const url = new URL(req.url ?? '/', 'http://fixture');
     const send = (
       status: number,
@@ -152,6 +167,21 @@ export async function startFixtureServer(): Promise<FixtureServer> {
         return;
     }
 
+    // Corrected twin (Phase 9): the same page with its seeded defects switched off.
+    const twin = /^\/([\w-]+)\/fixed\.html$/.exec(url.pathname);
+    if (twin) {
+      try {
+        const body = await readFile(path.join(SITES, twin[1]!, 'index.html'), 'utf8');
+        return send(
+          200,
+          body
+            .replaceAll('__PORT__', String(port))
+            .replace('<body data-variant="seeded">', '<body data-variant="fixed">'),
+        );
+      } catch {
+        /* no such site: fall through to the 404 below */
+      }
+    }
     let file = path.normalize(path.join(SITES, decodeURIComponent(url.pathname)));
     if (!file.startsWith(SITES)) return send(403, 'forbidden', 'text/plain');
     if (url.pathname.endsWith('/')) file = path.join(file, 'index.html');
@@ -167,6 +197,10 @@ export async function startFixtureServer(): Promise<FixtureServer> {
     }
   });
 
+  server.on('upgrade', (req, socket) => {
+    safety.websockets.push(req.url ?? '');
+    socket.destroy();
+  });
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   port = (server.address() as AddressInfo).port;
 
@@ -174,6 +208,16 @@ export async function startFixtureServer(): Promise<FixtureServer> {
     port,
     url: (pathname) => `http://${FIXTURE_HOST}:${port}${pathname}`,
     secretHits: () => secretHits,
+    safetyHits: () => ({
+      writes: [...safety.writes],
+      traps: [...safety.traps],
+      websockets: [...safety.websockets],
+    }),
+    resetSafetyHits: () => {
+      safety.writes.length = 0;
+      safety.traps.length = 0;
+      safety.websockets.length = 0;
+    },
     setVisualChanged: (changed) => {
       visualChanged = changed;
     },

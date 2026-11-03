@@ -1,0 +1,144 @@
+<!doctype html>
+<!--
+  Generic fixture: an e-commerce product listing (Phase 9). data-variant="seeded" on
+  <body> switches on the seeded defects; /shop/fixed.html is the corrected twin.
+
+  Seeded defects (seeded variant only):
+    E1 the "Size" filter panel opens underneath the sticky promotion bar: its first
+       options are covered and cannot be clicked
+    E2 the "Sort by" list has a large empty area (a fixed minimum height)
+    E3 the "Reviews" link points to #reviews, which does not exist
+  Negative controls (both variants): "Colour" filter panel (overlaps the product grid on
+  purpose, on top of it), "Mini cart" panel, "Shipping details" <details>, "Back to top"
+  (#top is valid), "Specifications" link to an existing section.
+  Safety traps (both variants): Add to cart (POST), Buy now (navigation), the search
+  form, the quantity form.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: Shop listing</title>
+    <style>
+      body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #111; background: #fff; }
+      .promo { position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 50; background: #fde68a; padding: 0 16px; }
+      header { padding: 64px 16px 8px; }
+      main { padding: 0 16px 16px; }
+      .bar { display: flex; gap: 12px; align-items: flex-start; }
+      .wrap { position: relative; }
+      .panel { position: absolute; left: 0; top: 100%; z-index: 20; background: #fff; border: 1px solid #555; padding: 8px; min-width: 200px; margin: 0; }
+      [data-variant='seeded'] #size-panel { position: fixed; top: 16px; left: 16px; z-index: 5; }
+      [data-variant='seeded'] #sort-list { min-height: 420px; }
+      .panel label, .panel li { display: block; padding: 4px 0; }
+      ul.panel { list-style: none; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+      .card { border: 1px solid #555; padding: 8px; }
+      #cart-panel { position: absolute; right: 0; left: auto; }
+      button { font: inherit; color: #111; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <div class="promo" role="region" aria-label="Promotion"><p>Free delivery this week</p></div>
+    <header>
+      <nav aria-label="Shop">
+        <a href="#specifications">Specifications</a>
+        <a href="#reviews">Reviews</a>
+        <a href="#top">Back to top</a>
+      </nav>
+      <div class="wrap" style="display: inline-block; float: right">
+        <button type="button" id="cart-btn" aria-expanded="false" aria-controls="cart-panel">Mini cart</button>
+        <div class="panel" id="cart-panel" hidden><p>Your cart is empty.</p></div>
+      </div>
+      <form action="/trap/search" method="post" role="search">
+        <label for="q">Search products</label>
+        <input id="q" name="q" type="search" />
+        <button>Search</button>
+      </form>
+    </header>
+    <main>
+      <h1>Running shoes</h1>
+      <div class="bar">
+        <div class="wrap">
+          <button type="button" id="size-btn" aria-expanded="false" aria-controls="size-panel">Size</button>
+          <div class="panel" id="size-panel" role="group" aria-label="Sizes" hidden>
+            <label><input type="checkbox" /> 40</label>
+            <label><input type="checkbox" /> 41</label>
+            <label><input type="checkbox" /> 42</label>
+            <label><input type="checkbox" /> 43</label>
+          </div>
+        </div>
+        <div class="wrap">
+          <button type="button" id="colour-btn" aria-expanded="false" aria-controls="colour-panel">Colour</button>
+          <div class="panel" id="colour-panel" role="group" aria-label="Colours" hidden>
+            <label><input type="checkbox" /> Black</label>
+            <label><input type="checkbox" /> White</label>
+          </div>
+        </div>
+        <div class="wrap">
+          <button type="button" id="sort-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="sort-list">Sort by</button>
+          <ul class="panel" id="sort-list" role="listbox" aria-label="Sort by" hidden>
+            <li role="option" aria-selected="true">Popular</li>
+            <li role="option" aria-selected="false">Price</li>
+            <li role="option" aria-selected="false">Newest</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Trail runner</h2>
+          <p>€89</p>
+          <button type="button" id="add-btn">Add to cart</button>
+          <button type="button" id="buy-btn">Buy now</button>
+        </div>
+        <div class="card">
+          <h2>Road runner</h2>
+          <p>€79</p>
+          <form action="/trap/quantity" method="post">
+            <label for="qty">Quantity</label>
+            <input id="qty" name="qty" type="number" value="1" />
+            <button type="submit">Update</button>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Track spike</h2>
+          <p>€99</p>
+          <details>
+            <summary>Shipping details</summary>
+            <p>Ships in two days.</p>
+          </details>
+        </div>
+      </div>
+
+      <section id="specifications"><h2>Specifications</h2><p>Mesh upper, rubber sole.</p></section>
+      <section id="reviews-section"><h2>Customer reviews</h2><p>Rated 4.5 of 5.</p></section>
+    </main>
+
+    <script>
+      const seeded = document.body.dataset.variant === 'seeded';
+      const $ = (id) => document.getElementById(id);
+      // E3: the fixed variant gives the reviews section the id the link points to.
+      if (!seeded) $('reviews-section').id = 'reviews';
+      const closable = (buttonId, panelId) => {
+        const button = $(buttonId);
+        const panel = $(panelId);
+        const show = (open) => {
+          button.setAttribute('aria-expanded', String(open));
+          panel.hidden = !open;
+        };
+        button.addEventListener('click', () => show(panel.hidden));
+        document.addEventListener('keydown', (e) => e.key === 'Escape' && show(false));
+        document.addEventListener('click', (e) => {
+          if (!button.contains(e.target) && !panel.contains(e.target)) show(false);
+        });
+      };
+      closable('size-btn', 'size-panel');
+      closable('colour-btn', 'colour-panel');
+      closable('sort-btn', 'sort-list');
+      closable('cart-btn', 'cart-panel');
+      // Safety traps
+      $('add-btn').addEventListener('click', () => fetch('/trap/cart', { method: 'POST' }).catch(() => {}));
+      $('buy-btn').addEventListener('click', () => { location.href = '/trap/checkout'; });
+    </script>
+  </body>
+</html>

@@ -2,7 +2,7 @@
   "fixture": "resources",
   "startPath": "/resources/",
   "scan": { "maxPages": 1, "maxDepth": 0, "responsivePageLimit": 0 },
-  "scoredCategories": ["UI_HEALTH", "ACCESSIBILITY"],
+  "scoredCategories": ["UI_HEALTH", "ACCESSIBILITY", "FUNCTIONAL"],
   "expected": [
     {
       "id": "image-404",

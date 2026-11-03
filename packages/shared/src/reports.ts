@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import type { SeverityName } from './constants';
-import { REVIEW_STATUSES, type IssueCategoryName, type ReviewStatusName } from './scans';
+import {
+  REVIEW_STATUSES,
+  type FindingClassificationName,
+  type IssueCategoryName,
+  type ReviewStatusName,
+} from './scans';
 import { idSchema, listQuerySchema } from './schemas/common';
 
 // ------------------------------------------------------------------ dashboard
@@ -360,6 +365,7 @@ export const EXPORT_CATEGORIES = [
   'PERFORMANCE',
   'SEO',
   'SECURITY',
+  'FUNCTIONAL',
 ] as const;
 export type ExportCategory = (typeof EXPORT_CATEGORIES)[number];
 
@@ -574,7 +580,15 @@ export const trackedIssueQuerySchema = listQuerySchema.extend({
   status: z.enum(['OPEN', 'RESOLVED', 'IGNORED', 'FALSE_POSITIVE']).optional(),
   reviewStatus: z.enum(REVIEW_STATUSES).optional(),
   category: z
-    .enum(['ACCESSIBILITY', 'UI_HEALTH', 'RESPONSIVE', 'PERFORMANCE', 'SEO', 'SECURITY'])
+    .enum([
+      'ACCESSIBILITY',
+      'UI_HEALTH',
+      'RESPONSIVE',
+      'PERFORMANCE',
+      'SEO',
+      'SECURITY',
+      'FUNCTIONAL',
+    ])
     .optional(),
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']).optional(),
 });
@@ -634,4 +648,38 @@ export interface NotificationDto {
   emailedAt: string | null;
   emailError: string | null;
   createdAt: string;
+}
+
+// ------------------------------------------------------------------ functional (Phase 9)
+
+/** GET /api/reports/:scanId/functional: what the safe explorer did and found. */
+export interface FunctionalReportDto {
+  scan: ReportScanInfo;
+  /** Findings per check type (FUNCTIONAL category), most severe first. */
+  checks: {
+    checkType: string;
+    count: number;
+    highestSeverity: SeverityName;
+    byClassification: Partial<Record<FindingClassificationName, number>>;
+  }[];
+  /** Accessibility problems found only after opening a menu or panel. */
+  openStateAccessibilityIssues: number;
+  totals: {
+    pagesExplored: number;
+    controlsExplored: number;
+    controlsSkipped: number;
+    actionsBlocked: number;
+  };
+  /** One row per page the explorer ran on (null summary: the page could not be explored). */
+  pages: {
+    url: string;
+    explored: number;
+    eligible: number;
+    error: string | null;
+    stoppedEarly: string | null;
+    controls: { name: string; kind: string; result: string }[];
+    skipped: { name: string; role: string; reason: string }[];
+    skippedCounts: Record<string, number>;
+    blocked: { kind: string; method?: string; url?: string; detail?: string }[];
+  }[];
 }

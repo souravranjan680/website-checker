@@ -2,7 +2,8 @@
  * Fixture acceptance (Phase 9): scans every fixture that has a manifest
  * (tests/fixtures/manifests/*.json) with the real scanner, and requires, per scored
  * detector category, 100% recall of the seeded issues and zero false positives
- * (including zero findings on negative controls). These targets apply to these
+ * (including zero findings on negative controls), and that the scan (including the
+ * safe explorer) never wrote anything to the fixture server. These targets apply to these
  * deterministic fixtures only, not to arbitrary websites.
  *
  * A Markdown summary is written to .scanner-test-storage/fixture-acceptance.md.
@@ -67,7 +68,9 @@ afterAll(async () => {
 
 describe.each(manifests.map((m) => [m.fixture, m] as const))('fixture %s', (_name, manifest) => {
   let results: CategoryResult[];
+  let safety: ReturnType<FixtureServer['safetyHits']>;
   beforeAll(async () => {
+    fixtures.resetSafetyHits();
     const ids = await createScanFor(prisma, fixtures.url(manifest.startPath), manifest.scan);
     const deps = createTestDeps(testScannerConfig(proxy.url), prisma, publisher);
     await runScan(ids.scanId, deps, { signal: new AbortController().signal });
@@ -88,10 +91,15 @@ describe.each(manifests.map((m) => [m.fixture, m] as const))('fixture %s', (_nam
       })),
     );
     report.push(...results.map((result) => ({ fixture: manifest.fixture, result })));
+    safety = fixtures.safetyHits();
   }, 180_000);
 
   it('finds every seeded issue with the expected classification (recall 100%)', () => {
     for (const r of results) expect(r.missed, `${r.category} missed`).toEqual([]);
+  });
+
+  it('changes nothing on the server: no writes, no trap requests, no WebSockets', () => {
+    expect(safety).toEqual({ writes: [], traps: [], websockets: [] });
   });
 
   it('reports nothing on negative controls and no unlisted problems (precision 100%)', () => {

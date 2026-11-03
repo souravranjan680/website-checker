@@ -1,0 +1,12 @@
+{
+  "fixture": "portfolio (corrected twin)",
+  "startPath": "/portfolio/fixed.html",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0
+  },
+  "scoredCategories": ["FUNCTIONAL", "ACCESSIBILITY", "UI_HEALTH"],
+  "expected": [],
+  "negativeControls": []
+}

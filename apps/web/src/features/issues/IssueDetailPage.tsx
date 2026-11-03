@@ -227,6 +227,23 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
                     <span className="break-all">{issue.security.recommendedValue}</span>
                   </Row>
                 ) : null}
+                {issue.functional?.controlName ? (
+                  <Row label="Control">
+                    “{issue.functional.controlName}”
+                    {issue.functional.controlRole ? ` (${issue.functional.controlRole})` : ''}
+                  </Row>
+                ) : null}
+                {Array.isArray(issue.functional?.interaction?.steps) ? (
+                  <Row label="What we did">
+                    <ol className="list-decimal pl-4">
+                      {(issue.functional.interaction.steps as unknown[])
+                        .filter((step): step is string => typeof step === 'string')
+                        .map((step, i) => (
+                          <li key={i}>{step}</li>
+                        ))}
+                    </ol>
+                  </Row>
+                ) : null}
                 <Row label="Rule">
                   <code className="text-xs">{issue.ruleId}</code>
                 </Row>

@@ -1,0 +1,56 @@
+{
+  "fixture": "portfolio",
+  "startPath": "/portfolio/",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0
+  },
+  "scoredCategories": ["FUNCTIONAL", "ACCESSIBILITY", "UI_HEALTH"],
+  "expected": [
+    {
+      "id": "contact-link-to-missing-section",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/broken-anchor",
+      "selector": "a:nth-of-type(3)",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "read-more-shows-nothing",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/control-no-effect",
+      "selector": "#read-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "filter-panel-past-window-edge",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-clipped",
+      "selector": "#filter-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "menu-toggle",
+      "reason": "a working disclosure",
+      "selectors": ["#menu-btn"]
+    },
+    {
+      "id": "show-more-projects",
+      "reason": "pushes content down on purpose",
+      "selectors": ["#projects-btn"]
+    },
+    {
+      "id": "awards",
+      "reason": "a working <details> section",
+      "selectors": ["details > summary", "summary"]
+    },
+    {
+      "id": "skip-link",
+      "reason": "#main exists",
+      "selectors": [".skip", "body > a"]
+    }
+  ],
+  "forbiddenTokens": ["Sam Lee", "Banking app redesign", "Museum website"]
+}

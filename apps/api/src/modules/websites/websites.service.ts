@@ -74,6 +74,9 @@ function toWebsiteDto(website: WebsiteRow, user: AuthUser): WebsiteDto {
     respectRobotsTxt: website.respectRobotsTxt,
     responsivePageLimit: website.responsivePageLimit,
     lighthousePageLimit: website.lighthousePageLimit,
+    explorationEnabled: website.explorationEnabled,
+    explorationPageLimit: website.explorationPageLimit,
+    explorationControlLimit: website.explorationControlLimit,
     verificationStatus: website.verificationStatus,
     authorizationConfirmedAt: website.authorizationConfirmedAt.toISOString(),
     myRole: user.role === 'ADMIN' ? 'OWNER' : (website.project.members[0]?.role ?? 'VIEWER'),
@@ -256,6 +259,9 @@ export function createWebsitesService(deps: {
         'respectRobotsTxt',
         'responsivePageLimit',
         'lighthousePageLimit',
+        'explorationEnabled',
+        'explorationPageLimit',
+        'explorationControlLimit',
       ] as const) {
         if (input[key] !== undefined) Object.assign(data, { [key]: input[key] });
       }

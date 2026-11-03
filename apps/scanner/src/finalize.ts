@@ -33,11 +33,17 @@ export function computeScore(
  *   was RESOLVED, seen again   → OPEN again (a regression)
  *   IGNORED / FALSE_POSITIVE   → the user's decision is kept
  *   OPEN, not seen, but its page WAS re-checked in this scan → RESOLVED
+ *     (interaction findings: only if the explorer ran on that page again)
  */
 export async function trackIssues(
   prisma: PrismaClient,
   scan: { id: string; websiteId: string },
-  checked: { pages: Set<string>; responsivePages: Set<string> },
+  checked: {
+    pages: Set<string>;
+    responsivePages: Set<string>;
+    /** Pages the safe explorer opened menus/tabs on (Phase 9). */
+    exploredPages?: Set<string>;
+  },
 ): Promise<{
   newCount: number;
   reopenedCount: number;
@@ -132,7 +138,7 @@ export async function trackIssues(
       issues: {
         orderBy: { createdAt: 'desc' },
         take: 1,
-        select: { pageUrl: true, category: true },
+        select: { pageUrl: true, category: true, details: true },
       },
     },
   });
@@ -142,6 +148,11 @@ export async function trackIssues(
       if (!last?.pageUrl) return false;
       const page = normalizeUrl(last.pageUrl);
       if (!page) return false;
+      // Interaction findings are only resolved where the explorer ran again.
+      const fromExplorer =
+        last.category === 'FUNCTIONAL' ||
+        Boolean((last.details as { interactionState?: unknown } | null)?.interactionState);
+      if (fromExplorer) return checked.exploredPages?.has(page) ?? false;
       return last.category === 'RESPONSIVE'
         ? checked.responsivePages.has(page)
         : checked.pages.has(page);

@@ -78,6 +78,7 @@ enum IssueCategory {
   PERFORMANCE
   SEO
   SECURITY
+  FUNCTIONAL // interaction and navigation checks (Phase 9)
 }
 
 enum Severity {
@@ -110,6 +111,20 @@ enum ReviewStatus {
   UNREVIEWED
   CONFIRMED // confirmed defect
   INTENTIONAL // works as designed
+}
+
+/// Interaction and navigation checks of the safe explorer (Phase 9, Milestone 1).
+enum FunctionalCheckType {
+  CONTROL_NO_EFFECT // a menu/disclosure/tab control changed nothing visible
+  LAYER_CLIPPED // an opened menu or panel is cut off
+  LAYER_OCCLUDED // items of an opened layer are hidden behind other content
+  LAYER_BLANK_AREA // an opened layer has a large empty area
+  LAYER_NOT_DISMISSIBLE // an opened menu cannot be closed
+  ESCAPE_NOT_SUPPORTED // an opened menu does not close with Escape
+  TAB_PANEL_NOT_SHOWN // a selected tab does not show its panel
+  INTERACTION_ERROR // a JavaScript error was thrown while interacting
+  BROKEN_ANCHOR // an in-page link points to a section that does not exist
+  NAV_CURRENT_MISMATCH // navigation marks a different page as the current one
 }
 
 enum DetectionType {
@@ -365,6 +380,10 @@ model Website {
   respectRobotsTxt         Boolean            @default(true)
   responsivePageLimit      Int                @default(3)
   lighthousePageLimit      Int                @default(1)
+  /// Safe explorer (Phase 9): opens menus, tabs and expandable sections on the first pages.
+  explorationEnabled       Boolean            @default(true)
+  explorationPageLimit     Int                @default(5)
+  explorationControlLimit  Int                @default(30)
   verificationStatus       VerificationStatus @default(UNVERIFIED)
   verificationToken        String?            @unique
   verifiedAt               DateTime?
@@ -482,6 +501,8 @@ model ScanPage {
   failedRequests  Json?
   pageErrors      Json? // uncaught JavaScript exceptions
   seoData         Json? // meta robots, Open Graph, heading outline, images without alt (Phase 6)
+  /// Safe explorer summary (Phase 9): controls explored, skipped (with reasons), blocked actions.
+  exploration     Json?
   errorMessage    String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -532,6 +553,7 @@ model Issue {
   uiHealth      UIHealthIssue?
   seo           SEOIssue?
   security      SecurityIssue?
+  functional    FunctionalIssue?
   bugReports    BugReport[]
   aiInsights    AiInsight[]
 
@@ -574,6 +596,21 @@ model SEOIssue {
   checkType SeoCheckType
   expected  String?
   actual    String?
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([checkType])
+}
+
+/// Details of a FUNCTIONAL issue (Phase 9): which control was used and what happened.
+model FunctionalIssue {
+  issueId         String              @id
+  checkType       FunctionalCheckType
+  controlName     String?
+  controlRole     String?
+  controlSelector String?
+  /// Steps, measurements and blocked actions recorded while interacting.
+  interaction     Json?
 
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
 

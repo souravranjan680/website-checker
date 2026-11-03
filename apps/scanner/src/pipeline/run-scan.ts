@@ -35,6 +35,7 @@ import { saveIssues, saveScreenshot } from '../persistence';
 import { createProgressReporter, type ProgressReporter } from '../progress';
 import { captureHighlightedIssue, captureViewport } from '../screenshots';
 import { resolveKey, type FileStorage } from '../storage';
+import { runExploration } from '../explore/run-exploration';
 import { scanPage } from './scan-page';
 
 export interface ScanDeps {
@@ -334,6 +335,38 @@ export async function runScan(
 
     const scannedPages = pages.filter((p) => p.status === 'DONE');
 
+    // ------------------------------------------------------- safe explorer
+    // Opens menus, tabs and expandable sections on the first pages (Phase 9). Its own
+    // browser context, with writes, navigation, pop-ups, downloads and WebSockets blocked.
+    let exploredPages = new Set<string>();
+    const explorationPages = website.explorationEnabled
+      ? Math.min(website.explorationPageLimit, config.maxExplorationPages)
+      : 0;
+    if (scannedPages.length > 0 && explorationPages > 0 && !timeLimitReached) {
+      const targets = scannedPages.slice(0, explorationPages);
+      exploredPages = await runExploration({
+        browser,
+        deps,
+        scanId,
+        websiteId: website.id,
+        siteHostname,
+        viewport: desktop,
+        targets,
+        controlLimit: Math.min(website.explorationControlLimit, config.maxExplorationControls),
+        cropBudget,
+        storeIssues,
+        onPage: (index, url) =>
+          progress.update({
+            step: `Exploring menus, tabs and expandable sections (page ${index + 1} of ${targets.length})`,
+            currentUrl: url,
+            issuesFound,
+          }),
+        checkpoint,
+        shouldStop: () => timeLimitReached,
+        log,
+      });
+    }
+
     // ------------------------------------------------- other screen sizes
     if (scannedPages.length > 0 && website.responsivePageLimit > 0 && !timeLimitReached) {
       const targets = scannedPages.slice(0, website.responsivePageLimit);
@@ -591,6 +624,7 @@ export async function runScan(
             scannedPages.flatMap((p) => [p.normalizedUrl, normalizeUrl(p.url) ?? p.normalizedUrl]),
           ),
           responsivePages: responsiveChecked,
+          exploredPages,
         },
       );
     }
@@ -675,11 +709,17 @@ async function finishScan(
       viewport: true,
       accessibility: { select: { detection: true } },
       security: { select: { checkType: true } },
+      details: true,
     },
   });
   const count = (severity: string) => issues.filter((i) => i.severity === severity).length;
+  // Problems found only inside opened menus/panels (Phase 9 explorer) are reported but do
+  // not change the accessibility score, so scores stay comparable with earlier scans.
   const a11y = issues.filter(
-    (i) => i.category === 'ACCESSIBILITY' && i.accessibility?.detection !== 'NEEDS_REVIEW',
+    (i) =>
+      i.category === 'ACCESSIBILITY' &&
+      i.accessibility?.detection !== 'NEEDS_REVIEW' &&
+      !(i.details as { interactionState?: unknown } | null)?.interactionState,
   );
   const ui = issues.filter((i) => i.category === 'UI_HEALTH' || i.category === 'RESPONSIVE');
   const seo = issues.filter((i) => i.category === 'SEO');

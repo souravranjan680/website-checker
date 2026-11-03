@@ -13,6 +13,7 @@ export const BUG_REPORT_ISSUE_INCLUDE = {
   uiHealth: true,
   seo: true,
   security: true,
+  functional: true,
   scanPage: {
     select: {
       screenshots: {
@@ -65,6 +66,22 @@ const CATEGORY: Record<string, string> = {
   PERFORMANCE: 'performance (Lighthouse)',
   SEO: 'SEO',
   SECURITY: 'security configuration',
+  FUNCTIONAL: 'interaction and navigation',
+};
+
+/** What each interaction check expects when it passes (the check's own definition). */
+const FUNCTIONAL_EXPECTED: Record<string, string> = {
+  CONTROL_NO_EFFECT: 'Using the control shows the content or menu it controls.',
+  LAYER_CLIPPED: 'The opened menu or panel is fully visible.',
+  LAYER_OCCLUDED: 'Every item of the opened menu or panel is visible and can be clicked.',
+  LAYER_BLANK_AREA: 'The opened menu or panel has no large empty area.',
+  LAYER_NOT_DISMISSIBLE:
+    'The menu closes with Escape, by clicking outside it, or with the control.',
+  ESCAPE_NOT_SUPPORTED: 'The menu closes when Escape is pressed.',
+  TAB_PANEL_NOT_SHOWN: 'Selecting the tab shows its panel.',
+  INTERACTION_ERROR: 'Using the control throws no JavaScript error.',
+  BROKEN_ANCHOR: 'The link scrolls to an existing section of the page.',
+  NAV_CURRENT_MISMATCH: 'The navigation marks the page being shown as the current one.',
 };
 
 /** What each UI check guarantees when it passes (the check's own definition). */
@@ -200,6 +217,16 @@ export function buildBugReport(issue: BugReportIssue): BugReportDraft {
       if (security?.recommendedValue) expected = `Recommended: ${security.recommendedValue}`;
       if (security?.observedValue)
         actual = `${issue.description} Observed: ${security.observedValue}.`;
+      break;
+    }
+    case 'FUNCTIONAL': {
+      // Only the steps the explorer really performed (recorded with the finding).
+      const recorded = (issue.functional?.interaction as { steps?: unknown } | null)?.steps;
+      if (Array.isArray(recorded)) {
+        for (const step of recorded.slice(0, 6))
+          if (typeof step === 'string') steps.push(`${step}.`);
+      }
+      expected = FUNCTIONAL_EXPECTED[issue.functional?.checkType ?? ''] ?? '';
       break;
     }
     case 'PERFORMANCE': {

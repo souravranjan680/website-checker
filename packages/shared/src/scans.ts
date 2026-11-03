@@ -20,6 +20,7 @@ export const ISSUE_CATEGORIES = [
   'PERFORMANCE',
   'SEO',
   'SECURITY',
+  'FUNCTIONAL',
 ] as const;
 export type IssueCategoryName = (typeof ISSUE_CATEGORIES)[number];
 
@@ -242,6 +243,14 @@ export interface IssueDto {
   uiHealth: { checkType: string; resourceUrl: string | null; statusCode: number | null } | null;
   /** SEO details: what the check expected and what it found. */
   seo: { checkType: string; expected: string | null; actual: string | null } | null;
+  /** Interaction and navigation details (Phase 9 safe explorer). */
+  functional: {
+    checkType: string;
+    controlName: string | null;
+    controlRole: string | null;
+    controlSelector: string | null;
+    interaction: Record<string, unknown> | null;
+  } | null;
   /** Security details. findingLevel: OBSERVATION / WARNING / CONFIRMED (observed, not exploited). */
   security: {
     checkType: string;

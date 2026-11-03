@@ -26,6 +26,9 @@ const schema = z.object({
   SCAN_LIGHTHOUSE_TIMEOUT_MS: z.coerce.number().int().min(20_000).max(300_000).default(90_000),
   /** Visual regression: PNG snapshots of this many pages (desktop + mobile). 0 = off. */
   SCAN_VISUAL_PAGES: z.coerce.number().int().min(0).max(10).default(3),
+  // Safe explorer (Phase 9): upper limits; each website can choose lower ones.
+  SCAN_MAX_EXPLORATION_PAGES: z.coerce.number().int().min(0).max(10).default(5),
+  SCAN_MAX_EXPLORATION_CONTROLS: z.coerce.number().int().min(0).max(50).default(30),
   /** Days to keep page screenshots and raw Lighthouse files of old scans. 0 = keep forever. */
   SCAN_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(0),
   SCANNER_HEADLESS: z.stringbool().default(true),
@@ -52,6 +55,9 @@ export interface ScannerConfig {
   maxLighthousePages: number;
   lighthouseTimeoutMs: number;
   visualPages: number;
+  /** Safe explorer caps (Phase 9). */
+  maxExplorationPages: number;
+  maxExplorationControls: number;
   retentionDays: number;
   headless: boolean;
   browserChannel?: string;
@@ -94,6 +100,8 @@ export function loadScannerConfig(source: NodeJS.ProcessEnv = process.env): Scan
     maxLighthousePages: env.SCAN_MAX_LIGHTHOUSE_PAGES,
     lighthouseTimeoutMs: env.SCAN_LIGHTHOUSE_TIMEOUT_MS,
     visualPages: env.SCAN_VISUAL_PAGES,
+    maxExplorationPages: env.SCAN_MAX_EXPLORATION_PAGES,
+    maxExplorationControls: env.SCAN_MAX_EXPLORATION_CONTROLS,
     retentionDays: env.SCAN_RETENTION_DAYS,
     headless: env.SCANNER_HEADLESS,
     browserChannel: env.SCANNER_BROWSER_CHANNEL,

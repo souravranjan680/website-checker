@@ -1,0 +1,115 @@
+{
+  "fixture": "saas",
+  "startPath": "/saas/",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0
+  },
+  "scoredCategories": ["FUNCTIONAL", "ACCESSIBILITY", "UI_HEALTH"],
+  "expected": [
+    {
+      "id": "nav-marks-wrong-page-current",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/nav-current-mismatch",
+      "selector": "#nav-reports",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "account-menu-cut-off",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-clipped",
+      "selector": "#account-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "workspace-menu-cut-off",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-clipped",
+      "selector": "#workspace-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "notifications-menu-cut-off",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-clipped",
+      "selector": "#notify-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "workspace-menu-cannot-be-closed",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/layer-not-dismissible",
+      "selector": "#workspace-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "notifications-menu-ignores-escape",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/escape-not-supported",
+      "selector": "#notify-btn",
+      "classification": ["OBSERVATION"]
+    },
+    {
+      "id": "billing-tab-panel-stays-hidden",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/tab-panel-not-shown",
+      "selector": "#tab-billing",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "more-filters-does-nothing",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/control-no-effect",
+      "selector": "#filters-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "insights-throws-an-error",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/interaction-error",
+      "selector": "#insights-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "unnamed-button-inside-opened-menu",
+      "category": "ACCESSIBILITY",
+      "ruleId": "button-name",
+      "selector": "#icon-item",
+      "classification": ["DETECTED"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "help-menu",
+      "reason": "overlaps the page on purpose, on top of it; closes with Escape",
+      "selectors": ["#help-btn"]
+    },
+    {
+      "id": "activity-tab",
+      "reason": "a working tab",
+      "selectors": ["#tab-activity"]
+    },
+    {
+      "id": "show-more",
+      "reason": "a working disclosure",
+      "selectors": ["#more-btn"]
+    },
+    {
+      "id": "whats-new",
+      "reason": "a working <details> section",
+      "selectors": ["details > summary", "summary"]
+    },
+    {
+      "id": "recent-activity",
+      "reason": "works; its tracking requests are blocked for safety (not a defect of the page)",
+      "selectors": ["#activity-btn"]
+    },
+    {
+      "id": "resources",
+      "reason": "works; its pop-up and download are blocked for safety",
+      "selectors": ["#resources-btn"]
+    }
+  ],
+  "forbiddenTokens": ["More filters", "Recent activity", "Delete workspace", "Plan: Team"]
+}

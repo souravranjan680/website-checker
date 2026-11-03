@@ -7,6 +7,7 @@ export const ISSUE_INCLUDE = {
   uiHealth: true,
   seo: true,
   security: true,
+  functional: true,
   trackedIssue: {
     select: {
       id: true,
@@ -77,6 +78,15 @@ export function toIssueDto(row: IssueRow): IssueDto {
       : null,
     seo: row.seo
       ? { checkType: row.seo.checkType, expected: row.seo.expected, actual: row.seo.actual }
+      : null,
+    functional: row.functional
+      ? {
+          checkType: row.functional.checkType,
+          controlName: row.functional.controlName,
+          controlRole: row.functional.controlRole,
+          controlSelector: row.functional.controlSelector,
+          interaction: (row.functional.interaction as Record<string, unknown> | null) ?? null,
+        }
       : null,
     security: row.security
       ? {
