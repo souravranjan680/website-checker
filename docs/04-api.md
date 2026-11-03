@@ -358,3 +358,13 @@ Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website
 | `POST /api/websites` · `PUT /api/websites/:id` | Also accept `consistencyEnabled` (default `true`); clients that omit it keep the stored value |
 | `GET /api/reports/:scanId/ui-health` | New field `extraChecks`: `{ layout, fontsAndIcons, consistency, consistencyPages, byClassification }` (all screen sizes; never part of the score). Existing fields unchanged |
 | `GET /api/scans/:id/issues?checkType=` | Also accepts the new UI check types (`TEXT_OVERFLOW_VISIBLE`, `TEXT_OVERLAP`, `FIXED_OUT_OF_VIEWPORT`, `CONTROL_LABEL_CLIPPED`, `FONT_LOAD_FAILED`, `FONT_FALLBACK_RENDERED`, `ICON_BROKEN`, `ICON_MISSING`, `COMPONENT_INCONSISTENT`) |
+
+## Phase 9, Milestone 2 (Checkpoint 2) changes (implemented)
+
+Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#7-milestone-2-checkpoint-2-keyboard-and-form-probes-complete).
+
+| Method & path | Change |
+|---|---|
+| `POST /api/websites` · `PUT /api/websites/:id` | Also accept `keyboardProbeEnabled` (default `true`) and `formProbeMode` (`OFF` | `STATIC` | `BLUR` | `SYNTHETIC`, default `BLUR`; `SYNTHETIC` only when sent explicitly). Clients that omit them keep the stored values |
+| `GET /api/reports/:scanId/functional` | Per page: `keyboard` and `forms` (probe results, skipped items with reasons; `null` for older scans). Totals: `pagesKeyboardChecked`, `formFieldsProbed`, `probesSkipped`. Existing fields unchanged |
+| Issue DTOs, filters, exports | 12 new `FUNCTIONAL` check types (`FOCUS_NOT_VISIBLE`, `FOCUS_ON_HIDDEN`, `FOCUS_LOST`, `KEYBOARD_TRAP`, `KEY_ACTIVATION_FAILED`, `CLICK_NOT_FOCUSABLE`, `FORM_REQUIRED_NOT_INDICATED`, `FORM_INDICATOR_WITHOUT_REQUIRED`, `FORM_DESCRIBEDBY_MISSING`, `FORM_PLACEHOLDER_ONLY_LABEL`, `FORM_ERROR_NOT_ASSOCIATED`, `FORM_NO_BLUR_FEEDBACK`) |

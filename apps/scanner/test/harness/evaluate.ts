@@ -48,7 +48,13 @@ export interface FixtureManifest {
   /** Page to scan, relative to the fixture server. */
   startPath: string;
   /** Scan settings (same names as the Website model). */
-  scan: { maxPages: number; maxDepth: number; responsivePageLimit: number };
+  scan: {
+    maxPages: number;
+    maxDepth: number;
+    responsivePageLimit: number;
+    formProbeMode?: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
+    keyboardProbeEnabled?: boolean;
+  };
   /**
    * Categories whose seeded issues are listed completely: any other DETECTED or
    * POTENTIAL_DEFECT finding in these categories is a false positive. Other categories
@@ -175,8 +181,14 @@ export function formatResults(rows: { fixture: string; result: CategoryResult }[
   ].join('\n');
 }
 
-/** Detectors of Milestone 2, scored strictly (see the header). */
-export const STRICT_DETECTORS = ['layout', 'fonts-icons', 'consistency'] as const;
+/** Detectors of Milestone 2 (both checkpoints), scored strictly (see the header). */
+export const STRICT_DETECTORS = [
+  'layout',
+  'fonts-icons',
+  'consistency',
+  'keyboard',
+  'forms',
+] as const;
 
 const DETECTOR_OF_RULE: Record<string, string> = {
   'ui/text-overflow-visible': 'layout',
@@ -188,6 +200,18 @@ const DETECTOR_OF_RULE: Record<string, string> = {
   'ui/icon-broken': 'fonts-icons',
   'ui/icon-missing': 'fonts-icons',
   'ui/component-inconsistent': 'consistency',
+  'functional/focus-not-visible': 'keyboard',
+  'functional/focus-on-hidden': 'keyboard',
+  'functional/focus-lost': 'keyboard',
+  'functional/keyboard-trap': 'keyboard',
+  'functional/key-activation-failed': 'keyboard',
+  'functional/click-not-focusable': 'keyboard',
+  'functional/form-required-not-indicated': 'forms',
+  'functional/form-indicator-without-required': 'forms',
+  'functional/form-describedby-missing': 'forms',
+  'functional/form-placeholder-only-label': 'forms',
+  'functional/form-error-not-associated': 'forms',
+  'functional/form-no-blur-feedback': 'forms',
 };
 
 /** "layout", "fonts-icons", "consistency", "explorer", or the category for older checks. */

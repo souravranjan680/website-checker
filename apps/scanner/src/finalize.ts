@@ -28,6 +28,25 @@ export const SCORED_UI_CHECKS: ReadonlySet<string> = new Set([
   'IMAGE_SIZING',
 ]);
 
+/** Which probe has to run on a page again before its findings there may be resolved. */
+const PROBE_OF_RULE: Record<
+  string,
+  'keyboardPages' | 'formsReadPages' | 'formsProbedPages' | 'formsSyntheticPages'
+> = {
+  'functional/focus-not-visible': 'keyboardPages',
+  'functional/focus-on-hidden': 'keyboardPages',
+  'functional/focus-lost': 'keyboardPages',
+  'functional/keyboard-trap': 'keyboardPages',
+  'functional/key-activation-failed': 'keyboardPages',
+  'functional/click-not-focusable': 'keyboardPages',
+  'functional/form-required-not-indicated': 'formsReadPages',
+  'functional/form-indicator-without-required': 'formsReadPages',
+  'functional/form-describedby-missing': 'formsReadPages',
+  'functional/form-placeholder-only-label': 'formsReadPages',
+  'functional/form-error-not-associated': 'formsProbedPages',
+  'functional/form-no-blur-feedback': 'formsProbedPages',
+};
+
 /** Whether a UI or responsive issue counts towards the UI health score. */
 export function countsTowardsUiScore(issue: { uiHealth: { checkType: string } | null }): boolean {
   return !issue.uiHealth || SCORED_UI_CHECKS.has(issue.uiHealth.checkType);
@@ -64,7 +83,8 @@ export function computeScore(
  *   IGNORED / FALSE_POSITIVE   → the user's decision is kept
  *   OPEN, not seen, but its page WAS re-checked in this scan → RESOLVED
  *     (interaction findings: only if the explorer ran on that page again;
- *      component consistency: only if components were compared there again)
+ *      component consistency: only if components were compared there again;
+ *      keyboard and form probes: only if that probe ran there again)
  */
 export async function trackIssues(
   prisma: PrismaClient,
@@ -76,6 +96,12 @@ export async function trackIssues(
     exploredPages?: Set<string>;
     /** Pages whose components were compared (Phase 9, Milestone 2). */
     consistencyPages?: Set<string>;
+    /** Pages the keyboard probe ran on, and the form probe read / focused (Checkpoint 2). */
+    keyboardPages?: Set<string>;
+    formsReadPages?: Set<string>;
+    formsProbedPages?: Set<string>;
+    /** Pages where the form probe also typed invalid values (SYNTHETIC). */
+    formsSyntheticPages?: Set<string>;
   },
 ): Promise<{
   newCount: number;
@@ -185,6 +211,12 @@ export async function trackIssues(
       const fromExplorer =
         last.category === 'FUNCTIONAL' ||
         Boolean((last.details as { interactionState?: unknown } | null)?.interactionState);
+      // Keyboard and form findings only where that probe ran again (it can be switched off).
+      let probe = PROBE_OF_RULE[last.ruleId];
+      if ((last.details as { action?: string } | null)?.action === 'synthetic') {
+        probe = 'formsSyntheticPages';
+      }
+      if (probe) return checked[probe]?.has(page) ?? false;
       if (fromExplorer) return checked.exploredPages?.has(page) ?? false;
       // Consistency findings only where components were compared again.
       if (last.ruleId === 'ui/component-inconsistent') {

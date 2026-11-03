@@ -146,6 +146,10 @@ describe('GET /api/reports/:scanId/functional', () => {
       controlsExplored: 3,
       controlsSkipped: 5,
       actionsBlocked: 1,
+      // Added in Checkpoint 2 (additive): this scan has no keyboard or form probe data.
+      pagesKeyboardChecked: 0,
+      formFieldsProbed: 0,
+      probesSkipped: 0,
     });
     expect(report.pages).toHaveLength(1); // the second page was not explored
     expect(report.pages[0].skipped).toEqual([

@@ -128,6 +128,8 @@ export async function createScanFor(
     explorationPageLimit: number;
     explorationControlLimit: number;
     consistencyEnabled: boolean;
+    keyboardProbeEnabled: boolean;
+    formProbeMode: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
   }> = {},
   existingWebsiteId?: string,
 ): Promise<{ scanId: string; websiteId: string }> {
@@ -158,6 +160,8 @@ export async function createScanFor(
         explorationPageLimit: website.explorationPageLimit ?? 5,
         explorationControlLimit: website.explorationControlLimit ?? 30,
         consistencyEnabled: website.consistencyEnabled ?? true,
+        keyboardProbeEnabled: website.keyboardProbeEnabled ?? true,
+        formProbeMode: website.formProbeMode ?? 'BLUR',
       },
     });
     websiteId = created.id;

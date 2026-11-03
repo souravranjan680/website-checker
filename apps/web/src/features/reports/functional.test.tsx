@@ -41,7 +41,15 @@ const report: FunctionalReportDto = {
     },
   ],
   openStateAccessibilityIssues: 1,
-  totals: { pagesExplored: 1, controlsExplored: 3, controlsSkipped: 6, actionsBlocked: 2 },
+  totals: {
+    pagesExplored: 1,
+    controlsExplored: 3,
+    controlsSkipped: 6,
+    actionsBlocked: 2,
+    pagesKeyboardChecked: 0,
+    formFieldsProbed: 0,
+    probesSkipped: 0,
+  },
   pages: [
     {
       url: 'https://app.example.com/',
@@ -62,6 +70,8 @@ const report: FunctionalReportDto = {
         { kind: 'request', method: 'POST', url: 'https://app.example.com/track' },
         { kind: 'download', detail: 'https://app.example.com/report.csv' },
       ],
+      keyboard: null,
+      forms: null,
     },
   ],
 };
@@ -174,6 +184,103 @@ describe('website settings', () => {
       explorationEnabled: true,
       explorationPageLimit: 2,
       explorationControlLimit: 30,
+    });
+  });
+});
+
+describe('Interactions report: keyboard and form probes (Milestone 2, Checkpoint 2)', () => {
+  it('shows what was pressed and probed, and every skipped field or control with its reason', async () => {
+    const probed: FunctionalReportDto = {
+      ...report,
+      totals: { ...report.totals, pagesKeyboardChecked: 1, formFieldsProbed: 1, probesSkipped: 2 },
+      pages: [
+        {
+          ...report.pages[0]!,
+          keyboard: {
+            error: null,
+            steps: 14,
+            stoppedBy: 'trap',
+            focusOrder: ['Home'],
+            activation: [
+              {
+                name: 'More filters',
+                keys: [
+                  { key: 'Enter', result: 'fails' },
+                  { key: 'Space', result: 'works' },
+                ],
+              },
+            ],
+            skipped: [{ name: 'Settings', reason: 'opens-dialog' }],
+            clickableNotFocusable: 0,
+          },
+          forms: {
+            error: null,
+            mode: 'BLUR',
+            fields: 4,
+            probed: [{ name: 'Title', action: 'blur', outcome: 'error-not-linked' }],
+            skipped: [{ name: 'Password', reason: 'sensitive-field' }],
+            skippedCounts: { 'sensitive-field': 1 },
+          },
+        },
+      ],
+    };
+    mockApi({ ...api, 'GET /api/reports/s1/functional': ok(probed) });
+    renderApp('/scans/s1/reports/interactions');
+
+    expect(
+      await screen.findByText('Tab pressed 14 times · stopped at a keyboard trap'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Keyboard activation' })).toHaveTextContent(
+      'More filters · Enter: does nothing, Space: works',
+    );
+    expect(screen.getByRole('list', { name: 'Keyboard checks skipped' })).toHaveTextContent(
+      'Settings · opens a dialog (not opened)',
+    );
+    expect(screen.getByText('Forms (focus and leave (no typing))')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Form fields probed' })).toHaveTextContent(
+      'Title · message not linked',
+    );
+    expect(screen.getByRole('list', { name: 'Form fields left alone' })).toHaveTextContent(
+      'Password · secret or payment data: never touched',
+    );
+    expect(screen.getByText(/never submit a form/)).toBeInTheDocument();
+  });
+});
+
+describe('website settings: probes', () => {
+  it('keyboard on and forms BLUR by default; typing test values only when chosen', async () => {
+    const calls = mockApi({
+      ...signedIn,
+      'GET /api/projects': page([
+        {
+          id: 'p1',
+          name: 'Product',
+          description: null,
+          myRole: 'OWNER',
+          websiteCount: 0,
+          memberCount: 1,
+          scanCount: 0,
+          createdAt: '2026-11-01T10:00:00.000Z',
+          updatedAt: '2026-11-01T10:00:00.000Z',
+        },
+      ]),
+      'POST /api/websites': { status: 201, body: { data: { id: 'w9', name: 'App' } } },
+    });
+    renderApp('/websites/new');
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'App' } });
+    fireEvent.change(screen.getByLabelText('Website address'), {
+      target: { value: 'https://app.example.com' },
+    });
+    expect(screen.getByLabelText('Check keyboard use on explored pages')).toBeChecked();
+    const mode = screen.getByLabelText('Form checks on explored pages');
+    expect(mode).toHaveValue('BLUR');
+    fireEvent.change(mode, { target: { value: 'SYNTHETIC' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /I own this website/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add website' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'POST')).toBeDefined());
+    expect(calls.find((c) => c.method === 'POST')!.body).toMatchObject({
+      keyboardProbeEnabled: true,
+      formProbeMode: 'SYNTHETIC',
     });
   });
 });

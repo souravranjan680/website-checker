@@ -5,8 +5,8 @@ Status: **in progress.**
 - Milestone 1 (generic interaction explorer) is complete (section 5).
 - Milestone 2, Checkpoint 1 (layout, fonts and icons, component consistency) is complete
   (section 6).
-- Milestone 2, Checkpoint 2 (keyboard and form probes) and Milestones 3 to 8 are planned
-  (see section 7).
+- Milestone 2, Checkpoint 2 (keyboard and form probes) is complete (section 7).
+- Milestones 3 to 8 are planned (see section 8).
 - This document grows with each milestone.
 
 ## 1. Product purpose
@@ -634,11 +634,251 @@ database, shown by the Docker dashboard; no third-party site was scanned):
   - Pages whose fonts are still loading wait up to 3 s for them.
   - Each explored page adds up to 10 layout runs on opened menus and panels.
 
-## 7. Remaining milestones
+## 7. Milestone 2, Checkpoint 2: keyboard and form probes (complete)
+
+Two probes run on the pages the explorer opens, after the explorer, in the same browser
+context with the safety layer armed. Each starts from a fresh copy of the page. Dialogs
+are never opened; forms are never submitted. Their findings are in the `FUNCTIONAL`
+category (Interactions), which no score uses.
+
+### 7.1 Decisions applied
+
+| Decision | How it is applied |
+|---|---|
+| Keyboard and form findings under `FUNCTIONAL` | 12 new `FunctionalCheckType` values. |
+| Scores unchanged | `FUNCTIONAL` counts towards no score. A scan test compares the scores with the probes on and off. |
+| Form probe `BLUR` by default | `Website.formProbeMode` = `OFF \| STATIC \| BLUR \| SYNTHETIC`, default `BLUR`. `SYNTHETIC` is only ever set explicitly per website: there is no environment variable or global default. |
+| Dialogs stay closed | Dialog triggers stay skipped, and are listed as `opens-dialog`. |
+| Enter and Space only where safe behaviour is established | See section 7.2. |
+| A visible required mark without the attribute is not a defect | `OBSERVATION`, or `POTENTIAL_DEFECT` only when the form says what `*` means (section 7.3). |
+| Missing feedback on blur is not a defect | `FORM_NO_BLUR_FEEDBACK` is always an `OBSERVATION`. Many sites validate on submit. |
+| Focus, blur, `checkValidity()` and event handlers may have side effects | Every probe step runs inside the side-effect watch. See section 7.4. |
+
+### 7.2 Keyboard probe (`Website.keyboardProbeEnabled`, default on)
+
+1. **Tab walk** from the top of the page, at most 100 steps. Tab activates nothing.
+   - **Focus visibility.** Before the walk, each focusable element's unfocused look (and
+     its parent's) is recorded. Properties that cannot be seen are ignored, such as the
+     offset of an absent outline.
+   - **The walk stops** when focus comes back to the first element, when focus reaches
+     the page itself with nothing focusable left, at a trap, or at the step limit.
+
+   | Check | How it is decided | Classification |
+   |---|---|---|
+   | `FOCUS_NOT_VISIBLE` | The focused element and its parent look exactly as they do unfocused. A pixel comparison of the element's area, focused and unfocused, confirms it. | Potential defect |
+   | `FOCUS_ON_HIDDEN` | The focused element cannot be seen: not rendered, outside the page area, cut off by a container that hides overflow, clipped to nothing, or transparent. Skip links pass, because they appear when focused. | Potential defect |
+   | `FOCUS_LOST` | Focus falls back to the page itself while visible, focusable controls still follow. | Potential defect |
+   | `KEYBOARD_TRAP` | The same 2 to 10 elements repeat three times with controls after them, not all inside an open modal dialog. A modal keeping focus inside is correct and is not reported. | Potential defect (HIGH) |
+
+2. **Enter and Space.** Only on controls whose click the explorer proved safe in the
+   same scan: the click opened something, and nothing was blocked, there was no
+   navigation and no JavaScript error. The control is focused programmatically, then:
+   - Enter is pressed (and Space, for buttons and disclosures);
+   - the result is compared with what the click did;
+   - the page is reloaded after each key that changed something (at most 10 reloads).
+
+   Every other control is listed with a reason, so none is skipped silently:
+   - `activation-not-established`: its click did not open anything;
+   - `side-effect-observed`: something was blocked or failed during its click;
+   - `opens-dialog`;
+   - `limit`.
+
+   Enter is never pressed in a text field.
+   - **`KEY_ACTIVATION_FAILED`** (potential defect; HIGH when the control cannot receive
+     focus): the key does nothing.
+
+3. **`CLICK_NOT_FOCUSABLE`** (observation). An element has a pointer cursor and a click
+   (or pointer-down) listener, but cannot receive keyboard focus. The listener is read
+   through the Chrome DevTools Protocol (`DOMDebugger.getEventListeners`, read-only, at
+   most 50 elements); nothing is clicked. Elements inside a link, button, label or other
+   focusable element are excluded.
+
+### 7.3 Form probe (`Website.formProbeMode`)
+
+**Reading the fields** (`STATIC` and above; no focus, no events):
+
+| Check | How it is decided | Classification |
+|---|---|---|
+| `FORM_REQUIRED_NOT_INDICATED` | A required field (`required` or `aria-required`) whose visible label and description show no mark. Not reported when the form says "all fields are required", or marks optional fields instead. | Potential defect |
+| `FORM_INDICATOR_WITHOUT_REQUIRED` | The label shows `*` or "required", but the field has neither attribute. | Observation. Potential defect only if the form explains that `*` means required. Never `DETECTED`. |
+| `FORM_DESCRIBEDBY_MISSING` | `aria-describedby` or `aria-errormessage` name an id that does not exist. Skipped when axe already reported the field. | Detected |
+| `FORM_PLACEHOLDER_ONLY_LABEL` | No visible label; only the placeholder says what the field is. Search fields are excluded. | Potential defect |
+
+**Focus and leave** (`BLUR`, the default). For each allowed, empty, required field (at
+most 20 per page): focus it, move focus away without typing, then compare what the form
+shows.
+
+| Check | How it is decided | Classification |
+|---|---|---|
+| `FORM_ERROR_NOT_ASSOCIATED` | New text appeared in the form, but the field points to none of it (`aria-describedby` / `aria-errormessage`), it is not in a live region, and `aria-invalid` was not set. | Potential defect |
+| `FORM_NO_BLUR_FEEDBACK` | Nothing appeared and nothing changed. One finding per form; a disturbed field gets its own finding. | Observation |
+
+**Typing invalid values** (`SYNTHETIC`, opt-in per website only):
+- **Which values.** One clearly invalid, non-personal value, only where it is certain to break the field's own rule:
+  - `not-an-email` for email fields;
+  - `not a web address` for URL fields;
+  - `min − 1` or `max + 1` for numbers;
+  - `x`, `0` or `-` for a pattern that rejects it.
+- **Validity.** It is read from `validity` / `validationMessage`, which fire no events.
+- **Checks.** The same two checks apply.
+
+**Never touched, in any mode.** Each of these is listed as skipped, with its reason:
+- secret or payment fields: password, one-time code, card or IBAN, by type, `autocomplete` or name and label;
+- personal-data fields: name, e-mail, phone, address, birth date, by `autocomplete` or name and label;
+- file, checkbox, radio, range and colour inputs;
+- CAPTCHA fields;
+- disabled, read-only and hidden fields.
+
+There is no submit, no Enter in a field, and no checkbox or radio toggling. The explorer's
+in-page guards also stop form submission.
+
+### 7.4 Side effects (requirement 3)
+
+Each probe step (one Tab press, one key on a control, one field focused and left, the
+pixel comparison) runs inside the side-effect watch from Checkpoint 1:
+- **What counts as part of the step:**
+  - changes in the probed element, its wrapper, its labels and the elements it points to;
+  - for form fields, changes anywhere in its form, such as an error summary;
+  - announcements in live regions;
+  - attribute changes on `<html>` and `<body>`;
+  - elements that change by themselves (measured over a 300 ms baseline).
+- **What makes a step disturbed:** a blocked request or navigation, a new JavaScript
+  error, or a change anywhere else.
+
+A finding from a disturbed step is **INCONCLUSIVE**. Its description says why, and the
+evidence lists what happened.
+
+Two lessons from building this:
+- **Screenshot defaults touch the page.** Playwright's defaults for screenshots
+  (`caret: 'hide'`, `animations: 'disabled'`) write inline styles into the page, and the
+  watch caught them. The probe now takes screenshots without them.
+- **Some disturbance is expected.** On the fixtures, a link that prefetches data when
+  focused, and a field that autosaves when left, are deliberately not claimed.
+
+### 7.5 Storage, API and UI (all additive)
+
+- **Migration** `20261103093258_phase9_m2_cp2_keyboard_forms`:
+  - 12 `FunctionalCheckType` values;
+  - enum `FormProbeMode`;
+  - `Website.keyboardProbeEnabled` (default `true`);
+  - `Website.formProbeMode` (default `BLUR`).
+- **Per page** (`ScanPage.exploration`):
+  - `keyboard`: the steps, why the walk stopped, the focus order, activation results per key, and skipped controls with reasons;
+  - `forms`: the mode, the number of fields, the probed fields with outcomes, and skipped fields with reasons and counts.
+- **Tracking.** Keyboard findings are resolved only on pages the keyboard probe ran on
+  again. Form findings that come from reading need the form probe to run again; findings
+  from focus and leave need `BLUR` or `SYNTHETIC`; findings from invalid values need
+  `SYNTHETIC`. Switching a probe off or down therefore never resolves its findings.
+- **API.**
+  - Websites accept `keyboardProbeEnabled` and `formProbeMode`; both are optional, and
+    older clients keep the stored values.
+  - `GET /api/reports/:scanId/functional` adds `keyboard` and `forms` per page (`null`
+    for older scans) and three totals: `pagesKeyboardChecked`, `formFieldsProbed` and
+    `probesSkipped`.
+  - Selectors stay in the database.
+- **UI.**
+  - Interactions report: two more tiles, and a Keyboard and a Forms section per page,
+    listing every field or control left alone with its reason.
+  - Issue page: the recorded steps, under "What we did".
+  - Website form: the keyboard setting, and the form mode with the `SYNTHETIC` opt-in.
+  - Bug reports: an expected behaviour for each new check.
+
+### 7.6 Fixtures and results
+
+| Fixture | Seeded problems | Negative controls |
+|---|---|---|
+| `keyboard` (2 pages) | A link without a focus indicator; a div button that works with a click but not with Enter or Space; off-screen drawer links reachable with Tab; a rating widget that traps Tab; a link that removes itself when focused (focus lost); a span that reacts to clicks but cannot be focused; a link without an indicator whose focus triggers a (blocked) prefetch, which must be **INCONCLUSIVE** | A skip link, box-shadow focus rings, a native disclosure, a keyboard-ready div button, a `display: none` menu, a `tabindex="-1"` region, a span inside a link, a label, and (on `modal.html`) a modal dialog that keeps focus inside correctly |
+| `forms` | A required field without a mark; `*` without `required` (with a legend); a description id that is missing; a placeholder-only field; an error message not linked; no feedback on blur (observation); a field that autosaves when left (blocked), which must be **INCONCLUSIVE**; with `SYNTHETIC`, an invalid tag whose message is not linked | A form that says "all fields are required", a search field with only a placeholder, a form that marks optional fields instead, linked messages. The never-touch fields (e-mail, full name, password, verification code, card number, consent checkbox, CAPTCHA) report any focus, input, change or Enter to the server; the forms post to `/trap/`. |
+
+Each has corrected twins, so there are 6 new manifests: `keyboard`, `keyboard-fixed`,
+`forms` (`BLUR`), `forms-fixed`, `forms-synthetic` and `forms-synthetic-fixed`. The
+forms manifests switch the keyboard probe off, because the fixture would also report the
+Tab walk's focus.
+
+**Fixture acceptance.** 22 fixture pages; 88 tests. The new detectors are strict: every
+unseeded finding counts as a false positive, observations included.
+
+| Detector | Fixture pages | Expected | Found | Recall | False positives |
+|---|---|---|---|---|---|
+| keyboard (new) | 22 | 8 | 8 | 100% | 0 |
+| forms (new) | 22 | 17 | 17 | 100% | 0 |
+| explorer (M1) | 22 | 15 | 15 | 100% | 0 |
+| layout (CP1) | 22 | 20 | 20 | 100% | 0 |
+| fonts-icons (CP1) | 22 | 7 | 7 | 100% | 0 |
+| consistency (CP1) | 22 | 3 | 3 | 100% | 0 |
+| UI_HEALTH | 22 | 18 | 18 | 100% | 0 |
+| ACCESSIBILITY | 9 | 3 | 3 | 100% | 0 |
+| RESPONSIVE | 4 | 22 | 22 | 100% | 0 |
+
+- The 16 fixture pages from earlier milestones produce **no** keyboard or form finding.
+- The server-side safety counters stayed at 0 everywhere: no writes, no trap requests,
+  no WebSockets. In the forms fixtures this includes "a never-touch field was focused,
+  typed into or changed" and "Enter was pressed in a field".
+- **These targets apply to these deterministic fixtures only, not to arbitrary
+  websites.**
+
+### 7.7 Verification on a real site (separate from the fixtures)
+
+**Docker before and after** (W3C BAD "before" demo, 6 pages, the same settings as
+before; compared with Checkpoint 1):
+- **Unchanged:** the same pages and crawl order, the same scores (accessibility 62, UI
+  health 91), the same links (88 checked, 4 broken), and the same 22 earlier rule groups
+  with the same counts.
+- **New:** 4 `functional/focus-lost` findings, one per explored page.
+  - **Checked by hand:** they are **real**. The demo's main navigation links carry
+    `onfocus="blur();"`, so Tab drops focus back to the page about 14 times in a row,
+    after the "QUICKMENU" select.
+  - This demo is deliberately inaccessible.
+- **Scan time:** 43 s → 64 to 67 s (two runs). The probes add about 4 to 5 s per explored page.
+
+**Demo** (this repository's scanner on the local fixtures, results in the development
+database, shown by the Docker dashboard; no third-party site was used):
+- `keyboard` and `forms` (`SYNTHETIC`) both completed, with 0 server writes, trap
+  requests or WebSockets.
+- **Browser check of the dashboard, 8 of 8 passed:**
+  - the keyboard activation list per proven control;
+  - the keyboard check filters;
+  - the recorded steps on the issue page;
+  - fields left alone with their reasons;
+  - probed fields with their outcomes;
+  - the opted-in mode on the website form;
+  - no horizontal scroll at 390 px;
+  - no page errors, console errors or failed API calls.
+
+### 7.8 Screenshots
+
+![Interactions report: keyboard results](images/phase9-m2-4-interactions-keyboard.png)
+![A control that cannot be used with the keyboard, with the recorded steps](images/phase9-m2-5-issue-key-activation.png)
+![Interactions report: form fields probed and left alone](images/phase9-m2-6-interactions-forms.png)
+![Website settings for the probes](images/phase9-m2-7-website-probe-settings.png)
+
+### 7.9 Limitations
+
+- **The explorer is needed.** Probes run only on pages the explorer opens (its page
+  limit); with the explorer off, they do not run.
+- **Keyboard:**
+  - The Tab walk stops at 100 steps; long pages may not be covered completely.
+  - Shift+Tab is not tested.
+  - Focus visibility is judged by style and pixels around the element; an indicator
+    drawn far from it, or only by animation, may be missed.
+  - Delegated click listeners (on a parent or the document) are not seen, so
+    `CLICK_NOT_FOCUSABLE` misses them.
+- **Forms:**
+  - The personal-data and secret vocabulary is English.
+  - Fields named in other languages are protected only by their `type` and
+    `autocomplete`.
+  - Many real forms consist mostly of personal-data fields, which are never probed.
+  - Feedback is recognised as text appearing in the form, `aria-invalid`, or a change of
+    the field's own border, outline or background. A message shown elsewhere (a toast)
+    counts as a change elsewhere and makes the step inconclusive.
+- **Desktop only (1920×1080).** No dialogs are opened.
+- **Cost:** about 5 s per explored page on the W3C demo; more for pages with many
+  proven controls (each key that works reloads the page).
+
+## 8. Remaining milestones
 
 | M | Scope |
 |---|---|
-| 2 (Checkpoint 2) | Mode 1: keyboard probe (Tab walk, Enter/Space on controls with established safe behaviour) and form probe (`BLUR` by default, `SYNTHETIC` only when opted in per website). Dialogs stay skipped. |
 | 3 | Mode 1: opt-in Firefox/WebKit compatibility |
 | 4 | Mode 2: comparisons, routes, discovery and mapping, run job |
 | 5 | Mode 2: element, visual, style and open-state differences |
@@ -646,7 +886,7 @@ database, shown by the Docker dashboard; no third-party site was scanned):
 | 7 | Comparison tracking, AI for both modes, QA-style reports and exports |
 | 8 | Dashboards, hardening, Docker end to end, final documentation |
 
-## 8. Known limitations (so far)
+## 9. Known limitations (so far)
 
 - Classification of older issues uses the data they stored. Older resource failures were
   not re-checked, so they are `POTENTIAL_DEFECT`, not `DETECTED`.

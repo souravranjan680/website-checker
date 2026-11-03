@@ -142,3 +142,23 @@ describe('side-effect watch (for the keyboard and form probes)', () => {
     await p.close();
   });
 });
+
+describe('side-effect watch: several elements and whole areas (Checkpoint 2 probes)', () => {
+  it('counts changes in any watched element, in a given area, and in elements added at the end', async () => {
+    const p = await open(`<!doctype html>
+      <form id="f"><p id="summary"></p><input id="a" /><input id="b" /></form>
+      <div id="elsewhere"></div><div id="later"><button id="c">C</button></div>`);
+    await p.evaluate(
+      `window.__whcDomChecks.sideEffects.start([document.getElementById('a')], [document.getElementById('f')])`,
+    );
+    await p.evaluate(`document.getElementById('summary').textContent = '1 error'`); // in the form
+    await p.evaluate(`document.getElementById('c').setAttribute('data-state', 'focused')`); // added at stop
+    await p.evaluate(`document.getElementById('elsewhere').textContent = 'saved'`); // unrelated
+    const report = (await p.evaluate(
+      `window.__whcDomChecks.sideEffects.stop([document.getElementById('c')])`,
+    )) as SideEffectReport;
+    expect(report.counts.expected).toBe(2);
+    expect(report.unrelated.map((u) => u.selector)).toEqual(['#elsewhere']);
+    await p.close();
+  });
+});

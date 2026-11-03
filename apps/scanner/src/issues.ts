@@ -33,7 +33,20 @@ export type FunctionalCheck =
   | 'TAB_PANEL_NOT_SHOWN'
   | 'INTERACTION_ERROR'
   | 'BROKEN_ANCHOR'
-  | 'NAV_CURRENT_MISMATCH';
+  | 'NAV_CURRENT_MISMATCH'
+  // Keyboard and form probes (Milestone 2, Checkpoint 2)
+  | 'FOCUS_NOT_VISIBLE'
+  | 'FOCUS_ON_HIDDEN'
+  | 'FOCUS_LOST'
+  | 'KEYBOARD_TRAP'
+  | 'KEY_ACTIVATION_FAILED'
+  | 'CLICK_NOT_FOCUSABLE'
+  | 'FORM_REQUIRED_NOT_INDICATED'
+  | 'FORM_INDICATOR_WITHOUT_REQUIRED'
+  | 'FORM_DESCRIBEDBY_MISSING'
+  | 'FORM_PLACEHOLDER_ONLY_LABEL'
+  | 'FORM_ERROR_NOT_ASSOCIATED'
+  | 'FORM_NO_BLUR_FEEDBACK';
 
 /** An issue found during a scan, before it is saved. */
 export interface IssueDraft {
@@ -267,6 +280,54 @@ const FUNCTIONAL_TEXT: Record<FunctionalCheck, { title: string; fix: string }> =
   NAV_CURRENT_MISMATCH: {
     title: 'Navigation marks the wrong page as current',
     fix: 'Mark the item of the page being shown as current (aria-current="page" and the "active" style), not another item.',
+  },
+  FOCUS_NOT_VISIBLE: {
+    title: 'Keyboard focus is not visible',
+    fix: 'Give focused elements a clear indicator (e.g. :focus-visible { outline: 2px solid } ). Do not remove the outline without a replacement (WCAG 2.4.7).',
+  },
+  FOCUS_ON_HIDDEN: {
+    title: 'Keyboard focus lands on something hidden',
+    fix: 'Elements that cannot be seen (closed menus, off-screen panels) must not be reachable with Tab: hide them with display: none, visibility: hidden or the inert attribute while closed.',
+  },
+  FOCUS_LOST: {
+    title: 'Keyboard focus is lost',
+    fix: 'When the focused element disappears or is replaced, move focus to a sensible element (the next control, or the new content) instead of letting it fall back to the page.',
+  },
+  KEYBOARD_TRAP: {
+    title: 'Keyboard trap',
+    fix: 'Tab must be able to leave every component (WCAG 2.1.2). Only an open modal dialog may keep focus inside, and it must close with Escape.',
+  },
+  KEY_ACTIVATION_FAILED: {
+    title: 'Control cannot be used with the keyboard',
+    fix: 'Use a native <button> (or <a href>), or make the custom control focusable (tabindex="0") and activate it on Enter and, for buttons, on Space.',
+  },
+  CLICK_NOT_FOCUSABLE: {
+    title: 'Clickable element cannot be reached with the keyboard',
+    fix: 'Use a <button> or <a href> for things people click, or add tabindex="0", a role and keyboard handling.',
+  },
+  FORM_REQUIRED_NOT_INDICATED: {
+    title: 'Required field is not marked as required',
+    fix: 'Show that the field is required in its label (e.g. "Name *", with a note explaining the asterisk, or the word "required").',
+  },
+  FORM_INDICATOR_WITHOUT_REQUIRED: {
+    title: 'Field marked as required but not required in the code',
+    fix: 'Add the required attribute (or aria-required="true") so assistive technology and the browser know, or remove the mark if the field is optional.',
+  },
+  FORM_DESCRIBEDBY_MISSING: {
+    title: 'Field points to a description that does not exist',
+    fix: 'aria-describedby and aria-errormessage must name the id of an element in the page; fix the id or add the element.',
+  },
+  FORM_PLACEHOLDER_ONLY_LABEL: {
+    title: 'Field has only a placeholder as its label',
+    fix: 'Add a visible <label>. Placeholders disappear while typing and often have low contrast.',
+  },
+  FORM_ERROR_NOT_ASSOCIATED: {
+    title: 'Error message is not linked to its field',
+    fix: 'Link the message with aria-describedby (or aria-errormessage) and set aria-invalid="true" on the field, so screen readers announce it.',
+  },
+  FORM_NO_BLUR_FEEDBACK: {
+    title: 'No feedback when leaving an empty required field',
+    fix: 'Many sites validate only when the form is submitted, which is fine. If yours should validate earlier, show the message next to the field and link it.',
   },
 };
 

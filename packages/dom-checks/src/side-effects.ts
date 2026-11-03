@@ -129,15 +129,22 @@ export function stopBaseline(): number {
   return background.length;
 }
 
-/** Step 2: watch while probing `element` (by the explorer's element registry or a selector). */
-export function start(element: Element): void {
-  component = componentArea(element);
+/**
+ * Step 2: watch while probing `element` (or several, e.g. the elements focus moves
+ * between). `areas` are whole regions that also count as the component (e.g. the form
+ * a field belongs to, where its error summary may appear).
+ */
+export function start(element: Element | Element[], areas: Element[] = []): void {
+  const elements = Array.isArray(element) ? element : [element];
+  component = [...elements.flatMap((el) => componentArea(el)), ...areas];
   observe();
 }
 
-export function stop(): SideEffectReport {
+/** Ends the watch. `also`: elements known only now that belong to the component. */
+export function stop(also: (Element | null)[] = []): SideEffectReport {
   observer?.disconnect();
   observer = null;
+  for (const el of also) if (el) component.push(...componentArea(el));
   const counts: Record<SideEffectBucket, number> = {
     expected: 0,
     announcement: 0,

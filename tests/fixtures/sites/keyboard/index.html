@@ -1,0 +1,137 @@
+<!doctype html>
+<!--
+  Keyboard fixture (Phase 9, Milestone 2, Checkpoint 2): a help centre.
+  Seeded problems (body[data-variant="seeded"]); /keyboard/fixed.html is the corrected twin:
+    K1  the "Pricing" link removes its focus outline with nothing in its place
+    K2  "Shipping questions" is a div button that works with a click but not with Enter/Space
+    K3  the closed side drawer is moved off the screen but its links can still be tabbed to
+    K4  the rating widget sends Tab from its last star back to its first (a trap)
+    K5  the promotion link removes itself when focused, so focus falls back to the page
+        (reported on the step after "Pricing", where focus was lost)
+    K6  "Read the guide" reacts to clicks but cannot be reached with Tab
+    K7  "Status" has no focus outline either, but focusing it prefetches data (blocked):
+        not claimed (inconclusive)
+  Negative controls (must stay silent):
+    a skip link that appears when focused, buttons with a box-shadow focus ring, a native
+    disclosure button, a div button that does handle Enter and Space, a hidden menu that
+    is display: none, a tabindex="-1" region, a span inside a link with a pointer cursor,
+    and a label with a pointer cursor. (A correct modal focus trap is on modal.html.)
+  Traps for safety: nothing here may be submitted, navigated to or written.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keyboard fixture page</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; font: 16px/1.5 system-ui, sans-serif; color: #1d2433; }
+      a, button, [role='button'] { color: #1d2433; }
+      :focus-visible { outline: 3px solid #2453c7; outline-offset: 2px; }
+      .skip { position: absolute; left: -10000px; top: 8px; background: #fff; padding: 6px; }
+      .skip:focus { left: 8px; }
+      body[data-variant='seeded'] .plain:focus-visible { outline: none; }
+      .ring { border: 1px solid #1d2433; background: #fff; padding: 6px 12px; }
+      .ring:focus-visible { outline: none; box-shadow: 0 0 0 3px #2453c7; }
+      .faq-q { display: inline-block; padding: 6px 12px; border: 1px solid #1d2433; cursor: pointer; }
+      .drawer { position: fixed; top: 0; bottom: 0; width: 280px; left: 0; background: #f3f0e8; padding: 16px; }
+      .drawer.closed { left: -320px; }
+      body[data-variant='fixed'] .drawer.closed { visibility: hidden; }
+      .star { border: 1px solid #1d2433; background: #fff; }
+      .fake-link { color: #2453c7; text-decoration: underline; cursor: pointer; }
+      .menu-hidden { display: none; }
+      .card-link span { cursor: pointer; }
+      label { cursor: pointer; }
+      body[data-variant='seeded'] .status:focus-visible { outline: none; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <a class="skip" href="#main">Skip to the help articles</a>
+    <nav class="drawer closed" aria-label="Help topics">
+      <a href="#orders">Orders</a>
+      <a href="#returns">Returns</a>
+    </nav>
+    <header>
+      <a class="plain" href="#pricing">Pricing</a>
+      <a class="promo" href="#offers">Spring offers</a>
+      <a class="status" href="#status">Status</a>
+      <button class="ring" type="button">Contact</button>
+      <button class="ring" type="button">Language</button>
+    </header>
+    <main id="main" tabindex="-1">
+      <h1>Help centre</h1>
+      <section id="pricing"><h2>Pricing</h2><p>Plans and prices.</p></section>
+      <section id="orders"><h2>Orders</h2><p>Track an order.</p></section>
+      <section id="returns"><h2>Returns</h2><p>Send something back.</p></section>
+      <section id="offers"><h2>Offers</h2><p>Seasonal offers.</p></section>
+      <section id="status"><h2>Status</h2><p>All systems normal.</p></section>
+
+      <h2>Questions</h2>
+      <div class="faq-q" role="button" tabindex="0" aria-expanded="false" aria-controls="faq-shipping" id="faq-shipping-btn">Shipping questions</div>
+      <div id="faq-shipping" hidden><p>We ship within two days.</p></div>
+      <div class="faq-q" role="button" tabindex="0" aria-expanded="false" aria-controls="faq-billing" id="faq-billing-btn">Billing questions</div>
+      <div id="faq-billing" hidden><p>Invoices are sent monthly.</p></div>
+      <p><button type="button" aria-expanded="false" aria-controls="more-tips" id="tips-btn">More tips</button></p>
+      <div id="more-tips" hidden><p>Use the search box.</p></div>
+
+      <h2>Rate this page</h2>
+      <div class="stars" role="group" aria-label="Rating">
+        <button class="star" type="button" id="star-1">1 star</button>
+        <button class="star" type="button" id="star-2">2 stars</button>
+        <button class="star" type="button" id="star-3">3 stars</button>
+      </div>
+
+      <p><span class="fake-link" id="guide">Read the guide</span></p>
+      <p><a class="card-link" href="#orders"><span>Order help</span></a></p>
+      <p><input type="checkbox" id="news-opt" /> <label for="news-opt">Show news</label></p>
+      <ul class="menu-hidden"><li><a href="#returns">Hidden menu link</a></li></ul>
+      <p><a href="modal.html">Cookie notice example</a></p>
+      <p><a href="#main">Back to top</a></p>
+    </main>
+    <script>
+      const seeded = document.body.dataset.variant === 'seeded';
+      const toggle = (button) => {
+        const panel = document.getElementById(button.getAttribute('aria-controls'));
+        const open = button.getAttribute('aria-expanded') === 'true';
+        button.setAttribute('aria-expanded', String(!open));
+        panel.hidden = open;
+      };
+      for (const id of ['faq-shipping-btn', 'faq-billing-btn', 'tips-btn']) {
+        document.getElementById(id).addEventListener('click', (e) => toggle(e.currentTarget));
+      }
+      // "Billing questions" handles the keyboard; "Shipping questions" only on the twin (K2).
+      const keyed = seeded ? ['faq-billing-btn'] : ['faq-billing-btn', 'faq-shipping-btn'];
+      for (const id of keyed) {
+        document.getElementById(id).addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggle(e.currentTarget);
+          }
+        });
+      }
+      // K4: the rating widget traps Tab (seeded only).
+      document.getElementById('star-3').addEventListener('keydown', (e) => {
+        if (seeded && e.key === 'Tab' && !e.shiftKey) {
+          e.preventDefault();
+          document.getElementById('star-1').focus();
+        }
+      });
+      // K5: the promotion link removes itself when focused (seeded only).
+      document.querySelector('.promo').addEventListener('focus', (e) => {
+        if (seeded) e.currentTarget.remove();
+      });
+      // K7: focusing "Status" prefetches data (a request the safety layer blocks).
+      document.querySelector('.status').addEventListener('focus', () => {
+        fetch('/trap/prefetch-status', { method: 'POST' }).catch(() => {});
+      });
+      // K6: a click handler on a span (the twin makes it focusable and keyboard-usable).
+      const guide = document.getElementById('guide');
+      if (!seeded) {
+        guide.setAttribute('tabindex', '0');
+        guide.setAttribute('role', 'link');
+      }
+      guide.addEventListener('click', () => { document.getElementById('pricing').scrollIntoView(); });
+      // Drawer toggling is not offered here; it stays closed.
+    </script>
+  </body>
+</html>

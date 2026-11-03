@@ -44,6 +44,18 @@ export const FUNCTIONAL_CHECK_LABEL: Record<string, string> = {
   INTERACTION_ERROR: 'Error while interacting',
   BROKEN_ANCHOR: 'Link to missing section',
   NAV_CURRENT_MISMATCH: 'Wrong current page in navigation',
+  FOCUS_NOT_VISIBLE: 'Focus not visible',
+  FOCUS_ON_HIDDEN: 'Focus on hidden element',
+  FOCUS_LOST: 'Focus lost',
+  KEYBOARD_TRAP: 'Keyboard trap',
+  KEY_ACTIVATION_FAILED: 'Not usable with keyboard',
+  CLICK_NOT_FOCUSABLE: 'Clickable but not focusable',
+  FORM_REQUIRED_NOT_INDICATED: 'Required field not marked',
+  FORM_INDICATOR_WITHOUT_REQUIRED: 'Marked required, not required',
+  FORM_DESCRIBEDBY_MISSING: 'Description id missing',
+  FORM_PLACEHOLDER_ONLY_LABEL: 'Placeholder as only label',
+  FORM_ERROR_NOT_ASSOCIATED: 'Error not linked to field',
+  FORM_NO_BLUR_FEEDBACK: 'No feedback on leaving field',
 };
 
 export const BUG_STATUS_LABEL: Record<string, string> = {

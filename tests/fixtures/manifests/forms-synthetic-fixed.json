@@ -1,0 +1,43 @@
+{
+  "fixture": "forms (SYNTHETIC, corrected twin)",
+  "startPath": "/forms/fixed.html",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0,
+    "keyboardProbeEnabled": false,
+    "formProbeMode": "SYNTHETIC"
+  },
+  "scoredCategories": ["FUNCTIONAL", "UI_HEALTH"],
+  "expected": [
+    {
+      "id": "notes-autosave-not-claimed",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-no-blur-feedback",
+      "selector": "#notes",
+      "classification": ["INCONCLUSIVE"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "all-fields-required-note",
+      "reason": "the newsletter form says that all fields are required",
+      "selectors": ["#n-email", "#n-name", "#n-pass", "#n-otp", "#n-card", "#n-captcha"]
+    },
+    {
+      "id": "search-placeholder",
+      "reason": "a search field with only a placeholder is common and allowed",
+      "selectors": ["form:nth-of-type(3) > input"]
+    },
+    {
+      "id": "optional-convention",
+      "reason": "the feedback form marks optional fields instead",
+      "selectors": ["#topic", "#details"]
+    },
+    {
+      "id": "linked-messages",
+      "reason": "its messages are linked with aria-describedby and aria-invalid",
+      "selectors": ["#title"]
+    }
+  ]
+}

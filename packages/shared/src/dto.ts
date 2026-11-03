@@ -107,6 +107,9 @@ export interface WebsiteDto {
   explorationControlLimit: number;
   /** Component consistency check (Phase 9, Milestone 2). */
   consistencyEnabled: boolean;
+  /** Keyboard and form probes (Phase 9, Milestone 2, Checkpoint 2). */
+  keyboardProbeEnabled: boolean;
+  formProbeMode: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
   verificationStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED';
   authorizationConfirmedAt: string;
   myRole: ProjectRole;

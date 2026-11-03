@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+  Forms fixture (Phase 9, Milestone 2, Checkpoint 2): a project tool.
+  Seeded problems; /forms/fixed.html is the corrected twin ({{seeded|fixed}} switches markup):
+    F1  "Project title" is required but its label has no mark
+    F2  "Team size *" shows a mark (and the form explains "*") but is not required in the code
+    F3  "Budget" points to a description id that does not exist
+    F4  "Repository URL" has only a placeholder, no visible label
+    F5  "Project code": leaving it empty shows a message that is not linked to the field
+    F6  "Milestone": leaving it empty shows nothing (validated on submit only): an observation
+    F7  "Notes": leaving it saves a draft with a request (blocked): not claimed (inconclusive),
+        on both variants
+    S1  "Release tag" (only with synthetic values): an invalid tag shows an unlinked message
+  Negative controls (must stay silent):
+    a required field with "*" and linked messages, a newsletter form that says all fields
+    are required, a search field with only a placeholder, a feedback form that marks
+    optional fields instead, a field that hints "required" next to the word optional.
+  Never touched (any focus, input or Enter is reported to /trap/ by an image beacon, and
+  the newsletter form posts to /trap/): e-mail, full name, password, verification code,
+  card number, a consent checkbox, and a CAPTCHA field.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Forms fixture page</title>
+    <style>
+      body { margin: 0; padding: 24px; font: 16px/1.5 system-ui, sans-serif; color: #1d2433; }
+      form { border: 1px solid #ccd; padding: 16px; margin-bottom: 24px; max-width: 520px; }
+      label { display: block; margin-top: 12px; }
+      input, textarea, select { font: inherit; padding: 4px 8px; border: 1px solid #9aa3b2; }
+      .error { color: #b42318; margin: 4px 0 0; }
+      .hint { color: #4a5468; margin: 4px 0 0; font-size: 14px; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <h1>New project</h1>
+    <form id="project" action="/trap/project" method="post" novalidate>
+      <p class="hint">Fields marked * are required.</p>
+      <label for="title">Project title{{| *}}</label>
+      <input id="title" name="title" required data-feedback="linked" />
+      <label for="team">Team size *</label>
+      <input id="team" name="team" type="number" min="1" {{|required}} data-feedback="linked" />
+      <label for="budget">Budget</label>
+      <input id="budget" name="budget" type="number" aria-describedby="{{budget-help-old|budget-hint}}" />
+      <p class="hint" id="budget-hint">In euros, without tax.</p>
+      {{|<label for="repo">Repository URL</label>}}
+      <input id="repo" name="repo" type="url" placeholder="Repository URL" aria-label="Repository URL" data-feedback="linked" />
+      <label for="code">Project code *</label>
+      <input id="code" name="code" required pattern="[A-Z]{3}-[0-9]{3}" data-feedback="unlinked" data-fixed="linked" />
+      <label for="milestone">Milestone *</label>
+      <input id="milestone" name="milestone" required data-feedback="none" data-fixed="linked" />
+      <label for="notes">Notes *</label>
+      <textarea id="notes" name="notes" required data-feedback="none" data-autosave="yes"></textarea>
+      <label for="tag">Release tag</label>
+      <input id="tag" name="tag" pattern="v[0-9]+\.[0-9]+" data-feedback="unlinked" data-fixed="linked" />
+      <p><button type="submit">Create project</button></p>
+    </form>
+
+    <h2>Newsletter</h2>
+    <form id="newsletter" action="/trap/subscribe" method="post">
+      <p class="hint">All fields are required.</p>
+      <label for="n-email">E-mail</label>
+      <input id="n-email" name="email" type="email" autocomplete="email" required data-never />
+      <label for="n-name">Full name</label>
+      <input id="n-name" name="fullname" autocomplete="name" required data-never />
+      <label for="n-pass">Password</label>
+      <input id="n-pass" name="password" type="password" autocomplete="new-password" required data-never />
+      <label for="n-otp">Verification code</label>
+      <input id="n-otp" name="otp" autocomplete="one-time-code" required data-never />
+      <label for="n-card">Card number</label>
+      <input id="n-card" name="card" autocomplete="cc-number" required data-never />
+      <div class="g-recaptcha"><label for="n-captcha">Type the letters</label><input id="n-captcha" name="captcha" required data-never /></div>
+      <label><input type="checkbox" name="consent" required data-never /> I agree to receive e-mails</label>
+      <p><button type="submit">Send</button></p>
+    </form>
+
+    <form role="search" action="/trap/search">
+      <input type="search" name="q" placeholder="Search projects" aria-label="Search projects" />
+    </form>
+
+    <h2>Feedback</h2>
+    <form id="feedback" action="/trap/feedback" method="post">
+      <label for="topic">Topic</label>
+      <input id="topic" name="topic" required data-feedback="linked" />
+      <label for="details">Details (optional)</label>
+      <textarea id="details" name="details"></textarea>
+    </form>
+
+    <script>
+      const seeded = document.body.dataset.variant === 'seeded';
+      const beacon = (what) => { new Image().src = '/trap/' + what + '?t=' + Date.now(); };
+      // Anything that touches a field the scanner must never touch is reported to the server.
+      for (const field of document.querySelectorAll('[data-never]')) {
+        for (const type of ['focus', 'input', 'change', 'keydown']) {
+          field.addEventListener(type, () => beacon('touched-' + type + '-' + field.name));
+        }
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.matches('input, textarea, select')) beacon('enter-in-field');
+      });
+      for (const field of document.querySelectorAll('[data-feedback]')) {
+        field.addEventListener('blur', () => {
+          if (field.dataset.autosave) fetch('/trap/autosave', { method: 'POST' }).catch(() => {});
+          const how = seeded ? field.dataset.feedback : field.dataset.fixed || field.dataset.feedback;
+          if (how === 'none' || field.validity.valid) return;
+          let message = document.getElementById(field.id + '-error');
+          if (!message) {
+            message = document.createElement('p');
+            message.className = 'error';
+            message.id = field.id + '-error';
+            field.insertAdjacentElement('afterend', message);
+          }
+          message.textContent = field.value ? 'Check the format of this field.' : 'Please fill in this field.';
+          if (how === 'linked') {
+            field.setAttribute('aria-describedby', message.id);
+            field.setAttribute('aria-invalid', 'true');
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

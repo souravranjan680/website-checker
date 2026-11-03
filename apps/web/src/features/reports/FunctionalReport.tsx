@@ -45,6 +45,49 @@ const BLOCKED: Record<string, string> = {
   'form-submit': 'Form submission',
 };
 
+/** Why a keyboard or form probe left something alone. */
+const PROBE_SKIP: Record<string, string> = {
+  'sensitive-field': 'secret or payment data: never touched',
+  'personal-data-field': 'personal data: never touched',
+  'unsupported-type': 'choice, file or button field',
+  captcha: 'CAPTCHA',
+  disabled: 'disabled',
+  'read-only': 'read-only',
+  'not-visible': 'not visible',
+  'not-required': 'not required (only empty required fields are left)',
+  'not-empty': 'already filled in',
+  'no-invalid-value': 'no value is certainly invalid',
+  'mode-static': 'fields are only read on this website',
+  limit: 'over the limit',
+  'activation-not-established': 'its click did not prove safe here',
+  'side-effect-observed': 'its click caused other activity',
+  'opens-dialog': 'opens a dialog (not opened)',
+};
+
+const KEY_RESULT: Record<string, string> = {
+  works: 'works',
+  fails: 'does nothing',
+  'not-focusable': 'cannot get focus',
+  inconclusive: 'not claimed',
+};
+
+const FORM_OUTCOME: Record<string, string> = {
+  'error-shown-linked': 'message shown and linked',
+  'error-not-linked': 'message not linked',
+  'feedback-without-text': 'marked, no message',
+  'no-feedback': 'no feedback',
+  'value-accepted': 'value accepted',
+  'not-focusable': 'could not focus',
+  inconclusive: 'not claimed',
+};
+
+const FORM_MODE: Record<string, string> = {
+  OFF: 'off',
+  STATIC: 'fields read only',
+  BLUR: 'focus and leave (no typing)',
+  SYNTHETIC: 'with invalid test values',
+};
+
 const ruleIdOf = (checkType: string) => `functional/${checkType.toLowerCase().replace(/_/g, '-')}`;
 
 /**
@@ -77,7 +120,7 @@ export function FunctionalReport() {
 
   return (
     <div className="flex flex-col gap-6">
-      <dl className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         <MetricTile label="Pages explored" value={r.totals.pagesExplored} />
         <MetricTile label="Controls opened" value={r.totals.controlsExplored} />
         <MetricTile label="Findings" value={total} />
@@ -91,6 +134,16 @@ export function FunctionalReport() {
           value={r.totals.actionsBlocked}
           hint="Requests, navigations, downloads and pop-ups the page tried while it was explored"
         />
+        <MetricTile
+          label="Pages keyboard-checked"
+          value={r.totals.pagesKeyboardChecked}
+          hint="Tab moved through the page; Enter and Space only on controls whose click was proven safe"
+        />
+        <MetricTile
+          label="Form fields probed"
+          value={r.totals.formFieldsProbed}
+          hint={`Fields focused and left (never submitted); ${r.totals.probesSkipped} fields and controls were left alone, each with a reason`}
+        />
       </dl>
 
       <Alert>
@@ -100,7 +153,10 @@ export function FunctionalReport() {
           It only opens menus, tabs and expandable sections. It never submits forms or uses controls
           that could change data (delete, send, save, buy…). While it works, the page cannot send
           data, navigate, open pop-ups, download files or use WebSockets. Findings from an
-          interaction during which something was blocked are marked inconclusive.
+          interaction during which something was blocked are marked inconclusive. The keyboard and
+          form checks never submit a form, never type into personal, secret or payment fields, and
+          press Enter or Space only where a click was proven safe; a step during which anything else
+          happened is not claimed.
         </AlertDescription>
       </Alert>
 
@@ -220,6 +276,93 @@ export function FunctionalReport() {
                       <li className="text-muted-foreground">and {page.blocked.length - 8} more</li>
                     ) : null}
                   </ul>
+                </div>
+              ) : null}
+              {page.keyboard ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Keyboard</p>
+                  {page.keyboard.error ? (
+                    <p className="text-muted-foreground">{page.keyboard.error}</p>
+                  ) : (
+                    <>
+                      <p>
+                        Tab pressed {page.keyboard.steps} times
+                        {page.keyboard.stoppedBy === 'trap'
+                          ? ' · stopped at a keyboard trap'
+                          : page.keyboard.stoppedBy === 'limit'
+                            ? ' · stopped at the step limit'
+                            : ''}
+                      </p>
+                      {page.keyboard.activation.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5" aria-label="Keyboard activation">
+                          {page.keyboard.activation.map((a, i) => (
+                            <li key={i}>
+                              <span className="font-medium">{a.name || '(unnamed)'}</span>{' '}
+                              <span className="text-muted-foreground">
+                                ·{' '}
+                                {a.keys
+                                  .map((k) => `${k.key}: ${KEY_RESULT[k.result] ?? k.result}`)
+                                  .join(', ')}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {page.keyboard.skipped.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5" aria-label="Keyboard checks skipped">
+                          {page.keyboard.skipped.map((k, i) => (
+                            <li key={i} className="text-muted-foreground">
+                              Not pressed:{' '}
+                              <span className="font-medium text-foreground">
+                                {k.name || '(unnamed)'}
+                              </span>{' '}
+                              · {PROBE_SKIP[k.reason] ?? k.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
+              {page.forms ? (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Forms ({FORM_MODE[page.forms.mode] ?? page.forms.mode})
+                  </p>
+                  {page.forms.error ? (
+                    <p className="text-muted-foreground">{page.forms.error}</p>
+                  ) : (
+                    <>
+                      <p>{page.forms.fields} fields read</p>
+                      {page.forms.probed.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5" aria-label="Form fields probed">
+                          {page.forms.probed.map((f, i) => (
+                            <li key={i}>
+                              <span className="font-medium">{f.name || '(unnamed)'}</span>{' '}
+                              <span className="text-muted-foreground">
+                                · {FORM_OUTCOME[f.outcome] ?? f.outcome}
+                                {f.action === 'synthetic' ? ' (invalid test value)' : ''}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {page.forms.skipped.length > 0 ? (
+                        <ul className="mt-1 space-y-0.5" aria-label="Form fields left alone">
+                          {page.forms.skipped.map((f, i) => (
+                            <li key={i} className="text-muted-foreground">
+                              Left alone:{' '}
+                              <span className="font-medium text-foreground">
+                                {f.name || '(unnamed)'}
+                              </span>{' '}
+                              · {PROBE_SKIP[f.reason] ?? f.reason}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               ) : null}
             </CardContent>

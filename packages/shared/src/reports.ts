@@ -7,6 +7,7 @@ import {
   type ReviewStatusName,
 } from './scans';
 import { idSchema, listQuerySchema } from './schemas/common';
+import type { FormProbeModeName } from './schemas/websites';
 
 // ------------------------------------------------------------------ dashboard
 
@@ -681,6 +682,11 @@ export interface FunctionalReportDto {
     controlsExplored: number;
     controlsSkipped: number;
     actionsBlocked: number;
+    /** Keyboard and form probes (Phase 9, Milestone 2, Checkpoint 2). */
+    pagesKeyboardChecked: number;
+    formFieldsProbed: number;
+    /** Fields and controls the probes left alone, with a reason (see pages). */
+    probesSkipped: number;
   };
   /** One row per page the explorer ran on (null summary: the page could not be explored). */
   pages: {
@@ -693,5 +699,24 @@ export interface FunctionalReportDto {
     skipped: { name: string; role: string; reason: string }[];
     skippedCounts: Record<string, number>;
     blocked: { kind: string; method?: string; url?: string; detail?: string }[];
+    /** Keyboard probe on this page (null: switched off, or a scan from before it existed). */
+    keyboard: {
+      error: string | null;
+      steps: number;
+      stoppedBy: string;
+      focusOrder: string[];
+      activation: { name: string; keys: { key: string; result: string }[] }[];
+      skipped: { name: string; reason: string }[];
+      clickableNotFocusable: number;
+    } | null;
+    /** Form probe on this page (null: switched off, or a scan from before it existed). */
+    forms: {
+      error: string | null;
+      mode: FormProbeModeName;
+      fields: number;
+      probed: { name: string; action: string; outcome: string }[];
+      skipped: { name: string; reason: string }[];
+      skippedCounts: Record<string, number>;
+    } | null;
   }[];
 }

@@ -19,6 +19,10 @@ const pathPatternSchema = z
   .max(200)
   .regex(/^\//, 'Patterns must start with "/", e.g. /blog/*');
 
+/** How far the form probe goes; forms are never submitted. */
+export const FORM_PROBE_MODES = ['OFF', 'STATIC', 'BLUR', 'SYNTHETIC'] as const;
+export type FormProbeModeName = (typeof FORM_PROBE_MODES)[number];
+
 export const websiteSettingsSchema = z.object({
   maxDepth: z.number().int().min(0, 'Minimum is 0.').max(5, 'Maximum is 5.'),
   maxPages: z.number().int().min(1, 'Minimum is 1.').max(100, 'Maximum is 100.'),
@@ -33,6 +37,9 @@ export const websiteSettingsSchema = z.object({
   explorationControlLimit: z.number().int().min(1, 'Minimum is 1.').max(50, 'Maximum is 50.'),
   /** Component consistency (Phase 9, Milestone 2): compares comparable buttons and fields. */
   consistencyEnabled: z.boolean(),
+  /** Keyboard and form probes (Phase 9, Milestone 2, Checkpoint 2). SYNTHETIC is opt-in only. */
+  keyboardProbeEnabled: z.boolean(),
+  formProbeMode: z.enum(FORM_PROBE_MODES),
 });
 
 export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
@@ -47,6 +54,8 @@ export const DEFAULT_WEBSITE_SETTINGS: z.infer<typeof websiteSettingsSchema> = {
   explorationPageLimit: 5,
   explorationControlLimit: 30,
   consistencyEnabled: true,
+  keyboardProbeEnabled: true,
+  formProbeMode: 'BLUR',
 };
 
 const authorizationSchema = z.literal(true, {

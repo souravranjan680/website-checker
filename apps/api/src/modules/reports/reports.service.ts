@@ -648,6 +648,8 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
         skipped: { name: string; role: string; reason: string }[];
         skippedCounts: Record<string, number>;
         blocked: { kind: string; method?: string; url?: string; detail?: string }[];
+        keyboard: Partial<NonNullable<FunctionalReportDto['pages'][number]['keyboard']>> | null;
+        forms: Partial<NonNullable<FunctionalReportDto['pages'][number]['forms']>> | null;
       }>;
       const rows = pages.map((page) => {
         const summary = (page.exploration ?? {}) as Summary;
@@ -666,6 +668,28 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
           })),
           skippedCounts: summary.skippedCounts ?? {},
           blocked: summary.blocked ?? [],
+          // Keyboard and form probes (Milestone 2, Checkpoint 2); null on older scans.
+          keyboard: summary.keyboard
+            ? {
+                error: summary.keyboard.error ?? null,
+                steps: summary.keyboard.steps ?? 0,
+                stoppedBy: summary.keyboard.stoppedBy ?? 'error',
+                focusOrder: summary.keyboard.focusOrder ?? [],
+                activation: summary.keyboard.activation ?? [],
+                skipped: summary.keyboard.skipped ?? [],
+                clickableNotFocusable: summary.keyboard.clickableNotFocusable ?? 0,
+              }
+            : null,
+          forms: summary.forms
+            ? {
+                error: summary.forms.error ?? null,
+                mode: summary.forms.mode ?? 'BLUR',
+                fields: summary.forms.fields ?? 0,
+                probed: summary.forms.probed ?? [],
+                skipped: summary.forms.skipped ?? [],
+                skippedCounts: summary.forms.skippedCounts ?? {},
+              }
+            : null,
         };
       });
       return {
@@ -682,6 +706,12 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
             0,
           ),
           actionsBlocked: rows.reduce((n, r) => n + r.blocked.length, 0),
+          pagesKeyboardChecked: rows.filter((r) => r.keyboard && !r.keyboard.error).length,
+          formFieldsProbed: rows.reduce((n, r) => n + (r.forms?.probed.length ?? 0), 0),
+          probesSkipped: rows.reduce(
+            (n, r) => n + (r.keyboard?.skipped.length ?? 0) + (r.forms?.skipped.length ?? 0),
+            0,
+          ),
         },
         pages: rows,
       };

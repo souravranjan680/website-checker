@@ -125,6 +125,28 @@ enum FunctionalCheckType {
   INTERACTION_ERROR // a JavaScript error was thrown while interacting
   BROKEN_ANCHOR // an in-page link points to a section that does not exist
   NAV_CURRENT_MISMATCH // navigation marks a different page as the current one
+  // Keyboard probe (Phase 9, Milestone 2, Checkpoint 2)
+  FOCUS_NOT_VISIBLE // focus moves to an element without any visible change
+  FOCUS_ON_HIDDEN // focus lands on an element that cannot be seen
+  FOCUS_LOST // focus falls back to the page while more controls follow
+  KEYBOARD_TRAP // Tab keeps cycling through a few elements outside a modal
+  KEY_ACTIVATION_FAILED // Enter/Space do not do what a click did
+  CLICK_NOT_FOCUSABLE // clickable element that Tab never reaches
+  // Form probe (Phase 9, Milestone 2, Checkpoint 2)
+  FORM_REQUIRED_NOT_INDICATED // required field without a visible required mark
+  FORM_INDICATOR_WITHOUT_REQUIRED // "*" or "required" shown, but the field is not required
+  FORM_DESCRIBEDBY_MISSING // aria-describedby/-errormessage point to a missing id
+  FORM_PLACEHOLDER_ONLY_LABEL // the placeholder is the only visible label
+  FORM_ERROR_NOT_ASSOCIATED // an error appears but is not linked to its field
+  FORM_NO_BLUR_FEEDBACK // no feedback when leaving an empty required field
+}
+
+/// How far the form probe goes (Phase 9, Milestone 2). Forms are never submitted.
+enum FormProbeMode {
+  OFF // no form checks
+  STATIC // read the fields only (no focus, no events)
+  BLUR // also focus and leave empty required fields (no typing)
+  SYNTHETIC // also type clearly invalid, non-personal values (opt-in per website)
 }
 
 enum DetectionType {
@@ -396,6 +418,9 @@ model Website {
   explorationControlLimit  Int                @default(30)
   /// Component consistency check (Phase 9, Milestone 2): compares comparable buttons and fields.
   consistencyEnabled       Boolean            @default(true)
+  /// Keyboard and form probes (Phase 9, Milestone 2): run on the pages the explorer opens.
+  keyboardProbeEnabled     Boolean            @default(true)
+  formProbeMode            FormProbeMode      @default(BLUR)
   verificationStatus       VerificationStatus @default(UNVERIFIED)
   verificationToken        String?            @unique
   verifiedAt               DateTime?

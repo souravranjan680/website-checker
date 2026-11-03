@@ -82,6 +82,21 @@ const FUNCTIONAL_EXPECTED: Record<string, string> = {
   INTERACTION_ERROR: 'Using the control throws no JavaScript error.',
   BROKEN_ANCHOR: 'The link scrolls to an existing section of the page.',
   NAV_CURRENT_MISMATCH: 'The navigation marks the page being shown as the current one.',
+  FOCUS_NOT_VISIBLE: 'The element shows a visible focus indicator when it has keyboard focus.',
+  FOCUS_ON_HIDDEN: 'Tab only moves focus to elements that can be seen.',
+  FOCUS_LOST: 'Tab moves focus to the next control; focus never falls back to the page.',
+  KEYBOARD_TRAP: 'Tab and Shift+Tab can move focus out of the component.',
+  KEY_ACTIVATION_FAILED: 'Enter (and Space, for buttons) does what a click does.',
+  CLICK_NOT_FOCUSABLE: 'Every clickable element can also be reached and used with the keyboard.',
+  FORM_REQUIRED_NOT_INDICATED: 'A required field shows that it is required in its label.',
+  FORM_INDICATOR_WITHOUT_REQUIRED:
+    'A field marked as required is required in the code (required or aria-required).',
+  FORM_DESCRIBEDBY_MISSING: 'aria-describedby and aria-errormessage point to elements that exist.',
+  FORM_PLACEHOLDER_ONLY_LABEL: 'The field has a visible label besides its placeholder.',
+  FORM_ERROR_NOT_ASSOCIATED:
+    'The error message is linked to its field and the field is marked aria-invalid.',
+  FORM_NO_BLUR_FEEDBACK:
+    'If the site validates while typing, leaving an empty required field shows a linked message.',
 };
 
 /** What each UI check guarantees when it passes (the check's own definition). */

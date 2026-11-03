@@ -1,0 +1,86 @@
+{
+  "fixture": "forms (BLUR, the default)",
+  "startPath": "/forms/",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0,
+    "keyboardProbeEnabled": false,
+    "formProbeMode": "BLUR"
+  },
+  "scoredCategories": ["FUNCTIONAL", "UI_HEALTH"],
+  "expected": [
+    {
+      "id": "title-required-not-marked",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-required-not-indicated",
+      "selector": "#title",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "team-size-marked-not-required",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-indicator-without-required",
+      "selector": "#team",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "budget-description-missing",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-describedby-missing",
+      "selector": "#budget",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "repository-placeholder-only",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-placeholder-only-label",
+      "selector": "#repo",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "project-code-error-not-linked",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-error-not-associated",
+      "selector": "#code",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "milestone-no-blur-feedback",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-no-blur-feedback",
+      "selector": "#milestone",
+      "classification": ["OBSERVATION"]
+    },
+    {
+      "id": "notes-autosave-not-claimed",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/form-no-blur-feedback",
+      "selector": "#notes",
+      "classification": ["INCONCLUSIVE"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "all-fields-required-note",
+      "reason": "the newsletter form says that all fields are required",
+      "selectors": ["#n-email", "#n-name", "#n-pass", "#n-otp", "#n-card", "#n-captcha"]
+    },
+    {
+      "id": "search-placeholder",
+      "reason": "a search field with only a placeholder is common and allowed",
+      "selectors": ["form:nth-of-type(3) > input"]
+    },
+    {
+      "id": "optional-convention",
+      "reason": "the feedback form marks optional fields instead",
+      "selectors": ["#topic", "#details"]
+    },
+    {
+      "id": "linked-messages",
+      "reason": "its messages are linked with aria-describedby and aria-invalid",
+      "selectors": ["#title"]
+    }
+  ],
+  "forbiddenTokens": ["Project title", "Team size", "Release tag", "budget-help-old", "Milestone *"]
+}

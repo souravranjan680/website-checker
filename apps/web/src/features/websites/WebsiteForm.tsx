@@ -68,6 +68,8 @@ function buildSchema(needsAuthorization: (baseUrl: string) => boolean) {
         .number(numberError)
         .pipe(websiteSettingsSchema.shape.explorationControlLimit),
       consistencyEnabled: z.boolean(),
+      keyboardProbeEnabled: z.boolean(),
+      formProbeMode: websiteSettingsSchema.shape.formProbeMode,
       includePatterns: patternsText,
       excludePatterns: patternsText,
       authorizationConfirmed: z.boolean(),
@@ -98,6 +100,8 @@ export interface WebsiteSubmitValues {
   explorationPageLimit: number;
   explorationControlLimit: number;
   consistencyEnabled: boolean;
+  keyboardProbeEnabled: boolean;
+  formProbeMode: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
   includePatterns: string[];
   excludePatterns: string[];
   authorizationConfirmed: boolean;
@@ -153,6 +157,8 @@ export function WebsiteForm({
       explorationPageLimit: settings.explorationPageLimit,
       explorationControlLimit: settings.explorationControlLimit,
       consistencyEnabled: settings.consistencyEnabled,
+      keyboardProbeEnabled: settings.keyboardProbeEnabled,
+      formProbeMode: settings.formProbeMode,
       includePatterns: settings.includePatterns.join('\n'),
       excludePatterns: settings.excludePatterns.join('\n'),
       authorizationConfirmed: false,
@@ -296,6 +302,27 @@ export function WebsiteForm({
             name="consistencyEnabled"
             label="Compare similar buttons and fields"
             description="Points out buttons and fields that look different from others with the same classes, on a page or across pages. Reported as observations unless the difference is clearly set on that element alone; never part of the score."
+          />
+          <CheckboxField
+            control={form.control}
+            name="keyboardProbeEnabled"
+            label="Check keyboard use on explored pages"
+            description="Moves through each explored page with Tab (focus visible, never lost or trapped) and presses Enter or Space only on controls whose click was proven safe. Needs the explorer."
+          />
+          <SelectField
+            control={form.control}
+            name="formProbeMode"
+            label="Form checks on explored pages"
+            description="Forms are never submitted. Personal, secret, payment and CAPTCHA fields are never touched. Typing invalid values is only done if you choose it here."
+            options={[
+              { value: 'OFF', label: 'Off' },
+              { value: 'STATIC', label: 'Read the fields only' },
+              {
+                value: 'BLUR',
+                label: 'Also click into empty required fields and leave them (default)',
+              },
+              { value: 'SYNTHETIC', label: 'Also type clearly invalid test values (opt-in)' },
+            ]}
           />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextareaField

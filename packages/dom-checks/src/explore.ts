@@ -55,6 +55,11 @@ export function element(id: number): Element | null {
   return registry.elements.get(id) ?? null;
 }
 
+/** The registry id of an element (registering it if needed); used by the probes. */
+export function register(el: Element): number {
+  return idOf(el);
+}
+
 /** A rough accessible name: label attributes, then text, then images' alt text. */
 export function accessibleName(el: Element): string {
   const labelledBy = el.getAttribute('aria-labelledby');

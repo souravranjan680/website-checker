@@ -52,6 +52,20 @@ export interface ExplorationResult {
   summary: ExplorationSummary;
   drafts: IssueDraft[];
   crops: Map<string, CapturedImage>;
+  /**
+   * For the keyboard probe (Milestone 2, Checkpoint 2): controls whose click was proven
+   * safe in this scan (it opened something, with nothing blocked, no navigation and no
+   * error), and the others with the reason they may not be activated by keyboard.
+   */
+  /** "rule|selector" of the page's accessibility violations (the form probe skips them). */
+  knownViolations: Set<string>;
+  activation: {
+    established: ExploreControl[];
+    skipped: {
+      name: string;
+      reason: 'activation-not-established' | 'side-effect-observed' | 'opens-dialog' | 'limit';
+    }[];
+  };
 }
 
 const SETTLE_MS = 300;
@@ -208,17 +222,35 @@ export async function explorePage(params: {
   summary.skippedCounts = inventory.skippedCounts as Record<string, number>;
   let layerAxeRuns = 0;
 
+  const activation: ExplorationResult['activation'] = { established: [], skipped: [] };
+  for (const skipped of inventory.skipped) {
+    if (skipped.reason === 'opens-dialog' || skipped.reason === 'limit') {
+      activation.skipped.push({ name: skipped.name, reason: skipped.reason });
+    }
+  }
   for (const control of inventory.controls) {
     params.checkpoint();
+    const blockedBeforeControl = params.blocked.length;
+    const errorsBeforeControl = params.log.pageErrors.length;
     const outcome = await exploreControl(control);
     summary.controls.push({ name: control.name, kind: control.kind, result: outcome });
+    if (
+      params.blocked.length > blockedBeforeControl ||
+      params.log.pageErrors.length > errorsBeforeControl
+    ) {
+      activation.skipped.push({ name: control.name, reason: 'side-effect-observed' });
+    } else if (outcome === 'opened') {
+      activation.established.push(control);
+    } else {
+      activation.skipped.push({ name: control.name, reason: 'activation-not-established' });
+    }
     if (outcome !== 'not-clickable' && outcome !== 'disappeared') summary.explored += 1;
     if (summary.stoppedEarly) break;
   }
 
   await params.collectPageBlocks(page);
   summary.blocked = params.blocked.slice(blockedAtStart).slice(0, 50);
-  return { summary, drafts, crops };
+  return { summary, drafts, crops, activation, knownViolations };
 
   // ------------------------------------------------------------ one control
   async function exploreControl(control: ExploreControl): Promise<ControlResult> {

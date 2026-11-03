@@ -1,0 +1,44 @@
+<!doctype html>
+<!--
+  Keyboard fixture, second page: a cookie notice shown as a modal dialog on load, which
+  keeps focus inside it on purpose (correct for a modal). Must not be reported as a trap.
+  Its buttons ("Accept", "Reject") change data and are never activated by the scanner.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Keyboard fixture modal page</title>
+    <style>
+      body { margin: 0; padding: 24px; font: 16px/1.5 system-ui, sans-serif; color: #1d2433; }
+      :focus-visible { outline: 3px solid #2453c7; outline-offset: 2px; }
+      .backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); }
+      .notice { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); background: #fff; padding: 24px; width: 320px; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <main><h1>Welcome</h1><p><a href="/keyboard/">Help centre</a></p></main>
+    <div class="backdrop"></div>
+    <div class="notice" role="dialog" aria-modal="true" aria-labelledby="notice-title">
+      <h2 id="notice-title">Cookies</h2>
+      <p>We use one cookie to remember this choice.</p>
+      <button type="button" id="accept">Accept</button>
+      <button type="button" id="reject">Reject</button>
+    </div>
+    <script>
+      const first = document.getElementById('accept');
+      const last = document.getElementById('reject');
+      document.querySelector('.notice').addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      });
+      first.focus();
+    </script>
+  </body>
+</html>

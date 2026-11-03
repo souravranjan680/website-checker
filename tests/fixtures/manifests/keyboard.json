@@ -1,0 +1,122 @@
+{
+  "fixture": "keyboard",
+  "startPath": "/keyboard/",
+  "scan": {
+    "maxPages": 2,
+    "maxDepth": 1,
+    "responsivePageLimit": 0
+  },
+  "scoredCategories": ["FUNCTIONAL", "UI_HEALTH"],
+  "expected": [
+    {
+      "id": "pricing-focus-not-visible",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/focus-not-visible",
+      "selector": "header > a:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "status-focus-prefetch-not-claimed",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/focus-not-visible",
+      "selector": "header > a:nth-of-type(2)",
+      "classification": ["INCONCLUSIVE"]
+    },
+    {
+      "id": "shipping-div-button-no-keys",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/key-activation-failed",
+      "selector": "#faq-shipping-btn",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "drawer-orders-focused-off-screen",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/focus-on-hidden",
+      "selector": "nav > a:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "drawer-returns-focused-off-screen",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/focus-on-hidden",
+      "selector": "nav > a:nth-of-type(2)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "rating-widget-trap",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/keyboard-trap",
+      "selector": "#star-1",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "promotion-link-loses-focus",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/focus-lost",
+      "selector": "header > a:nth-of-type(1)",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "guide-click-only",
+      "category": "FUNCTIONAL",
+      "ruleId": "functional/click-not-focusable",
+      "selector": "#guide",
+      "classification": ["OBSERVATION"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "skip-link",
+      "reason": "off screen until focused, then visible",
+      "selectors": [".skip", "body > a"]
+    },
+    {
+      "id": "focus-ring-buttons",
+      "reason": "box-shadow focus ring instead of an outline",
+      "selectors": ["header > button:nth-of-type(1)", "header > button:nth-of-type(2)"]
+    },
+    {
+      "id": "native-disclosure",
+      "reason": "a native button: Enter and Space work",
+      "selectors": ["#tips-btn"]
+    },
+    {
+      "id": "keyboard-ready-div-button",
+      "reason": "a div button that handles Enter and Space",
+      "selectors": ["#faq-billing-btn"]
+    },
+    {
+      "id": "hidden-menu",
+      "reason": "display: none, so not focusable",
+      "selectors": ["ul > li > a"]
+    },
+    {
+      "id": "main-region",
+      "reason": "tabindex=\"-1\" region (focusable by script only)",
+      "selectors": ["#main"]
+    },
+    {
+      "id": "span-in-link",
+      "reason": "pointer cursor inside a link: the link gets focus",
+      "selectors": [".card-link > span", "p:nth-of-type(3) > a > span"]
+    },
+    {
+      "id": "label",
+      "reason": "a label with a pointer cursor focuses its checkbox",
+      "selectors": ["label"]
+    },
+    {
+      "id": "modal-focus-trap",
+      "reason": "an open modal dialog keeps focus inside on purpose",
+      "selectors": ["#accept", "#reject"]
+    }
+  ],
+  "forbiddenTokens": [
+    "faq-shipping",
+    "star-1",
+    "Spring offers",
+    "Read the guide",
+    "prefetch-status"
+  ]
+}

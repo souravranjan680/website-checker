@@ -59,3 +59,22 @@ export type {
   SideEffectReport,
   StyleProperty,
 } from './extra-rules';
+// Milestone 2, Checkpoint 2: pure rules of the keyboard and form probes.
+export {
+  ALL_REQUIRED,
+  ASTERISK_LEGEND,
+  detectTrap,
+  fieldPolicy,
+  OPTIONAL_MARK,
+  REQUIRED_MARK,
+  syntheticValue,
+} from './probe-rules';
+export type {
+  Feedback,
+  FieldFacts,
+  FocusStep,
+  FormFacts,
+  FormField,
+  FormProbeMode,
+  ProbeSkipReason,
+} from './probe-rules';

@@ -37,7 +37,7 @@ import { saveIssues, saveScreenshot } from '../persistence';
 import { createProgressReporter, type ProgressReporter } from '../progress';
 import { captureHighlightedIssue, captureViewport } from '../screenshots';
 import { resolveKey, type FileStorage } from '../storage';
-import { runExploration } from '../explore/run-exploration';
+import { runExploration, type ExploredPages } from '../explore/run-exploration';
 import { scanPage } from './scan-page';
 
 export interface ScanDeps {
@@ -372,13 +372,19 @@ export async function runScan(
     // ------------------------------------------------------- safe explorer
     // Opens menus, tabs and expandable sections on the first pages (Phase 9). Its own
     // browser context, with writes, navigation, pop-ups, downloads and WebSockets blocked.
-    let exploredPages = new Set<string>();
+    let covered: ExploredPages = {
+      explored: new Set(),
+      keyboard: new Set(),
+      formsRead: new Set(),
+      formsProbed: new Set(),
+      formsSynthetic: new Set(),
+    };
     const explorationPages = website.explorationEnabled
       ? Math.min(website.explorationPageLimit, config.maxExplorationPages)
       : 0;
     if (scannedPages.length > 0 && explorationPages > 0 && !timeLimitReached) {
       const targets = scannedPages.slice(0, explorationPages);
-      exploredPages = await runExploration({
+      covered = await runExploration({
         browser,
         deps,
         scanId,
@@ -387,6 +393,8 @@ export async function runScan(
         viewport: desktop,
         targets,
         controlLimit: Math.min(website.explorationControlLimit, config.maxExplorationControls),
+        keyboardProbe: website.keyboardProbeEnabled,
+        formProbeMode: website.formProbeMode,
         cropBudget,
         storeIssues,
         onPage: (index, url) =>
@@ -658,7 +666,11 @@ export async function runScan(
             scannedPages.flatMap((p) => [p.normalizedUrl, normalizeUrl(p.url) ?? p.normalizedUrl]),
           ),
           responsivePages: responsiveChecked,
-          exploredPages,
+          exploredPages: covered.explored,
+          keyboardPages: covered.keyboard,
+          formsReadPages: covered.formsRead,
+          formsProbedPages: covered.formsProbed,
+          formsSyntheticPages: covered.formsSynthetic,
           consistencyPages: consistencyChecked,
         },
       );
