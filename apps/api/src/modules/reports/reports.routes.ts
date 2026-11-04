@@ -43,6 +43,10 @@ export function createReportsRouter(deps: {
     res.json({ data: await reports.seo(currentUser(req), scanIdOf(req.params.scanId)) });
   });
 
+  router.get('/:scanId/browsers', async (req, res) => {
+    res.json({ data: await reports.browsers(currentUser(req), scanIdOf(req.params.scanId)) });
+  });
+
   router.get('/:scanId/functional', async (req, res) => {
     res.json({ data: await reports.functional(currentUser(req), scanIdOf(req.params.scanId)) });
   });

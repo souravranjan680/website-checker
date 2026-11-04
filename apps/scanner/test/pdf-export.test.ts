@@ -105,6 +105,60 @@ describe('buildReportHtml', () => {
     expect(html).toContain('Demo project');
   });
 
+  it('no other browsers: no Browsers section (the PDF is as before)', () => {
+    const html = buildReportHtml({ ...reportData([issue(1)]), browsers: null }, new Map());
+    expect(html).not.toContain('<h2>Browsers</h2>');
+    expect(html).not.toContain('compared with');
+  });
+
+  it('other browsers: their status, version, pages and reasons, all escaped', () => {
+    const data = {
+      ...reportData([
+        issue(1, {
+          category: 'COMPATIBILITY',
+          compatibility: {
+            browser: 'FIREFOX',
+            browserVersion: 'Firefox 157.0',
+            baselineVersion: 'Chromium 156.0',
+            checkType: 'BROWSER_ONLY_ERROR',
+          },
+        }),
+      ]),
+      browsers: {
+        chromiumVersion: 'Chromium 156.0',
+        runs: [
+          {
+            browser: 'FIREFOX',
+            status: 'PARTIAL',
+            version: 'Firefox 157.0',
+            pagesPlanned: 3,
+            pagesChecked: 2,
+            errorMessage: '1 page(s) could not be checked in Firefox.',
+            skippedChecks: [{ check: 'explorer', reason: '<b>interactions</b> in Chromium only' }],
+          },
+          {
+            browser: 'WEBKIT',
+            status: 'UNAVAILABLE',
+            version: null,
+            pagesPlanned: 3,
+            pagesChecked: 0,
+            errorMessage: '<script>alert(1)</script>',
+            skippedChecks: 'malformed',
+          },
+        ],
+      },
+    } as unknown as ReportData;
+    const html = buildReportHtml(data, new Map());
+    expect(html).toContain('<h2>Browsers</h2>');
+    expect(html).toContain(
+      '<td>Firefox</td><td>Partial (some pages failed)</td><td>Firefox 157.0</td><td>2 of 3</td>',
+    );
+    expect(html).toContain('<td>WebKit</td><td>Unavailable</td><td>—</td><td>0 of 3</td>');
+    expect(html).toContain(esc('explorer (<b>interactions</b> in Chromium only)'));
+    expect(html).not.toMatch(/<script/i);
+    expect(html).toContain('<b>Browser:</b> Firefox 157.0 · compared with Chromium 156.0');
+  });
+
   it('embeds screenshots as data URLs', () => {
     const png = Buffer.from('fake-png-bytes');
     const html = buildReportHtml(

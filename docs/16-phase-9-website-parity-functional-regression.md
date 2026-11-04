@@ -1196,18 +1196,180 @@ is gone.
   Their fixtures run in the Docker test image. The full acceptance suite in that image
   has the 2 environment-dependent fixtures described in 9.5.
 
-## 10. Remaining milestones
+## 10. Milestone 3, Checkpoint 3: API, UI, reports and final verification (complete)
+
+The stored cross-browser results are now visible and usable: website settings, a
+Browsers report, a browser difference card on each issue, browser and check filters, and
+exports. Nothing about scanning, comparison or classification changed, and no migration was
+needed.
+
+### 10.1 Decisions applied
+
+| Decision | How it is applied |
+|---|---|
+| Per-browser screenshots deferred | Only stored facts and evidence are shown. Firefox and WebKit store no images, and pixel differences never become findings. |
+| CSV columns unchanged | Byte-identical CSV for the same scan before and after this checkpoint (10.6). The browser is in the title, both versions in the description. |
+| No migration | The Browsers report needs to tell "off" from "older scan": the scan's existing JSON settings snapshot (`Scan.config`) now also records `crossBrowserEnabled` and `crossBrowserTargets`. |
+
+### 10.2 Website settings
+
+- The add/edit form has an **Other browsers** section:
+  - off by default;
+  - when on, Firefox and WebKit are preselected, and at least one is required;
+  - pages per browser (1–10, default 3);
+  - "Also check WebKit at a phone size (390×844)", noting that Firefox cannot emulate phones.
+- The text says that menus, keyboard and form checks run in Chromium only, that
+  differences are never scored, and what it costs (about 15 s per browser for 3 pages).
+- The website page summarises the setting, e.g. "Firefox, WebKit · first 3 pages".
+- Older API responses without these fields are shown as off (they never crash the page).
+
+### 10.3 Browsers report (`/scans/:id/reports/browsers`, `GET /api/reports/:scanId/browsers`)
+
+**Status cards for Chromium, Firefox and WebKit:**
+- Chromium is the scan itself (its status, version and pages scanned).
+- Firefox and WebKit show their own run: state, version, pages checked of planned, start
+  time, number of differences, the error message, and the checks not run there, each
+  with its reason.
+
+**Each state is told apart; only a real run can look like a success:**
+
+| State | Meaning |
+|---|---|
+| Completed / Partial: some pages failed / Failed / Unavailable / Timed out / Skipped / Cancelled / Running | The browser's own run (`ScanBrowserRun`) |
+| Off | Cross-browser checks were off for this scan, or this browser was not chosen |
+| Did not run | Chosen, but the scan ended before the browser stage |
+| Not recorded | An older scan with no record of the setting: nothing is claimed |
+
+A browser that never started shows "Not compared in this scan", with no version.
+
+**Pages:** each browser's result per page and size:
+- loaded or failed, with the reason;
+- the HTTP status and load time;
+- whether it was compared with Chromium (and which version), or why not;
+- the number of differences and how many were confirmed.
+
+**Stored data read defensively:** `ScanPage.compatibility` is parsed field by field. An
+entry with an unknown status, an unknown browser key or a non-object value is counted as
+"could not be read" and shown as such, never as a success.
+
+**Differences:**
+- filters by browser and by browser plus check type, with counts per classification;
+- the COMPATIBILITY issue list underneath, with the existing search, severity and
+  tracking filters.
+
+**Empty states:**
+- "Cross-browser checks were off for this scan";
+- "No cross-browser results for this scan" for older scans;
+- "Firefox and WebKit did not run in this scan".
+
+### 10.4 Issues and filters
+
+- **Issue page:** a **Browser difference** card shows:
+  - the browser, its version and the Chromium version;
+  - the check, and the underlying check that found it;
+  - how the element was matched;
+  - whether the second load confirmed it, and why;
+  - the evidence: the error and its location, the resource and HTTP status, the font
+    and its files, the element, and the unsupported declarations;
+  - all recorded evidence (collapsed).
+- **Evidence is untrusted page data:** it is rendered as React text only, never as HTML,
+  and every field is type-checked. Missing or unexpected fields are left out. A test uses
+  an `<img onerror>` payload.
+- **API filters:**
+  - `GET /api/scans/:id/issues` accepts `browser=FIREFOX|WEBKIT` and the six
+    cross-browser check types in `checkType` (UI check types unchanged; anything else 400);
+  - `GET /api/websites/:id/issues` accepts `browser`. The website's tracked-issues card
+    offers "Browsers" as a category, with a browser choice.
+- **Access:** the existing project rules apply. Members, viewers included, can see the
+  report; anyone else gets 404, and signed-out users 401.
+
+### 10.5 Exports
+
+| Format | Scan without other browsers | Scan with other browsers |
+|---|---|---|
+| JSON | Unchanged: the same keys and content | Adds a top-level `browsers` block (`chromiumVersion`, each run: browser, status, version, pages, error, skipped checks); `compatibility` on each cross-browser issue (Checkpoint 2) |
+| CSV | Unchanged | Unchanged columns |
+| PDF | Unchanged | A **Browsers** section after the pages (status, version, pages checked, notes and reasons, all escaped); each cross-browser issue names its browser and both versions |
+
+### 10.6 Verification
+
+- **`npm run check`** passes: 820 tests passed and 10 skipped (Firefox/WebKit markers).
+  - API: new `browsers.test.ts` (9 tests):
+    - every state, including off, older, not chosen, not run and running;
+    - malformed stored results and skipped checks;
+    - filters, and 400 for bad values;
+    - access by member, viewer, outsider and signed-out user;
+    - the settings snapshot;
+    - exports with and without other browsers (JSON keys, CSV header).
+  - Bug-report test for cross-browser issues (Checkpoint 2) still passes.
+  - Scanner: 2 new PDF tests (no section without other browsers; escaped section with
+    them).
+  - Web: new `browsers.test.tsx` (6 tests):
+    - the report: states, reasons, unreadable results, filter requests;
+    - the off and older-scan states;
+    - the issue card, with untrusted evidence shown as text;
+    - the settings form, including the at-least-one-browser rule.
+  - The extension's 43 tests are unchanged.
+  - The local check found one real defect, which was fixed: the website page crashed on
+    responses without the new fields.
+- **Docker test image** (real Chromium 156, Firefox 157, WebKit 27.2):
+  - security, stage, comparison, launch and PDF suites: 60 passed (5 skips are the "not
+    installed here" markers);
+  - compat fixtures: 8 of 8.
+- **W3C regression (6 pages, Docker stack):**
+  - cross-browser **off**: identical to Checkpoint 2 (378 issues, 62/91, 23 rule groups,
+    pages and links), 64 s;
+  - cross-browser **on**: identical to Checkpoint 2 (the same 4 confirmed overlap
+    differences), Firefox 3/3 (14 s) and WebKit 3/3 (16 s), 91 s.
+- **Exports of the same Checkpoint 2 scans, before and after this checkpoint:**
+  - cross-browser off: JSON identical (apart from `generatedAt`), CSV byte-identical,
+    PDF text identical (apart from the generated time);
+  - cross-browser on: JSON identical apart from the new `browsers` block, CSV
+    byte-identical.
+- **End to end in a real browser** against the Docker dashboard (a new account): the
+  settings were added through the form, then W3C was scanned with cross-browser on
+  (100 s) and off (70 s).
+  - 17 of 18 checks passed on the first run. The failed check was a page-text check
+    taken before the filtered list re-rendered. A second run on the same scans confirmed
+    both filters (4 → 2 issues, sent as `browser` plus `checkType`).
+  - That run also confirmed the reworded cards for browsers that did not run.
+  - No browser errors or failed requests.
+  - The first run also found two display problems, both fixed: long page URLs
+    overlapped the next column, and the PDF table broke words.
+
+### 10.7 Screenshots
+
+- `docs/images/phase9-m3-1-website-cross-browser-settings.png`: the Other browsers settings.
+- `docs/images/phase9-m3-2-browsers-report.png`: status cards, pages and differences (W3C).
+- `docs/images/phase9-m3-3-browsers-report-webkit-filter.png`: filtered to WebKit.
+- `docs/images/phase9-m3-4-issue-browser-difference.png`: a Firefox difference on an issue.
+- `docs/images/phase9-m3-5-browsers-report-off.png`: a scan with cross-browser checks off.
+
+### 10.8 Limitations
+
+- **No screenshots** from Firefox or WebKit (deferred by decision); the report shows facts
+  and evidence only.
+- **Scans started before this checkpoint** have no recorded setting. Their report says
+  "Not recorded" unless browser runs exist, so nothing is guessed.
+- **The snapshot is taken when the scan is queued.** If the website's setting changes
+  before the scan starts, the report follows the snapshot, while the scanner uses the
+  setting at start.
+- **Real engines locally:** they run only in the Docker test image. The full acceptance
+  suite there still has the 2 environment-dependent fixtures from 9.5 (unchanged).
+- **The tracked-issue filter** narrows by browser only (the check type is available on
+  the scan issue list and the Browsers report).
+
+## 11. Remaining milestones
 
 | M | Scope |
 |---|---|
-| 3 (Checkpoint 3) | Cross-browser settings form, per-browser progress, Browsers report with side-by-side screenshots |
 | 4 | Mode 2: comparisons, routes, discovery and mapping, run job |
 | 5 | Mode 2: element, visual, style and open-state differences |
 | 6 | Scenarios (both modes), loading-state checks, QA case import and traceability |
 | 7 | Comparison tracking, AI for both modes, QA-style reports and exports |
 | 8 | Dashboards, hardening, Docker end to end, final documentation |
 
-## 11. Known limitations (so far)
+## 12. Known limitations (so far)
 
 - Classification of older issues uses the data they stored. Older resource failures were
   not re-checked, so they are `POTENTIAL_DEFECT`, not `DETECTED`.

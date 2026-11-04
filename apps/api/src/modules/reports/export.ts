@@ -94,6 +94,8 @@ export function toJson(data: ReportData) {
       screenshotId: issue.screenshotId,
     })),
     pages: data.pages,
+    // Only for scans that checked other browsers (Phase 9, Milestone 3).
+    ...(data.browsers ? { browsers: data.browsers } : {}),
   };
 }
 

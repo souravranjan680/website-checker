@@ -606,6 +606,8 @@ export const trackedIssueQuerySchema = listQuerySchema.extend({
     ])
     .optional(),
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']).optional(),
+  /** Cross-browser issues seen in this browser. */
+  browser: z.enum(['FIREFOX', 'WEBKIT']).optional(),
 });
 
 export interface WebsiteStatsDto {
@@ -720,5 +722,83 @@ export interface FunctionalReportDto {
       skipped: { name: string; reason: string }[];
       skippedCounts: Record<string, number>;
     } | null;
+  }[];
+}
+
+/**
+ * What a browser did in one scan (Phase 9, Milestone 3). Firefox and WebKit have their own
+ * run; Chromium is the scan itself. DISABLED: not chosen for this scan. NOT_RUN: chosen,
+ * but the scan ended before the browser stage (cancelled, failed, time limit, no pages).
+ * NOT_RECORDED: the scan has no record of the setting (older scans): nothing is claimed.
+ */
+export const BROWSER_STATES = [
+  'COMPLETED',
+  'PARTIAL',
+  'FAILED',
+  'UNAVAILABLE',
+  'TIMED_OUT',
+  'SKIPPED',
+  'CANCELLED',
+  'RUNNING',
+  'DISABLED',
+  'NOT_RUN',
+  'NOT_RECORDED',
+] as const;
+export type BrowserStateName = (typeof BROWSER_STATES)[number];
+export type BrowserName = 'CHROMIUM' | 'FIREFOX' | 'WEBKIT';
+
+export interface BrowserComparisonDto {
+  compared: boolean;
+  /** Why the page was not compared (compared = false). */
+  reason: string | null;
+  baselineVersion: string | null;
+  differences: number;
+  confirmed: number;
+  chromiumOnly: number;
+}
+
+/** GET /api/reports/:scanId/browsers */
+export interface BrowsersReportDto {
+  scan: ReportScanInfo;
+  /** The scan's cross-browser setting when it was started; UNKNOWN for older scans. */
+  crossBrowser: 'ON' | 'OFF' | 'UNKNOWN';
+  browsers: {
+    browser: BrowserName;
+    /** Chromium is the baseline every other browser is compared with. */
+    role: 'BASELINE' | 'COMPARED';
+    state: BrowserStateName;
+    /** Why (error message, or why it did not run). */
+    message: string | null;
+    version: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+    pagesPlanned: number | null;
+    pagesChecked: number | null;
+    skippedChecks: { check: string; reason: string; viewport: string | null }[];
+    /** COMPATIBILITY issues of this browser in this scan. */
+    issues: number;
+  }[];
+  /** Pages another browser loaded, with each browser's result per size. */
+  pages: {
+    url: string;
+    results: {
+      browser: 'FIREFOX' | 'WEBKIT';
+      viewport: string;
+      status: 'DONE' | 'FAILED' | 'SKIPPED';
+      error: string | null;
+      httpStatus: number | null;
+      loadTimeMs: number | null;
+      /** null: no comparison recorded for this result. */
+      comparison: BrowserComparisonDto | null;
+    }[];
+    /** Stored results that could not be read (malformed); never shown as success. */
+    unreadable: number;
+  }[];
+  /** COMPATIBILITY issues per browser and check type. */
+  checks: {
+    browser: 'FIREFOX' | 'WEBKIT';
+    checkType: string;
+    count: number;
+    byClassification: Partial<Record<FindingClassificationName, number>>;
   }[];
 }

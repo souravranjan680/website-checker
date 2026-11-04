@@ -82,17 +82,21 @@ const CATEGORY_OPTIONS = [
   { value: 'ACCESSIBILITY', label: 'Accessibility' },
   { value: 'UI_HEALTH', label: 'UI health' },
   { value: 'RESPONSIVE', label: 'Responsive' },
+  { value: 'COMPATIBILITY', label: 'Browsers' },
 ];
 
 /** Every problem ever detected on this website, with its current tracking status. */
 export function TrackedIssuesCard({ website }: { website: WebsiteDto }) {
   const [status, setStatus] = useState('OPEN');
   const [category, setCategory] = useState('');
+  const [browser, setBrowser] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const issues = useWebsiteIssues(website.id, {
     status: status || undefined,
     category: category || undefined,
+    // Only cross-browser issues have a browser.
+    browser: category === 'COMPATIBILITY' && browser ? browser : undefined,
     q: q.trim() || undefined,
     page,
   });
@@ -146,6 +150,20 @@ export function TrackedIssuesCard({ website }: { website: WebsiteDto }) {
               </NativeSelectOption>
             ))}
           </NativeSelect>
+          {category === 'COMPATIBILITY' ? (
+            <NativeSelect
+              aria-label="Browser"
+              value={browser}
+              onChange={(e) => {
+                setBrowser(e.target.value);
+                setPage(1);
+              }}
+            >
+              <NativeSelectOption value="">Firefox and WebKit</NativeSelectOption>
+              <NativeSelectOption value="FIREFOX">Firefox</NativeSelectOption>
+              <NativeSelectOption value="WEBKIT">WebKit</NativeSelectOption>
+            </NativeSelect>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

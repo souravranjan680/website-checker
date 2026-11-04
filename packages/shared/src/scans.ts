@@ -64,14 +64,29 @@ export type FindingClassificationName = (typeof FINDING_CLASSIFICATIONS)[number]
 export const REVIEW_STATUSES = ['UNREVIEWED', 'CONFIRMED', 'INTENTIONAL'] as const;
 export type ReviewStatusName = (typeof REVIEW_STATUSES)[number];
 
+/** Differences between Chromium and another browser (Phase 9, Milestone 3). */
+export const COMPATIBILITY_CHECK_TYPES = [
+  'BROWSER_ONLY_ERROR',
+  'BROWSER_ONLY_RESOURCE_FAILURE',
+  'BROWSER_ONLY_FONT_FAILURE',
+  'BROWSER_ONLY_LAYOUT',
+  'BROWSER_ONLY_ACCESSIBILITY',
+  'UNSUPPORTED_CSS',
+] as const;
+export type CompatibilityCheckTypeName = (typeof COMPATIBILITY_CHECK_TYPES)[number];
+/** Browsers a COMPATIBILITY issue can belong to (Chromium is the baseline, never a target). */
+export const COMPARED_BROWSERS = ['FIREFOX', 'WEBKIT'] as const;
+
 export const issueListQuerySchema = listQuerySchema.extend({
   pageSize: z.coerce.number().int().min(1).max(200).default(100),
   category: z.enum(ISSUE_CATEGORIES).optional(),
   severity: z.enum(SEVERITIES).optional(),
   viewport: z.string().max(20).optional(),
   pageId: idSchema.optional(),
-  /** UI check type (e.g. BROKEN_LINK) or axe rule id. */
+  /** UI check type (e.g. BROKEN_LINK) or cross-browser check type (e.g. BROWSER_ONLY_ERROR). */
   checkType: z.string().max(40).optional(),
+  /** Cross-browser issues seen in this browser. */
+  browser: z.enum(COMPARED_BROWSERS).optional(),
   ruleId: z.string().max(80).optional(),
   detection: z.enum(['AUTOMATED', 'NEEDS_REVIEW']).optional(),
   trackedStatus: z.enum(['OPEN', 'RESOLVED', 'IGNORED', 'FALSE_POSITIVE']).optional(),

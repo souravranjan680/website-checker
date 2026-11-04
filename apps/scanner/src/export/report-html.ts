@@ -24,6 +24,23 @@ const CATEGORY_LABEL: Record<string, string> = {
   COMPATIBILITY: 'Cross-browser compatibility',
 };
 
+const BROWSER_NAME: Record<string, string> = {
+  CHROMIUM: 'Chromium',
+  FIREFOX: 'Firefox',
+  WEBKIT: 'WebKit',
+};
+/** Each browser's own status (Phase 9, Milestone 3), in words. */
+const RUN_STATUS: Record<string, string> = {
+  RUNNING: 'Running',
+  COMPLETED: 'Completed',
+  PARTIAL: 'Partial (some pages failed)',
+  FAILED: 'Failed',
+  UNAVAILABLE: 'Unavailable',
+  TIMED_OUT: 'Timed out',
+  SKIPPED: 'Skipped',
+  CANCELLED: 'Cancelled',
+};
+
 /** Security finding levels in words (passive checks; nothing was exploited). */
 const LEVEL_TEXT: Record<string, string> = {
   CONFIRMED: 'Confirmed (insecure configuration observed, not an exploit)',
@@ -84,6 +101,9 @@ export function buildReportHtml(
       const wcag = issue.accessibility?.wcagCriteria?.length
         ? `<div><b>WCAG:</b> ${esc(issue.accessibility.wcagCriteria.join(', '))} ${esc(issue.accessibility.wcagLevel ?? '')}</div>`
         : '';
+      const compat = issue.compatibility
+        ? `<div><b>Browser:</b> ${esc(issue.compatibility.browserVersion)} · compared with ${esc(issue.compatibility.baselineVersion)}</div>`
+        : '';
       const security = issue.security
         ? `<div><b>Finding level:</b> ${esc(LEVEL_TEXT[issue.security.findingLevel] ?? issue.security.findingLevel)}${issue.security.observedValue ? ` · <b>Observed:</b> ${esc(issue.security.observedValue)}` : ''}</div>`
         : '';
@@ -98,6 +118,7 @@ export function buildReportHtml(
     <div><b>Page:</b> ${esc(issue.pageUrl ?? '—')}${issue.viewport ? ` <i>(${esc(issue.viewport.toLowerCase())})</i>` : ''}</div>
     ${issue.selector ? `<div><b>Element:</b> <code>${esc(issue.selector)}</code></div>` : ''}
     ${wcag}
+    ${compat}
     ${security}
     <div><b>Rule:</b> ${esc(issue.ruleId)}${issue.trackedIssue ? ` · <b>Status:</b> ${esc(issue.trackedIssue.status)} · first seen ${esc(formatDate(issue.trackedIssue.firstSeenAt))}` : ''}</div>
   </div>
@@ -116,6 +137,28 @@ ${rest
     (i) =>
       `<tr><td>${esc(i.severity)}</td><td>${esc(i.title)}</td><td>${esc(i.pageUrl ?? '')}</td><td><code>${esc(i.selector ?? '')}</code></td></tr>`,
   )
+  .join('\n')}
+</tbody></table>`
+    : '';
+
+  // Other browsers (Phase 9, Milestone 3): only for scans that checked them.
+  const browsersSection = data.browsers
+    ? `<h2>Browsers</h2>
+<p class="muted">Chromium runs every check. Firefox and WebKit load the first pages with passive checks only; differences from Chromium are in the Cross-browser compatibility category, which is never part of the scores.</p>
+<table class="browsers"><thead><tr><th>Browser</th><th>Status</th><th>Version</th><th>Pages checked</th><th>Note</th></tr></thead><tbody>
+<tr><td>Chromium</td><td>The scan itself</td><td>${esc(data.browsers.chromiumVersion ?? 'Not recorded')}</td><td>${scan.pagesScanned}</td><td></td></tr>
+${data.browsers.runs
+  .map((r) => {
+    const skipped = Array.isArray(r.skippedChecks)
+      ? (r.skippedChecks as { check?: unknown; reason?: unknown }[])
+          .filter((s) => typeof s?.check === 'string' && typeof s?.reason === 'string')
+          .map((s) => `${String(s.check)} (${String(s.reason)})`)
+      : [];
+    const note = [r.errorMessage, skipped.length ? `Not run here: ${skipped.join('; ')}` : null]
+      .filter(Boolean)
+      .join(' ');
+    return `<tr><td>${esc(BROWSER_NAME[r.browser] ?? r.browser)}</td><td>${esc(RUN_STATUS[r.status] ?? r.status)}</td><td>${esc(r.version ?? '—')}</td><td>${r.pagesChecked} of ${r.pagesPlanned}</td><td>${esc(note)}</td></tr>`;
+  })
   .join('\n')}
 </tbody></table>`
     : '';
@@ -151,6 +194,8 @@ ${rest
   .fix { background: #eef5fd; padding: 6px; border-radius: 4px; margin-top: 4px; }
   img { max-width: 100%; max-height: 220px; border: 1px solid #e1e0d9; margin-top: 6px; }
   .note { background: #fff7e0; padding: 6px; border-radius: 4px; }
+  .browsers th, .browsers td { word-break: normal; overflow-wrap: anywhere; }
+  .browsers td:last-child { width: 45%; }
 </style></head>
 <body>
   <h1>${esc(title)}: ${esc(data.website.name)}</h1>
@@ -183,6 +228,8 @@ ${rest
     )
     .join('\n')}
   </tbody></table>
+
+  ${browsersSection}
 
   <h2>Issues${data.category ? ` (${esc(CATEGORY_LABEL[data.category] ?? data.category)})` : ''}: ${data.totalIssues}</h2>
   ${truncatedNote}

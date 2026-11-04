@@ -33,6 +33,22 @@ export const CATEGORY_LABEL: Record<string, string> = {
   COMPATIBILITY: 'Browsers',
 };
 
+/** Differences between Chromium and another browser (Phase 9, Milestone 3). */
+export const COMPATIBILITY_CHECK_LABEL: Record<string, string> = {
+  BROWSER_ONLY_ERROR: 'JavaScript error',
+  BROWSER_ONLY_RESOURCE_FAILURE: 'Resource fails',
+  BROWSER_ONLY_FONT_FAILURE: 'Web font fails',
+  BROWSER_ONLY_LAYOUT: 'Layout problem',
+  BROWSER_ONLY_ACCESSIBILITY: 'Accessibility result',
+  UNSUPPORTED_CSS: 'Unsupported CSS',
+};
+
+export const BROWSER_LABEL: Record<string, string> = {
+  CHROMIUM: 'Chromium',
+  FIREFOX: 'Firefox',
+  WEBKIT: 'WebKit',
+};
+
 /** Interaction and navigation checks of the safe explorer (Phase 9). */
 export const FUNCTIONAL_CHECK_LABEL: Record<string, string> = {
   CONTROL_NO_EFFECT: 'Control does nothing',

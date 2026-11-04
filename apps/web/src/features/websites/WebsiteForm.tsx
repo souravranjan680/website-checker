@@ -70,11 +70,25 @@ function buildSchema(needsAuthorization: (baseUrl: string) => boolean) {
       consistencyEnabled: z.boolean(),
       keyboardProbeEnabled: z.boolean(),
       formProbeMode: websiteSettingsSchema.shape.formProbeMode,
+      crossBrowserEnabled: z.boolean(),
+      crossBrowserFirefox: z.boolean(),
+      crossBrowserWebkit: z.boolean(),
+      crossBrowserPageLimit: z
+        .number(numberError)
+        .pipe(websiteSettingsSchema.shape.crossBrowserPageLimit),
+      crossBrowserMobile: z.boolean(),
       includePatterns: patternsText,
       excludePatterns: patternsText,
       authorizationConfirmed: z.boolean(),
     })
     .superRefine((data, ctx) => {
+      if (data.crossBrowserEnabled && !data.crossBrowserFirefox && !data.crossBrowserWebkit) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['crossBrowserFirefox'],
+          message: 'Choose at least one browser, or turn cross-browser checks off.',
+        });
+      }
       if (needsAuthorization(data.baseUrl) && !data.authorizationConfirmed) {
         ctx.addIssue({
           code: 'custom',
@@ -102,6 +116,10 @@ export interface WebsiteSubmitValues {
   consistencyEnabled: boolean;
   keyboardProbeEnabled: boolean;
   formProbeMode: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
+  crossBrowserEnabled: boolean;
+  crossBrowserTargets: ('FIREFOX' | 'WEBKIT')[];
+  crossBrowserPageLimit: number;
+  crossBrowserMobile: boolean;
   includePatterns: string[];
   excludePatterns: string[];
   authorizationConfirmed: boolean;
@@ -159,6 +177,12 @@ export function WebsiteForm({
       consistencyEnabled: settings.consistencyEnabled,
       keyboardProbeEnabled: settings.keyboardProbeEnabled,
       formProbeMode: settings.formProbeMode,
+      crossBrowserEnabled: settings.crossBrowserEnabled ?? false,
+      crossBrowserFirefox: (settings.crossBrowserTargets ?? ['FIREFOX']).includes('FIREFOX'),
+      crossBrowserWebkit: (settings.crossBrowserTargets ?? ['WEBKIT']).includes('WEBKIT'),
+      crossBrowserPageLimit:
+        settings.crossBrowserPageLimit ?? DEFAULT_WEBSITE_SETTINGS.crossBrowserPageLimit,
+      crossBrowserMobile: settings.crossBrowserMobile ?? false,
       includePatterns: settings.includePatterns.join('\n'),
       excludePatterns: settings.excludePatterns.join('\n'),
       authorizationConfirmed: false,
@@ -168,12 +192,18 @@ export function WebsiteForm({
   const baseUrl = useWatch({ control: form.control, name: 'baseUrl' });
   const preview = baseUrl ? normalizeWebsiteUrl(baseUrl) : null;
   const showAuthorization = urlChanged(baseUrl ?? '');
+  const crossBrowser = useWatch({ control: form.control, name: 'crossBrowserEnabled' });
 
   const submit = form.handleSubmit(async (values) => {
     setFormError(null);
+    const { crossBrowserFirefox, crossBrowserWebkit, ...rest } = values;
     try {
       await onSubmit({
-        ...values,
+        ...rest,
+        crossBrowserTargets: [
+          ...(crossBrowserFirefox ? (['FIREFOX'] as const) : []),
+          ...(crossBrowserWebkit ? (['WEBKIT'] as const) : []),
+        ],
         includePatterns: toPatterns(values.includePatterns),
         excludePatterns: toPatterns(values.excludePatterns),
         urlChanged: urlChanged(values.baseUrl),
@@ -190,6 +220,7 @@ export function WebsiteForm({
           'lighthousePageLimit',
           'explorationPageLimit',
           'explorationControlLimit',
+          'crossBrowserPageLimit',
           'includePatterns',
           'excludePatterns',
           'authorizationConfirmed',
@@ -342,6 +373,39 @@ export function WebsiteForm({
               description="One per line."
             />
           </div>
+        </FieldSet>
+
+        <FieldSet>
+          <FieldLegend variant="label">Other browsers</FieldLegend>
+          <CheckboxField
+            control={form.control}
+            name="crossBrowserEnabled"
+            label="Also check the first pages in Firefox and WebKit (Safari's engine)"
+            description="Off by default. Each browser loads the pages and runs the same passive checks; differences from Chromium are reported in the Browsers category, which is never part of the scores. Menus, keyboard and form checks run in Chromium only. Adds about 15 seconds per browser for 3 pages."
+          />
+          {crossBrowser ? (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <CheckboxField control={form.control} name="crossBrowserFirefox" label="Firefox" />
+                <CheckboxField control={form.control} name="crossBrowserWebkit" label="WebKit" />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <NumberField
+                  control={form.control}
+                  name="crossBrowserPageLimit"
+                  label="Pages checked in each browser"
+                  min={1}
+                  max={10}
+                />
+              </div>
+              <CheckboxField
+                control={form.control}
+                name="crossBrowserMobile"
+                label="Also check WebKit at a phone size (390×844)"
+                description="Firefox cannot emulate phones, so it is always checked at desktop size."
+              />
+            </>
+          ) : null}
         </FieldSet>
 
         {showAuthorization ? (

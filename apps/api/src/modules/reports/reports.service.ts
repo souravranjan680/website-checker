@@ -4,6 +4,9 @@ import {
   VIEWPORTS,
   WCAG_CRITERIA,
   type AccessibilityReportDto,
+  type BrowserComparisonDto,
+  type BrowsersReportDto,
+  type BrowserStateName,
   type FunctionalReportDto,
   type ConsoleKindName,
   type ManualCheckState,
@@ -18,6 +21,7 @@ import {
   type UiHealthReportDto,
 } from '@whc/shared';
 import { MANUAL_CHECKLIST } from '@whc/shared';
+import { z } from 'zod';
 import { AppError, notFound } from '../../lib/errors';
 import type { AuthUser } from '../../types/express';
 import { requireProjectRole } from '../projects/project-access';
@@ -46,6 +50,46 @@ const EXTRA_CHECK_GROUPS = {
   consistency: ['COMPONENT_INCONSISTENT'],
 } as const;
 const EXTRA_CHECKS = Object.values(EXTRA_CHECK_GROUPS).flat();
+
+/**
+ * One browser's stored result for one page and size (ScanPage.compatibility). Parsed
+ * leniently field by field; an entry without a known status is counted as unreadable,
+ * never shown as a success.
+ */
+const pageResultSchema = z.object({
+  viewport: z.string().max(40),
+  status: z.enum(['DONE', 'FAILED', 'SKIPPED']),
+  error: z.string().nullish().catch(null),
+  httpStatus: z.number().int().nullish().catch(null),
+  loadTimeMs: z.number().nullish().catch(null),
+  comparison: z
+    .object({
+      compared: z.boolean(),
+      reason: z.string().nullish().catch(null),
+      baselineVersion: z.string().nullish().catch(null),
+      differences: z.number().int().nonnegative().catch(0),
+      confirmed: z.number().int().nonnegative().catch(0),
+      chromiumOnly: z.number().int().nonnegative().catch(0),
+    })
+    .nullish()
+    .catch(null),
+});
+const skippedCheckSchema = z.object({
+  check: z.string(),
+  reason: z.string(),
+  viewport: z.string().nullish(),
+});
+
+/** The scan's own Chromium, from the scan's status. */
+const CHROMIUM_STATE: Record<string, BrowserStateName> = {
+  QUEUED: 'RUNNING',
+  RUNNING: 'RUNNING',
+  CANCELLING: 'RUNNING',
+  COMPLETED: 'COMPLETED',
+  PARTIAL: 'PARTIAL',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED',
+};
 
 export type ReportsService = ReturnType<typeof createReportsService>;
 
@@ -599,6 +643,185 @@ export function createReportsService({ prisma }: { prisma: PrismaClient }) {
      * What the safe explorer (Phase 9) did and found: findings per check, and per page
      * the controls it explored, what it skipped (and why) and what it blocked.
      */
+    /**
+     * What each browser did (Phase 9, Milestone 3): Chromium (the scan), Firefox and WebKit
+     * (their own runs), per-page results with the comparison, and the differences found.
+     * Only stored facts; missing or unreadable data is reported as such.
+     */
+    async browsers(user: AuthUser, scanId: string): Promise<BrowsersReportDto> {
+      const { scan, info } = await scanInfo(user, scanId);
+      const [runs, pages, issues] = await Promise.all([
+        prisma.scanBrowserRun.findMany({ where: { scanId } }),
+        prisma.scanPage.findMany({
+          where: { scanId, compatibility: { not: Prisma.AnyNull } },
+          orderBy: { createdAt: 'asc' },
+          select: { url: true, compatibility: true },
+        }),
+        prisma.issue.findMany({
+          where: { scanId, category: 'COMPATIBILITY' },
+          select: {
+            classification: true,
+            compatibility: { select: { browser: true, checkType: true } },
+          },
+        }),
+      ]);
+
+      const config = (scan.config ?? {}) as Record<string, unknown>;
+      const crossBrowser: BrowsersReportDto['crossBrowser'] =
+        typeof config.crossBrowserEnabled === 'boolean'
+          ? config.crossBrowserEnabled
+            ? 'ON'
+            : 'OFF'
+          : runs.length > 0
+            ? 'ON'
+            : 'UNKNOWN';
+      const chosen = Array.isArray(config.crossBrowserTargets)
+        ? (config.crossBrowserTargets as unknown[])
+        : null;
+      const finished = !['QUEUED', 'RUNNING', 'CANCELLING'].includes(scan.status);
+      const issuesOf = (browser: string) =>
+        issues.filter((i) => i.compatibility?.browser === browser).length;
+
+      const others = (['FIREFOX', 'WEBKIT'] as const).map(
+        (browser): BrowsersReportDto['browsers'][number] => {
+          const run = runs.find((r) => r.browser === browser);
+          const base = {
+            browser,
+            role: 'COMPARED' as const,
+            version: null,
+            startedAt: null,
+            finishedAt: null,
+            pagesPlanned: null,
+            pagesChecked: null,
+            skippedChecks: [],
+            issues: issuesOf(browser),
+          };
+          if (run) {
+            const skipped = z.array(skippedCheckSchema).safeParse(run.skippedChecks);
+            return {
+              ...base,
+              state: run.status,
+              message: run.errorMessage,
+              version: run.version,
+              startedAt: run.startedAt.toISOString(),
+              finishedAt: run.finishedAt?.toISOString() ?? null,
+              pagesPlanned: run.pagesPlanned,
+              pagesChecked: run.pagesChecked,
+              skippedChecks: skipped.success
+                ? skipped.data.map((s) => ({ ...s, viewport: s.viewport ?? null }))
+                : [],
+            };
+          }
+          if (crossBrowser === 'UNKNOWN') {
+            return {
+              ...base,
+              state: 'NOT_RECORDED',
+              message: 'This scan has no record of cross-browser checks (it may predate them).',
+            };
+          }
+          if (crossBrowser === 'OFF' || (chosen && !chosen.includes(browser))) {
+            return {
+              ...base,
+              state: 'DISABLED',
+              message:
+                crossBrowser === 'OFF'
+                  ? 'Cross-browser checks were off for this scan.'
+                  : 'Not chosen for this website.',
+            };
+          }
+          return {
+            ...base,
+            state: finished ? 'NOT_RUN' : 'RUNNING',
+            message: finished
+              ? 'The scan ended before this browser ran (cancelled, failed, no pages loaded, or the time limit was reached).'
+              : null,
+          };
+        },
+      );
+
+      const chromium: BrowsersReportDto['browsers'][number] = {
+        browser: 'CHROMIUM',
+        role: 'BASELINE',
+        state: CHROMIUM_STATE[scan.status] ?? 'NOT_RECORDED',
+        message: scan.errorMessage,
+        version: scan.browserVersion,
+        startedAt: scan.startedAt?.toISOString() ?? null,
+        finishedAt: scan.finishedAt?.toISOString() ?? null,
+        pagesPlanned: null,
+        pagesChecked: scan.pagesScanned,
+        skippedChecks: [],
+        issues: 0,
+      };
+
+      const pageRows = pages.map((page) => {
+        const record = page.compatibility as unknown;
+        const results: BrowsersReportDto['pages'][number]['results'] = [];
+        let unreadable = 0;
+        if (record && typeof record === 'object' && !Array.isArray(record)) {
+          for (const [key, list] of Object.entries(record as Record<string, unknown>)) {
+            const browser = key === 'firefox' ? 'FIREFOX' : key === 'webkit' ? 'WEBKIT' : null;
+            if (!browser || !Array.isArray(list)) {
+              unreadable += 1;
+              continue;
+            }
+            for (const entry of list) {
+              const parsed = pageResultSchema.safeParse(entry);
+              if (!parsed.success) {
+                unreadable += 1;
+                continue;
+              }
+              const r = parsed.data;
+              results.push({
+                browser,
+                viewport: r.viewport,
+                status: r.status,
+                error: r.error ?? null,
+                httpStatus: r.httpStatus ?? null,
+                loadTimeMs: r.loadTimeMs ?? null,
+                comparison: r.comparison
+                  ? ({
+                      ...r.comparison,
+                      reason: r.comparison.reason ?? null,
+                      baselineVersion: r.comparison.baselineVersion ?? null,
+                    } satisfies BrowserComparisonDto)
+                  : null,
+              });
+            }
+          }
+        } else {
+          unreadable += 1;
+        }
+        return { url: page.url, results, unreadable };
+      });
+
+      const checks = new Map<string, BrowsersReportDto['checks'][number]>();
+      for (const issue of issues) {
+        const compat = issue.compatibility;
+        if (!compat || compat.browser === 'CHROMIUM') continue;
+        const key = `${compat.browser}|${compat.checkType}`;
+        const entry = checks.get(key) ?? {
+          browser: compat.browser,
+          checkType: compat.checkType,
+          count: 0,
+          byClassification: {},
+        };
+        entry.count += 1;
+        entry.byClassification[issue.classification] =
+          (entry.byClassification[issue.classification] ?? 0) + 1;
+        checks.set(key, entry);
+      }
+
+      return {
+        scan: info,
+        crossBrowser,
+        browsers: [chromium, ...others],
+        pages: pageRows,
+        checks: [...checks.values()].sort(
+          (a, b) => a.browser.localeCompare(b.browser) || b.count - a.count,
+        ),
+      };
+    },
+
     async functional(user: AuthUser, scanId: string): Promise<FunctionalReportDto> {
       const { info } = await scanInfo(user, scanId);
       const [issues, openState, pages] = await Promise.all([

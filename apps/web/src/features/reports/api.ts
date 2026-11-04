@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AccessibilityReportDto,
+  BrowsersReportDto,
   ManualCheckState,
   PerformanceReportDto,
   ResponsiveReportDto,
@@ -40,6 +41,13 @@ export function useSeoReport(scanId: string) {
   return useQuery({
     queryKey: reportKeys.report(scanId, 'seo'),
     queryFn: () => apiData<SeoReportDto>(`/api/reports/${scanId}/seo`),
+  });
+}
+
+export function useBrowsersReport(scanId: string) {
+  return useQuery({
+    queryKey: reportKeys.report(scanId, 'browsers'),
+    queryFn: () => apiData<BrowsersReportDto>(`/api/reports/${scanId}/browsers`),
   });
 }
 

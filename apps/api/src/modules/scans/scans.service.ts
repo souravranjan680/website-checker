@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@whc/db';
 import {
   ACTIVE_SCAN_STATUSES,
+  COMPATIBILITY_CHECK_TYPES,
   SEVERITIES,
   type IssueCategoryName,
   type IssueDto,
@@ -199,6 +200,9 @@ export function createScansService(deps: {
           excludePatterns: website.excludePatterns,
           respectRobotsTxt: website.respectRobotsTxt,
           responsivePageLimit: website.responsivePageLimit,
+          // Phase 9, Milestone 3: lets the Browsers report tell "off" from "not recorded".
+          crossBrowserEnabled: website.crossBrowserEnabled,
+          crossBrowserTargets: website.crossBrowserTargets,
         } satisfies Prisma.InputJsonObject,
       },
     });
@@ -380,6 +384,7 @@ export function createScansService(deps: {
 
     async issues(user: AuthUser, scanId: string, query: IssueQuery): Promise<Paginated<IssueDto>> {
       await loadScan(user, scanId, 'VIEWER', 'view scans');
+      const compatCheck = COMPATIBILITY_CHECK_TYPES.find((t) => t === query.checkType);
       const where: Prisma.IssueWhereInput = {
         scanId,
         ...(query.category ? { category: query.category } : {}),
@@ -387,7 +392,17 @@ export function createScansService(deps: {
         ...(query.viewport ? { viewport: query.viewport } : {}),
         ...(query.pageId ? { scanPageId: query.pageId } : {}),
         ...(query.ruleId ? { ruleId: query.ruleId } : {}),
-        ...(query.checkType ? { uiHealth: { checkType: query.checkType as never } } : {}),
+        ...(query.checkType && UI_CHECK_TYPES.has(query.checkType)
+          ? { uiHealth: { checkType: query.checkType as never } }
+          : {}),
+        ...(compatCheck || query.browser
+          ? {
+              compatibility: {
+                ...(compatCheck ? { checkType: compatCheck } : {}),
+                ...(query.browser ? { browser: query.browser } : {}),
+              },
+            }
+          : {}),
         ...(query.detection ? { accessibility: { detection: query.detection } } : {}),
         ...(query.trackedStatus || query.reviewStatus
           ? {
@@ -409,7 +424,7 @@ export function createScansService(deps: {
             }
           : {}),
       };
-      if (query.checkType && !UI_CHECK_TYPES.has(query.checkType)) {
+      if (query.checkType && !UI_CHECK_TYPES.has(query.checkType) && !compatCheck) {
         throw new AppError(400, 'VALIDATION_ERROR', 'Unknown check type.', [
           { path: 'checkType', message: 'Unknown check type.' },
         ]);

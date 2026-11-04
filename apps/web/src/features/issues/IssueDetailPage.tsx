@@ -35,6 +35,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { useScanPages, useUpdateTrackedIssue } from '@/features/scans/api';
 import { ScreenshotPreview } from '@/features/scans/Screenshot';
+import { CompatibilityCard } from './CompatibilityCard';
 import { ApiError } from '@/lib/api-client';
 import { errorMessage } from '@/lib/form-errors';
 import { formatDateTime } from '@/lib/format';
@@ -279,6 +280,8 @@ function IssueView({ data }: { data: IssueHistoryDto }) {
               {issue.htmlSnippet ? <CodeBlock label="HTML">{issue.htmlSnippet}</CodeBlock> : null}
             </CardContent>
           </Card>
+
+          {issue.compatibility ? <CompatibilityCard compatibility={issue.compatibility} /> : null}
 
           <Card>
             <CardHeader>

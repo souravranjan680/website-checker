@@ -49,7 +49,14 @@ export function useWebsiteStats(id: string) {
 /** Problems tracked across all scans of the website (one row per problem). */
 export function useWebsiteIssues(
   id: string,
-  params: { status?: string; category?: string; severity?: string; q?: string; page?: number },
+  params: {
+    status?: string;
+    category?: string;
+    severity?: string;
+    browser?: string;
+    q?: string;
+    page?: number;
+  },
 ) {
   return useQuery({
     queryKey: websiteKeys.issues(id, params),

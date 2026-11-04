@@ -17,6 +17,7 @@ export const REPORT_TABS = [
   { path: 'seo', label: 'SEO', category: 'SEO' },
   { path: 'security', label: 'Security', category: 'SECURITY' },
   { path: 'interactions', label: 'Interactions', category: 'FUNCTIONAL' },
+  { path: 'browsers', label: 'Browsers', category: 'COMPATIBILITY' },
   { path: 'visual', label: 'Visual' },
 ] as const;
 

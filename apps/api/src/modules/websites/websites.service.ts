@@ -376,6 +376,7 @@ export function createWebsitesService(deps: {
         reviewStatus?: string;
         category?: string;
         severity?: string;
+        browser?: 'FIREFOX' | 'WEBKIT';
       },
     ): Promise<Paginated<TrackedIssueDto>> {
       await loadWebsite(user, websiteId, 'VIEWER', 'view its issues');
@@ -385,6 +386,10 @@ export function createWebsitesService(deps: {
         ...(query.reviewStatus ? { reviewStatus: query.reviewStatus as never } : {}),
         ...(query.category ? { category: query.category as never } : {}),
         ...(query.severity ? { severity: query.severity as never } : {}),
+        // The browser is part of a cross-browser issue's identity: all its issues share it.
+        ...(query.browser
+          ? { issues: { some: { compatibility: { browser: query.browser } } } }
+          : {}),
         ...(query.q
           ? {
               OR: [

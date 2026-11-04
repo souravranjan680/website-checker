@@ -390,4 +390,16 @@ Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website
 | `GET /api/reports/:scanId/export?category=` | Accepts `COMPATIBILITY`. JSON export: each issue also has `compatibility` (`{ browser, browserVersion, baselineVersion, checkType }` or `null`). CSV columns unchanged (the title names the browser; the description has both versions) |
 | Bug-report drafts | For a `COMPATIBILITY` issue the environment is the other browser's version, with a step to compare in the recorded Chromium version |
 
-Scores are unchanged: `COMPATIBILITY` is never scored. A Browsers report endpoint and UI are Checkpoint 3.
+Scores are unchanged: `COMPATIBILITY` is never scored.
+
+## Phase 9, Milestone 3 (Checkpoint 3) changes (implemented)
+
+Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#10-milestone-3-checkpoint-3-api-ui-reports-and-final-verification-complete).
+
+| Method & path | Change |
+|---|---|
+| `GET /api/reports/:scanId/browsers` | **New.** Project members (viewers included); 404 for others. Returns `crossBrowser` (`ON` / `OFF` / `UNKNOWN` from the scan's settings snapshot), `browsers` (Chromium as `BASELINE`; Firefox and WebKit as `COMPARED`, each with `state`, `message`, `version`, times, pages planned/checked, `skippedChecks` with reasons, and their `COMPATIBILITY` issue count), `pages` (each browser's result per size with the comparison, plus `unreadable`: stored results that could not be read) and `checks` (issues per browser and check type, by classification). States: `COMPLETED`, `PARTIAL`, `FAILED`, `UNAVAILABLE`, `TIMED_OUT`, `SKIPPED`, `CANCELLED`, `RUNNING`, and three that are never a run: `DISABLED` (off, or not chosen), `NOT_RUN` (chosen, but the scan ended before the browser stage) and `NOT_RECORDED` (older scans) |
+| `GET /api/scans/:id/issues` | Also accepts `browser=FIREFOX|WEBKIT`, and the six cross-browser check types in `checkType` (UI check types unchanged; anything else is still 400) |
+| `GET /api/websites/:id/issues` | Also accepts `browser=FIREFOX|WEBKIT` |
+| `POST /api/scans` | The scan's settings snapshot (`Scan.config`) also records `crossBrowserEnabled` and `crossBrowserTargets` |
+| `GET /api/reports/:scanId/export` | JSON: a top-level `browsers` block (`chromiumVersion`, the browser runs) **only** for scans that checked other browsers; otherwise the export is unchanged. CSV: unchanged. PDF: a "Browsers" section only for such scans, and the browser and both versions on each cross-browser issue |

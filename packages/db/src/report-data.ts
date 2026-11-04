@@ -24,7 +24,7 @@ export async function loadReportData(
       triggeredBy: { select: { name: true } },
     },
   });
-  const [issues, pages, totalIssues] = await Promise.all([
+  const [issues, pages, totalIssues, browserRuns] = await Promise.all([
     prisma.issue.findMany({
       where: { scanId, ...(options.category ? { category: options.category } : {}) },
       // Severity enum order is CRITICAL → INFO, so ascending = worst first.
@@ -68,6 +68,20 @@ export async function loadReportData(
     prisma.issue.count({
       where: { scanId, ...(options.category ? { category: options.category } : {}) },
     }),
+    // Other browsers (Phase 9, Milestone 3); none unless the scan checked them.
+    prisma.scanBrowserRun.findMany({
+      where: { scanId },
+      orderBy: { browser: 'asc' },
+      select: {
+        browser: true,
+        status: true,
+        version: true,
+        pagesPlanned: true,
+        pagesChecked: true,
+        errorMessage: true,
+        skippedChecks: true,
+      },
+    }),
   ]);
   return {
     scan: {
@@ -102,6 +116,9 @@ export async function loadReportData(
     totalIssues,
     issues,
     pages,
+    /** null when the scan did not check other browsers: exports then stay exactly as before. */
+    browsers:
+      browserRuns.length > 0 ? { chromiumVersion: scan.browserVersion, runs: browserRuns } : null,
   };
 }
 

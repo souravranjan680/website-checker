@@ -147,6 +147,7 @@ export function WebsiteDetailsPage() {
                 ['Responsive test pages', String(data.responsivePageLimit)],
                 ['Lighthouse pages', String(data.lighthousePageLimit)],
                 ['Respect robots.txt', data.respectRobotsTxt ? 'Yes' : 'No'],
+                ['Other browsers', crossBrowserSummary(data)],
                 ['Include paths', patterns(data.includePatterns)],
                 ['Exclude paths', patterns(data.excludePatterns)],
               ]}
@@ -162,6 +163,18 @@ export function WebsiteDetailsPage() {
       <DeleteWebsiteDialog website={data} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>
   );
+}
+
+/** "Off", or e.g. "Firefox, WebKit · first 3 pages · WebKit also at 390×844". */
+export function crossBrowserSummary(website: WebsiteDto): string {
+  // Responses from before Milestone 3 have none of these fields: shown as off.
+  if (!website.crossBrowserEnabled) return 'Off';
+  const targets = website.crossBrowserTargets ?? [];
+  const names = targets.map((t) => (t === 'FIREFOX' ? 'Firefox' : 'WebKit'));
+  if (names.length === 0) return 'On, but no browser chosen';
+  const mobile =
+    website.crossBrowserMobile && targets.includes('WEBKIT') ? ' · WebKit also at 390×844' : '';
+  return `${names.join(', ')} · first ${website.crossBrowserPageLimit} page${website.crossBrowserPageLimit === 1 ? '' : 's'}${mobile}`;
 }
 
 function patterns(list: string[]): ReactNode {
