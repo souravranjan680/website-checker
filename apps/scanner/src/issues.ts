@@ -20,7 +20,14 @@ import { pathOf } from './crawler/urls';
 export { SEVERITY_RANK, wcagFromTags } from '@whc/dom-checks';
 export type { Severity, UiCheckType } from '@whc/dom-checks';
 export type Category =
-  'ACCESSIBILITY' | 'UI_HEALTH' | 'RESPONSIVE' | 'PERFORMANCE' | 'SEO' | 'SECURITY' | 'FUNCTIONAL';
+  | 'ACCESSIBILITY'
+  | 'UI_HEALTH'
+  | 'RESPONSIVE'
+  | 'PERFORMANCE'
+  | 'SEO'
+  | 'SECURITY'
+  | 'FUNCTIONAL'
+  | 'COMPATIBILITY';
 
 /** Interaction and navigation checks of the safe explorer (Phase 9, Milestone 1). */
 export type FunctionalCheck =
@@ -84,6 +91,22 @@ export interface IssueDraft {
     classification?: FindingClassification;
   };
   seo?: { checkType: string; expected: string | null; actual: string | null };
+  /** A difference between Chromium and another engine (Phase 9, Milestone 3). */
+  compatibility?: {
+    browser: 'FIREFOX' | 'WEBKIT';
+    browserVersion: string;
+    baselineVersion: string;
+    checkType:
+      | 'BROWSER_ONLY_ERROR'
+      | 'BROWSER_ONLY_RESOURCE_FAILURE'
+      | 'BROWSER_ONLY_FONT_FAILURE'
+      | 'BROWSER_ONLY_LAYOUT'
+      | 'BROWSER_ONLY_ACCESSIBILITY'
+      | 'UNSUPPORTED_CSS';
+    classification: FindingClassification;
+    matchMethod: string | null;
+    evidence: Record<string, unknown>;
+  };
   functional?: {
     checkType: FunctionalCheck;
     /** Set by the explorer for every functional finding (see classifyDraft). */
@@ -137,6 +160,8 @@ const RESOURCE_CHECKS = new Set<UiCheckType>([
 export function classifyDraft(draft: IssueDraft): FindingClassification {
   // Interaction findings are classified by the explorer, which has the evidence.
   if (draft.functional) return draft.functional.classification;
+  // Cross-browser differences by the comparison (after the confirmation load).
+  if (draft.compatibility) return draft.compatibility.classification;
   // So are the Milestone 2 checks (layout, fonts and icons, consistency).
   if (draft.uiHealth?.classification) return draft.uiHealth.classification;
   if (draft.accessibility) {

@@ -12,7 +12,8 @@ export async function loadReportData(
       | 'PERFORMANCE'
       | 'SEO'
       | 'SECURITY'
-      | 'FUNCTIONAL';
+      | 'FUNCTIONAL'
+      | 'COMPATIBILITY';
     maxIssues?: number;
   } = {},
 ) {
@@ -42,6 +43,9 @@ export async function loadReportData(
             observedValue: true,
             recommendedValue: true,
           },
+        },
+        compatibility: {
+          select: { browser: true, browserVersion: true, baselineVersion: true, checkType: true },
         },
         trackedIssue: {
           select: { status: true, firstSeenAt: true, lastSeenAt: true, occurrenceCount: true },

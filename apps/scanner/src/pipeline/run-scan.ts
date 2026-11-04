@@ -38,7 +38,7 @@ import { createProgressReporter, type ProgressReporter } from '../progress';
 import { captureHighlightedIssue, captureViewport } from '../screenshots';
 import { resolveKey, type FileStorage } from '../storage';
 import { runExploration, type ExploredPages } from '../explore/run-exploration';
-import { runCompatibility, type CompatOptions } from './compat-stage';
+import { runCompatibility, type CompatCoverage, type CompatOptions } from './compat-stage';
 import { scanPage } from './scan-page';
 
 export interface ScanDeps {
@@ -418,12 +418,16 @@ export async function runScan(
     // Off unless the website turns it on (Phase 9, Milestone 3). Firefox and WebKit load
     // the first pages and record what they see (passive checks only). Never changes this
     // scan's outcome, issues or scores; each browser gets its own status.
+    let compatPages: CompatCoverage | undefined;
     if (website.crossBrowserEnabled && scannedPages.length > 0 && !timeLimitReached) {
       try {
-        await runCompatibility({
+        compatPages = await runCompatibility({
           deps,
           scanId,
+          websiteId: website.id,
           website,
+          baseline: browser,
+          storeIssues,
           siteHostname,
           targets: scannedPages,
           checkpoint,
@@ -709,6 +713,7 @@ export async function runScan(
           formsProbedPages: covered.formsProbed,
           formsSyntheticPages: covered.formsSynthetic,
           consistencyPages: consistencyChecked,
+          compatPages,
         },
       );
     }

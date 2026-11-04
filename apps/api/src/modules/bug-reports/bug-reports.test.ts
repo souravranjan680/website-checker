@@ -185,6 +185,36 @@ describe('buildBugReport', () => {
     );
   });
 
+  it('cross-browser issues: reproduced in the other browser, compared with the recorded Chromium', () => {
+    const r = buildBugReport(
+      issue({
+        category: 'COMPATIBILITY',
+        severity: 'MEDIUM',
+        ruleId: 'compat/browser-only-layout',
+        title: 'Layout problem in one browser only: Firefox',
+        description: '“TEXT_OVERLAP” was found in this browser but not in Chromium.',
+        viewport: '1920x1080',
+        selector: '#badge',
+        accessibility: null,
+        compatibility: {
+          issueId: 'i1',
+          browser: 'FIREFOX',
+          browserVersion: 'Firefox 157.0',
+          baselineVersion: 'Chromium 156.0.8078.80',
+          checkType: 'BROWSER_ONLY_LAYOUT',
+          matchMethod: 'path',
+          evidence: {},
+        },
+      }),
+    );
+    expect(r.browser).toBe('Firefox 157.0');
+    expect(r.stepsToReproduce[0]).toContain('in Firefox 157.0 with a 1920×1080 browser window');
+    expect(r.stepsToReproduce).toContain(
+      'Open the same page in Chromium 156.0.8078.80 at the same window size and compare: the scanner did not see this there.',
+    );
+    expect(r.expectedBehavior).toBe('The same result as in Chromium 156.0.8078.80.');
+  });
+
   it('says when the browser version was not recorded (older scans)', () => {
     const r = buildBugReport(issue({ scan: { ...issue({}).scan, browserVersion: null } }));
     expect(r.browser).toBe('Chromium (exact version not recorded for this scan)');

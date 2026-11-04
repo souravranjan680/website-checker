@@ -25,7 +25,8 @@ export interface PdfJobData {
     | 'PERFORMANCE'
     | 'SEO'
     | 'SECURITY'
-    | 'FUNCTIONAL';
+    | 'FUNCTIONAL'
+    | 'COMPATIBILITY';
 }
 
 /** Issues loaded into a PDF, and how many of them get an embedded screenshot. */

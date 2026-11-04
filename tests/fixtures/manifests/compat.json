@@ -1,0 +1,110 @@
+{
+  "fixture": "compat",
+  "startPath": "/compat/",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0,
+    "explorationEnabled": false,
+    "keyboardProbeEnabled": false,
+    "formProbeMode": "OFF",
+    "crossBrowserEnabled": true,
+    "crossBrowserTargets": ["FIREFOX", "WEBKIT"],
+    "crossBrowserMobile": true
+  },
+  "requiresBrowsers": ["firefox", "webkit"],
+  "scoredCategories": ["COMPATIBILITY"],
+  "expected": [
+    {
+      "id": "firefox-unguarded-api-call",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/browser-only-error",
+      "browser": "FIREFOX",
+      "viewports": ["1920x1080"],
+      "text": "scrollIntoViewIfNeeded",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "firefox-third-party-widget-error",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/browser-only-error",
+      "browser": "FIREFOX",
+      "viewports": ["1920x1080"],
+      "text": "Widget failed to initialise",
+      "classification": ["OBSERVATION"]
+    },
+    {
+      "id": "firefox-missing-web-font",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/browser-only-font-failure",
+      "browser": "FIREFOX",
+      "viewports": ["1920x1080"],
+      "text": "Compat Brand",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "firefox-unsupported-css",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/unsupported-css",
+      "browser": "FIREFOX",
+      "viewports": ["1920x1080"],
+      "text": "corner-shape",
+      "classification": ["OBSERVATION"]
+    },
+    {
+      "id": "webkit-missing-polyfill",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/browser-only-resource-failure",
+      "browser": "WEBKIT",
+      "viewports": ["1920x1080", "390x844"],
+      "text": "idle-callback.js",
+      "classification": ["DETECTED"]
+    },
+    {
+      "id": "webkit-clipped-promo-text",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/browser-only-layout",
+      "browser": "WEBKIT",
+      "viewports": ["1920x1080", "390x844"],
+      "text": "TEXT_CLIPPING",
+      "classification": ["POTENTIAL_DEFECT"]
+    },
+    {
+      "id": "webkit-unsupported-css",
+      "category": "COMPATIBILITY",
+      "ruleId": "compat/unsupported-css",
+      "browser": "WEBKIT",
+      "viewports": ["1920x1080", "390x844"],
+      "text": "interpolate-size",
+      "classification": ["OBSERVATION"]
+    }
+  ],
+  "negativeControls": [
+    {
+      "id": "same-error-everywhere",
+      "reason": "thrown in every browser at the same place",
+      "text": "Analytics queue"
+    },
+    {
+      "id": "image-missing-everywhere",
+      "reason": "fails in every browser",
+      "text": "missing-everywhere"
+    },
+    {
+      "id": "proxy-blocked-image",
+      "reason": "refused by the egress proxy: not a browser defect",
+      "text": "10.20.30.40"
+    },
+    {
+      "id": "native-controls",
+      "reason": "native controls render differently in every engine",
+      "selectors": ["#country", "#when", "#size", "#terms", "#note"]
+    },
+    {
+      "id": "scroll-region",
+      "reason": "scrollbars differ between engines",
+      "selectors": [".scroller"]
+    }
+  ],
+  "forbiddenTokens": ["Compat Brand", "idle-callback", "promo-text", "corner-shape"]
+}

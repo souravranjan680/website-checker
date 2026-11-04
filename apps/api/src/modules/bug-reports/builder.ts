@@ -14,6 +14,7 @@ export const BUG_REPORT_ISSUE_INCLUDE = {
   seo: true,
   security: true,
   functional: true,
+  compatibility: true,
   scanPage: {
     select: {
       screenshots: {
@@ -67,6 +68,7 @@ const CATEGORY: Record<string, string> = {
   SEO: 'SEO',
   SECURITY: 'security configuration',
   FUNCTIONAL: 'interaction and navigation',
+  COMPATIBILITY: 'cross-browser compatibility',
 };
 
 /** What each interaction check expects when it passes (the check's own definition). */
@@ -152,9 +154,12 @@ function shortPath(url: string): string {
 export function buildBugReport(issue: BugReportIssue): BugReportDraft {
   const url = issue.pageUrl ?? issue.scan.website.baseUrl;
   const lighthouse = issue.category === 'PERFORMANCE';
-  const browser = lighthouse
-    ? `${issue.scan.browserVersion ?? 'Chromium'} (Lighthouse, simulated mobile device)`
-    : (issue.scan.browserVersion ?? 'Chromium (exact version not recorded for this scan)');
+  // A cross-browser difference happens in the other browser (Phase 9, Milestone 3).
+  const browser = issue.compatibility
+    ? issue.compatibility.browserVersion
+    : lighthouse
+      ? `${issue.scan.browserVersion ?? 'Chromium'} (Lighthouse, simulated mobile device)`
+      : (issue.scan.browserVersion ?? 'Chromium (exact version not recorded for this scan)');
   const size = windowSize(issue.viewport);
   const viewport = size
     ? `${size.width}×${size.height}`
@@ -242,6 +247,16 @@ export function buildBugReport(issue: BugReportIssue): BugReportDraft {
           if (typeof step === 'string') steps.push(`${step}.`);
       }
       expected = FUNCTIONAL_EXPECTED[issue.functional?.checkType ?? ''] ?? '';
+      break;
+    }
+    case 'COMPATIBILITY': {
+      const compat = issue.compatibility;
+      if (compat) {
+        steps.push(
+          `Open the same page in ${compat.baselineVersion} at the same window size and compare: the scanner did not see this there.`,
+        );
+        expected = `The same result as in ${compat.baselineVersion}.`;
+      }
       break;
     }
     case 'PERFORMANCE': {

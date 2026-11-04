@@ -1,0 +1,21 @@
+<!doctype html>
+<!--
+  Timing control (Phase 9, Milestone 3, Checkpoint 2): /compat/timing.js throws only on the
+  third request since the fixture server's counters were reset (the other browser's first
+  load in a one-page scan). The difference is not seen again on the second load, so it must
+  be INCONCLUSIVE, never claimed.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: timing control</title>
+  </head>
+  <body>
+    <main>
+      <h1>Timing control</h1>
+      <p>A script that fails once.</p>
+    </main>
+    <script src="/compat/timing.js"></script>
+  </body>
+</html>

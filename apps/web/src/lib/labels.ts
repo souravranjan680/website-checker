@@ -30,6 +30,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   SEO: 'SEO',
   SECURITY: 'Security',
   FUNCTIONAL: 'Interactions',
+  COMPATIBILITY: 'Browsers',
 };
 
 /** Interaction and navigation checks of the safe explorer (Phase 9). */

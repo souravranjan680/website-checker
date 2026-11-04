@@ -23,4 +23,4 @@ COPY apps/scanner apps/scanner
 COPY tests tests
 RUN npm run generate -w @whc/db && npm run build -w @whc/dom-checks
 WORKDIR /app/apps/scanner
-CMD ["npx", "vitest", "run", "test/cross-browser-security.test.ts", "test/compat-stage.test.ts", "test/browser-launch.test.ts"]
+CMD ["npx", "vitest", "run", "test/cross-browser-security.test.ts", "test/compat-stage.test.ts", "test/compat-compare.test.ts", "test/compat-diff.test.ts", "test/browser-launch.test.ts"]

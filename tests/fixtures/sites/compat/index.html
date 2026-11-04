@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  Cross-browser fixture (Phase 9, Milestone 3, Checkpoint 2). Every seeded difference depends
+  on a feature one engine lacks in the pinned Playwright builds (feature detection, as a
+  site's own code would do it; never the user agent):
+    - Firefox: no Element.prototype.scrollIntoViewIfNeeded, no CSS corner-shape
+    - WebKit:  no window.requestIdleCallback
+    - both:    no CSS interpolate-size
+  The corrected twin (/compat/fixed.html) has data-variant="fixed": the seeded code and CSS
+  do not run there. Everything else on the page renders differently in each engine (native
+  controls, fonts, scrolling) and must NOT be reported.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixture: cross-browser page</title>
+    <style>
+      body { margin: 0 auto; max-width: 40rem; padding: 1rem; font-family: sans-serif; color: #111; background: #fff; }
+      img { max-width: 100%; height: auto; }
+      @font-face { font-family: 'Compat Brand'; src: url('/compat/fonts/brand-missing.woff2') format('woff2'); }
+      .no-scroll-if-needed .brand { font-family: 'Compat Brand', sans-serif; }
+      .no-idle-callback #promo-text { height: 1.4em; overflow: hidden; }
+      body[data-variant='seeded'] .card { corner-shape: squircle; }
+      body[data-variant='seeded'] details { interpolate-size: allow-keywords; }
+      .card { border: 1px solid #555; border-radius: 12px; padding: 0.75rem; margin: 1rem 0; }
+      .scroller { max-height: 6rem; overflow: auto; border: 1px solid #555; padding: 0.5rem; }
+      table { border-collapse: collapse; }
+      td, th { border: 1px solid #555; padding: 0.25rem 0.5rem; }
+    </style>
+  </head>
+  <body data-variant="seeded">
+    <header><nav aria-label="Main"><a href="/compat/">Home</a></nav></header>
+    <main>
+      <h1 id="intro">A page checked in three browsers</h1>
+      <p class="brand">Compat Brand Studio</p>
+      <p id="promo-text">
+        Our spring collection is here: new colours, new sizes and free delivery on every order
+        over fifty euros until the end of the month, in every shop and online.
+      </p>
+
+      <section class="card" aria-labelledby="controls-heading">
+        <h2 id="controls-heading">Native controls (look different in every engine)</h2>
+        <div>
+          <p><label for="country">Country</label> <select id="country"><option>Belgium</option><option>Netherlands</option></select></p>
+          <p><label for="when">Date</label> <input id="when" type="date" /></p>
+          <p><label for="size">Size</label> <input id="size" type="range" min="1" max="5" /></p>
+          <p><input id="terms" type="checkbox" /> <label for="terms">I agree</label></p>
+          <p><label for="note">Note</label> <textarea id="note" rows="2" cols="20"></textarea></p>
+        </div>
+      </section>
+
+      <details>
+        <summary>Delivery details</summary>
+        <p>Parcels arrive within three working days.</p>
+      </details>
+
+      <div class="scroller" role="region" aria-label="Opening hours" tabindex="0">
+        <p>Monday to Friday: 9:00 to 18:00.</p>
+        <p>Saturday: 10:00 to 17:00.</p>
+        <p>Sunday: closed.</p>
+        <p>Public holidays: see the notice in the shop.</p>
+      </div>
+
+      <table>
+        <caption>Sizes</caption>
+        <tr><th scope="col">Size</th><th scope="col">Chest (cm)</th></tr>
+        <tr><td>S</td><td>88</td></tr>
+        <tr><td>M</td><td>96</td></tr>
+      </table>
+
+      <p><img src="/a11y/photo.svg" alt="A blue rectangle" width="120" height="80" /></p>
+      <p><img src="/compat/missing-everywhere.png" alt="Shop front" width="120" height="80" /></p>
+    </main>
+    <footer><p>Fixture footer</p></footer>
+
+    <script>
+      // The same error in every browser: never a cross-browser difference.
+      window.addEventListener('load', function () {
+        throw new Error('Analytics queue is not configured');
+      });
+    </script>
+    <script>
+      (function () {
+        if (document.body.dataset.variant !== 'seeded') return;
+        var root = document.documentElement;
+        var noScrollIfNeeded = !('scrollIntoViewIfNeeded' in Element.prototype);
+        var noIdle = !('requestIdleCallback' in window);
+        if (noScrollIfNeeded) {
+          root.classList.add('no-scroll-if-needed');
+          // Another site's widget, loaded as a fallback: its error is not the site's own.
+          var widget = document.createElement('script');
+          widget.src = 'http://widgets.thirdparty-cdn.test:__PORT__/compat-widget.js';
+          document.body.appendChild(widget);
+          // A private address: refused by the egress proxy, never a browser defect.
+          var internal = new Image();
+          internal.src = 'http://10.20.30.40/compat/internal.png';
+        }
+        if (noIdle) {
+          root.classList.add('no-idle-callback');
+          // A polyfill that was never deployed.
+          var polyfill = document.createElement('script');
+          polyfill.src = '/compat/polyfills/idle-callback.js';
+          document.head.appendChild(polyfill);
+        }
+      })();
+    </script>
+    <script>
+      if (document.body.dataset.variant === 'seeded') {
+        document.getElementById('intro').scrollIntoViewIfNeeded();
+      }
+    </script>
+  </body>
+</html>

@@ -11,6 +11,8 @@
  * fonts and icons, consistency, explorer...). The Milestone 2 detectors are strict: on
  * every fixture, ANY of their findings that is not seeded counts as a false positive,
  * observations included, because their negative controls must stay completely silent.
+ * The cross-browser detector (Milestone 3, Checkpoint 2) is strict in the same way: on its
+ * fixtures every difference is seeded and listed, with the browser it appears in.
  */
 
 export interface ExpectedFinding {
@@ -28,6 +30,8 @@ export interface ExpectedFinding {
   resource?: string;
   /** Substring of the description. */
   text?: string;
+  /** Cross-browser findings: the browser the difference was seen in. */
+  browser?: 'FIREFOX' | 'WEBKIT';
   /** Acceptable classifications (the strength of the evidence). */
   classification: string[];
 }
@@ -54,7 +58,16 @@ export interface FixtureManifest {
     responsivePageLimit: number;
     formProbeMode?: 'OFF' | 'STATIC' | 'BLUR' | 'SYNTHETIC';
     keyboardProbeEnabled?: boolean;
+    explorationEnabled?: boolean;
+    crossBrowserEnabled?: boolean;
+    crossBrowserTargets?: ('FIREFOX' | 'WEBKIT')[];
+    crossBrowserMobile?: boolean;
   };
+  /**
+   * Real browser engines the fixture needs (cross-browser fixtures). Where one is not
+   * installed (outside the Docker test image), the fixture is skipped with a visible marker.
+   */
+  requiresBrowsers?: ('firefox' | 'webkit')[];
   /**
    * Categories whose seeded issues are listed completely: any other DETECTED or
    * POTENTIAL_DEFECT finding in these categories is a false positive. Other categories
@@ -76,6 +89,8 @@ export interface Finding {
   resourceUrl: string | null;
   description: string;
   classification: string;
+  /** Cross-browser findings: the browser the difference was seen in. */
+  browser?: string | null;
 }
 
 export interface CategoryResult {
@@ -96,7 +111,13 @@ const CLAIMS = new Set(['DETECTED', 'POTENTIAL_DEFECT']);
 
 function matches(
   finding: Finding,
-  spec: { selector?: string; selectors?: string[]; resource?: string; text?: string },
+  spec: {
+    selector?: string;
+    selectors?: string[];
+    resource?: string;
+    text?: string;
+    browser?: string;
+  },
 ): boolean {
   if (spec.selector !== undefined && finding.selector !== spec.selector) return false;
   if (spec.selectors !== undefined && !spec.selectors.includes(finding.selector ?? ''))
@@ -104,11 +125,12 @@ function matches(
   if (spec.resource !== undefined && !(finding.resourceUrl ?? '').includes(spec.resource))
     return false;
   if (spec.text !== undefined && !finding.description.includes(spec.text)) return false;
+  if (spec.browser !== undefined && finding.browser !== spec.browser) return false;
   return true;
 }
 
 const label = (f: Finding) =>
-  `${f.ruleId} @ ${f.viewport ?? '-'} ${f.selector ?? f.resourceUrl ?? ''}`.trim();
+  `${f.ruleId}${f.browser ? ` [${f.browser}]` : ''} @ ${f.viewport ?? '-'} ${f.selector ?? f.resourceUrl ?? ''}`.trim();
 
 export function evaluate(manifest: FixtureManifest, findings: Finding[]): CategoryResult[] {
   const categories = [
@@ -188,6 +210,7 @@ export const STRICT_DETECTORS = [
   'consistency',
   'keyboard',
   'forms',
+  'compatibility',
 ] as const;
 
 const DETECTOR_OF_RULE: Record<string, string> = {
@@ -218,6 +241,7 @@ const DETECTOR_OF_RULE: Record<string, string> = {
 export function detectorOf(f: { category: string; ruleId: string }): string {
   if (DETECTOR_OF_RULE[f.ruleId]) return DETECTOR_OF_RULE[f.ruleId]!;
   if (f.ruleId.startsWith('functional/')) return 'explorer';
+  if (f.ruleId.startsWith('compat/')) return 'compatibility';
   return f.category;
 }
 
@@ -234,7 +258,9 @@ export function evaluateDetectors(
   const detectors = [
     ...new Set([
       ...STRICT_DETECTORS,
-      ...manifest.scoredCategories.map((c) => (c === 'FUNCTIONAL' ? 'explorer' : c)),
+      ...manifest.scoredCategories.map((c) =>
+        c === 'FUNCTIONAL' ? 'explorer' : c === 'COMPATIBILITY' ? 'compatibility' : c,
+      ),
       ...manifest.expected.map(expectedDetector),
       ...findings.filter((f) => manifest.scoredCategories.includes(f.category)).map(detectorOf),
     ]),

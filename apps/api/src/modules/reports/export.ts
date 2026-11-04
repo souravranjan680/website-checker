@@ -88,6 +88,8 @@ export function toJson(data: ReportData) {
       detection: issue.accessibility?.detection ?? null,
       checkType: issue.uiHealth?.checkType ?? null,
       resourceUrl: issue.uiHealth?.resourceUrl ?? null,
+      // Which browser differed from Chromium (cross-browser issues only).
+      compatibility: issue.compatibility ?? null,
       tracking: issue.trackedIssue,
       screenshotId: issue.screenshotId,
     })),

@@ -125,6 +125,7 @@ const issue: IssueDto = {
   uiHealth: null,
   seo: null,
   functional: null,
+  compatibility: null,
   security: null,
 };
 

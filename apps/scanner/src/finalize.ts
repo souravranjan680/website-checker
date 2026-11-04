@@ -102,6 +102,8 @@ export async function trackIssues(
     formsProbedPages?: Set<string>;
     /** Pages where the form probe also typed invalid values (SYNTHETIC). */
     formsSyntheticPages?: Set<string>;
+    /** Pages each other browser compared with Chromium at every size (Milestone 3). */
+    compatPages?: Partial<Record<'FIREFOX' | 'WEBKIT', Set<string>>>;
   },
 ): Promise<{
   newCount: number;
@@ -207,6 +209,11 @@ export async function trackIssues(
       if (!last?.pageUrl) return false;
       const page = normalizeUrl(last.pageUrl);
       if (!page) return false;
+      // Cross-browser differences only where that browser compared the page again.
+      if (last.category === 'COMPATIBILITY') {
+        const browser = (last.details as { browser?: 'FIREFOX' | 'WEBKIT' } | null)?.browser;
+        return browser ? (checked.compatPages?.[browser]?.has(page) ?? false) : false;
+      }
       // Interaction findings are only resolved where the explorer ran again.
       const fromExplorer =
         last.category === 'FUNCTIONAL' ||

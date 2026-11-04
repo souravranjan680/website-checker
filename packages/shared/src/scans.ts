@@ -21,6 +21,7 @@ export const ISSUE_CATEGORIES = [
   'SEO',
   'SECURITY',
   'FUNCTIONAL',
+  'COMPATIBILITY',
 ] as const;
 export type IssueCategoryName = (typeof ISSUE_CATEGORIES)[number];
 
@@ -250,6 +251,15 @@ export interface IssueDto {
     controlRole: string | null;
     controlSelector: string | null;
     interaction: Record<string, unknown> | null;
+  } | null;
+  /** Cross-browser details (Phase 9, Milestone 3): which browser differed from Chromium. */
+  compatibility: {
+    browser: 'FIREFOX' | 'WEBKIT' | 'CHROMIUM';
+    browserVersion: string;
+    baselineVersion: string;
+    checkType: string;
+    matchMethod: string | null;
+    evidence: Record<string, unknown>;
   } | null;
   /** Security details. findingLevel: OBSERVATION / WARNING / CONFIRMED (observed, not exploited). */
   security: {

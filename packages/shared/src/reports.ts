@@ -379,6 +379,7 @@ export const EXPORT_CATEGORIES = [
   'SEO',
   'SECURITY',
   'FUNCTIONAL',
+  'COMPATIBILITY',
 ] as const;
 export type ExportCategory = (typeof EXPORT_CATEGORIES)[number];
 
@@ -601,6 +602,7 @@ export const trackedIssueQuerySchema = listQuerySchema.extend({
       'SEO',
       'SECURITY',
       'FUNCTIONAL',
+      'COMPATIBILITY',
     ])
     .optional(),
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']).optional(),

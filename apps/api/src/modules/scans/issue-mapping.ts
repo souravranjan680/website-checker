@@ -8,6 +8,7 @@ export const ISSUE_INCLUDE = {
   seo: true,
   security: true,
   functional: true,
+  compatibility: true,
   trackedIssue: {
     select: {
       id: true,
@@ -86,6 +87,16 @@ export function toIssueDto(row: IssueRow): IssueDto {
           controlRole: row.functional.controlRole,
           controlSelector: row.functional.controlSelector,
           interaction: (row.functional.interaction as Record<string, unknown> | null) ?? null,
+        }
+      : null,
+    compatibility: row.compatibility
+      ? {
+          browser: row.compatibility.browser,
+          browserVersion: row.compatibility.browserVersion,
+          baselineVersion: row.compatibility.baselineVersion,
+          checkType: row.compatibility.checkType,
+          matchMethod: row.compatibility.matchMethod,
+          evidence: (row.compatibility.evidence as Record<string, unknown> | null) ?? {},
         }
       : null,
     security: row.security

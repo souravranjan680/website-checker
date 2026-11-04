@@ -21,6 +21,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   SEO: 'SEO',
   SECURITY: 'Security',
   FUNCTIONAL: 'Interactions and navigation',
+  COMPATIBILITY: 'Cross-browser compatibility',
 };
 
 /** Security finding levels in words (passive checks; nothing was exploited). */

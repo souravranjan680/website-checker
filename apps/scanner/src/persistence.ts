@@ -109,6 +109,19 @@ export async function saveIssues(
           interaction: json(d.functional!.interaction),
         })),
     }),
+    prisma.compatibilityIssue.createMany({
+      data: drafts
+        .filter((d) => d.compatibility)
+        .map((d) => ({
+          issueId: d.id,
+          browser: d.compatibility!.browser,
+          browserVersion: d.compatibility!.browserVersion,
+          baselineVersion: d.compatibility!.baselineVersion,
+          checkType: d.compatibility!.checkType,
+          matchMethod: d.compatibility!.matchMethod,
+          evidence: json(d.compatibility!.evidence)!,
+        })),
+    }),
     prisma.sEOIssue.createMany({
       data: drafts
         .filter((d) => d.seo)

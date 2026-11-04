@@ -6,12 +6,16 @@
  * safe explorer) never wrote anything to the fixture server. These targets apply to these
  * deterministic fixtures only, not to arbitrary websites.
  *
+ * Cross-browser fixtures (Milestone 3) need real Firefox/WebKit: where they are not
+ * installed (outside the Docker test image), those fixtures are skipped with a visible marker.
+ *
  * A Markdown summary is written to .scanner-test-storage/fixture-acceptance.md.
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { PrismaClient } from '@whc/db';
 import type { Redis } from 'ioredis';
+import { firefox, webkit } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runScan } from '../src/pipeline/run-scan';
 import {
@@ -47,6 +51,17 @@ const manifests: FixtureManifest[] = readdirSync(MANIFEST_DIR)
     (name) => JSON.parse(readFileSync(path.join(MANIFEST_DIR, name), 'utf8')) as FixtureManifest,
   );
 
+const ENGINES = { firefox, webkit };
+const installed = (engine: 'firefox' | 'webkit') => {
+  try {
+    return existsSync(ENGINES[engine].executablePath());
+  } catch {
+    return false;
+  }
+};
+const runnable = (m: FixtureManifest) => (m.requiresBrowsers ?? []).every(installed);
+const missingEngines = manifests.filter((m) => !runnable(m));
+
 let prisma: PrismaClient;
 let publisher: Redis;
 let fixtures: FixtureServer;
@@ -73,54 +88,71 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe.each(manifests.map((m) => [m.fixture, m] as const))('fixture %s', (_name, manifest) => {
-  let results: CategoryResult[];
-  let detectors: DetectorResult[];
-  let safety: ReturnType<FixtureServer['safetyHits']>;
-  beforeAll(async () => {
-    fixtures.resetSafetyHits();
-    const ids = await createScanFor(prisma, fixtures.url(manifest.startPath), manifest.scan);
-    const deps = createTestDeps(testScannerConfig(proxy.url), prisma, publisher);
-    await runScan(ids.scanId, deps, { signal: new AbortController().signal });
-    const issues = await prisma.issue.findMany({
-      where: { scanId: ids.scanId },
-      include: { uiHealth: { select: { resourceUrl: true } } },
-    });
-    const findings = issues.map((i) => ({
-      category: i.category,
-      ruleId: i.ruleId,
-      viewport: i.viewport,
-      selector: i.selector,
-      resourceUrl: i.uiHealth?.resourceUrl ?? null,
-      description: i.description,
-      classification: i.classification,
-    }));
-    results = evaluate(manifest, findings);
-    detectors = evaluateDetectors(manifest, findings);
-    detectorReport.push(...detectors.map((result) => ({ fixture: manifest.fixture, result })));
-    report.push(...results.map((result) => ({ fixture: manifest.fixture, result })));
-    safety = fixtures.safetyHits();
-  }, 180_000);
-
-  it('finds every seeded issue with the expected classification (recall 100%)', () => {
-    for (const r of results) expect(r.missed, `${r.category} missed`).toEqual([]);
-  });
-
-  it('per detector: every seeded issue found, and nothing else (Milestone 2 detectors: not even observations)', () => {
-    for (const d of detectors) {
-      expect(d.missed, `${d.detector} missed`).toEqual([]);
-      expect(d.falsePositives, `${d.detector} false positives`).toEqual([]);
-    }
-  });
-
-  it('changes nothing on the server: no writes, no trap requests, no WebSockets', () => {
-    expect(safety).toEqual({ writes: [], traps: [], websockets: [] });
-  });
-
-  it('reports nothing on negative controls and no unlisted problems (precision 100%)', () => {
-    for (const r of results) {
-      expect(r.negativeControlHits, `${r.category} negative controls`).toEqual([]);
-      expect(r.falsePositives, `${r.category} false positives`).toEqual([]);
-    }
-  });
+describe.runIf(missingEngines.length > 0)('fixtures needing other browser engines', () => {
+  it.each(missingEngines.map((m) => [m.fixture, m.requiresBrowsers!.join(', ')] as const))(
+    '%s: skipped, needs %s (covered in the Docker test image)',
+    () => {
+      expect(missingEngines.length).toBeGreaterThan(0);
+    },
+  );
 });
+
+const runnableManifests = manifests.filter(runnable);
+describe.each(runnableManifests.map((m) => [m.fixture, m] as const))(
+  'fixture %s',
+  (_name, manifest) => {
+    let results: CategoryResult[];
+    let detectors: DetectorResult[];
+    let safety: ReturnType<FixtureServer['safetyHits']>;
+    beforeAll(async () => {
+      fixtures.resetSafetyHits();
+      const ids = await createScanFor(prisma, fixtures.url(manifest.startPath), manifest.scan);
+      const deps = createTestDeps(testScannerConfig(proxy.url), prisma, publisher);
+      await runScan(ids.scanId, deps, { signal: new AbortController().signal });
+      const issues = await prisma.issue.findMany({
+        where: { scanId: ids.scanId },
+        include: {
+          uiHealth: { select: { resourceUrl: true } },
+          compatibility: { select: { browser: true } },
+        },
+      });
+      const findings = issues.map((i) => ({
+        category: i.category,
+        ruleId: i.ruleId,
+        viewport: i.viewport,
+        selector: i.selector,
+        resourceUrl: i.uiHealth?.resourceUrl ?? null,
+        description: i.description,
+        classification: i.classification,
+        browser: i.compatibility?.browser ?? null,
+      }));
+      results = evaluate(manifest, findings);
+      detectors = evaluateDetectors(manifest, findings);
+      detectorReport.push(...detectors.map((result) => ({ fixture: manifest.fixture, result })));
+      report.push(...results.map((result) => ({ fixture: manifest.fixture, result })));
+      safety = fixtures.safetyHits();
+    }, 180_000);
+
+    it('finds every seeded issue with the expected classification (recall 100%)', () => {
+      for (const r of results) expect(r.missed, `${r.category} missed`).toEqual([]);
+    });
+
+    it('per detector: every seeded issue found, and nothing else (Milestone 2 detectors: not even observations)', () => {
+      for (const d of detectors) {
+        expect(d.missed, `${d.detector} missed`).toEqual([]);
+        expect(d.falsePositives, `${d.detector} false positives`).toEqual([]);
+      }
+    });
+
+    it('changes nothing on the server: no writes, no trap requests, no WebSockets', () => {
+      expect(safety).toEqual({ writes: [], traps: [], websockets: [] });
+    });
+
+    it('reports nothing on negative controls and no unlisted problems (precision 100%)', () => {
+      for (const r of results) {
+        expect(r.negativeControlHits, `${r.category} negative controls`).toEqual([]);
+        expect(r.falsePositives, `${r.category} false positives`).toEqual([]);
+      }
+    });
+  },
+);

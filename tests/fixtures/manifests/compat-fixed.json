@@ -1,0 +1,45 @@
+{
+  "fixture": "compat-fixed",
+  "startPath": "/compat/fixed.html",
+  "scan": {
+    "maxPages": 1,
+    "maxDepth": 0,
+    "responsivePageLimit": 0,
+    "explorationEnabled": false,
+    "keyboardProbeEnabled": false,
+    "formProbeMode": "OFF",
+    "crossBrowserEnabled": true,
+    "crossBrowserTargets": ["FIREFOX", "WEBKIT"],
+    "crossBrowserMobile": true
+  },
+  "requiresBrowsers": ["firefox", "webkit"],
+  "scoredCategories": ["COMPATIBILITY"],
+  "expected": [],
+  "negativeControls": [
+    {
+      "id": "same-error-everywhere",
+      "reason": "thrown in every browser at the same place",
+      "text": "Analytics queue"
+    },
+    {
+      "id": "image-missing-everywhere",
+      "reason": "fails in every browser",
+      "text": "missing-everywhere"
+    },
+    {
+      "id": "proxy-blocked-image",
+      "reason": "refused by the egress proxy: not a browser defect",
+      "text": "10.20.30.40"
+    },
+    {
+      "id": "native-controls",
+      "reason": "native controls render differently in every engine",
+      "selectors": ["#country", "#when", "#size", "#terms", "#note"]
+    },
+    {
+      "id": "scroll-region",
+      "reason": "scrollbars differ between engines",
+      "selectors": [".scroller"]
+    }
+  ]
+}

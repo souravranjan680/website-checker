@@ -378,3 +378,16 @@ Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website
 | `POST /api/websites` · `PUT /api/websites/:id` | Also accept `crossBrowserEnabled` (default `false`), `crossBrowserTargets` (`FIREFOX` and/or `WEBKIT`, default both; no duplicates), `crossBrowserPageLimit` (1–10, default 3) and `crossBrowserMobile` (WebKit at 390×844, default `false`). Clients that omit them keep the stored values |
 
 The per-browser results (`ScanBrowserRun`, `ScanPage.compatibility`) are stored but not yet exposed by the API (Checkpoint 3).
+
+## Phase 9, Milestone 3 (Checkpoint 2) changes (implemented)
+
+Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#9-milestone-3-checkpoint-2-comparison-and-classification-complete).
+
+| Method & path | Change |
+|---|---|
+| Issue DTOs | New category `COMPATIBILITY` and `compatibility: { browser, browserVersion, baselineVersion, checkType, matchMethod, evidence }` (`null` for every other category). Rule IDs `compat/browser-only-error`, `compat/browser-only-resource-failure`, `compat/browser-only-font-failure`, `compat/browser-only-layout`, `compat/browser-only-accessibility`, `compat/unsupported-css` |
+| `GET /api/scans/:id/issues?category=` · `GET /api/websites/:id/issues?category=` | Accept `COMPATIBILITY` |
+| `GET /api/reports/:scanId/export?category=` | Accepts `COMPATIBILITY`. JSON export: each issue also has `compatibility` (`{ browser, browserVersion, baselineVersion, checkType }` or `null`). CSV columns unchanged (the title names the browser; the description has both versions) |
+| Bug-report drafts | For a `COMPATIBILITY` issue the environment is the other browser's version, with a step to compare in the recorded Chromium version |
+
+Scores are unchanged: `COMPATIBILITY` is never scored. A Browsers report endpoint and UI are Checkpoint 3.

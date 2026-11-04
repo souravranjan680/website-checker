@@ -263,6 +263,7 @@ const issueHistory: IssueHistoryDto = {
     uiHealth: null,
     seo: null,
     functional: null,
+    compatibility: null,
     security: null,
   },
   scan: { id: 's2', createdAt: '2026-11-02T10:00:00.000Z', status: 'COMPLETED' },

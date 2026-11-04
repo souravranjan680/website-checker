@@ -69,6 +69,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   SEO: 'SEO',
   SECURITY: 'Security',
   FUNCTIONAL: 'Interactions',
+  COMPATIBILITY: 'Browsers',
 };
 
 const CATEGORY_CONFIG = {

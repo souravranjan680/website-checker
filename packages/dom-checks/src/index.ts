@@ -78,3 +78,6 @@ export type {
   FormProbeMode,
   ProbeSkipReason,
 } from './probe-rules';
+// Milestone 3, Checkpoint 2: shared shapes and URL normalization of the cross-browser comparison.
+export { normalizeResourceUrl, TRACKING_PARAMETERS } from './compat-rules';
+export type { CssDeclaration, ElementIdentity } from './compat-rules';

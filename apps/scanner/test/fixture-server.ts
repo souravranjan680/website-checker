@@ -66,6 +66,7 @@ export async function startFixtureServer(): Promise<FixtureServer> {
   const safety = { writes: [] as string[], traps: [] as string[], websockets: [] as string[] };
   let toggleFixed = false;
   let visualChanged = false;
+  let timingRequests = 0;
   let port = 0;
 
   const server = http.createServer(async (req, res) => {
@@ -113,6 +114,16 @@ export async function startFixtureServer(): Promise<FixtureServer> {
         return res
           .writeHead(200, { 'content-type': 'image/svg+xml' })
           .end('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>');
+      case '/compat/timing.js':
+        // Throws on the third request only (see tests/fixtures/sites/compat/timing.html).
+        timingRequests += 1;
+        return send(
+          200,
+          timingRequests === 3
+            ? "throw new Error('Timing control: fails once');\n"
+            : "document.documentElement.dataset.timing = 'ok';\n",
+          'text/javascript',
+        );
       case '/resources/not-an-image.png':
         // Downloads fine, but it is an HTML error page served with 200: a real broken image.
         return send(200, '<!doctype html><title>Oops</title><p>Image moved</p>');
@@ -251,6 +262,7 @@ export async function startFixtureServer(): Promise<FixtureServer> {
       safety.writes.length = 0;
       safety.traps.length = 0;
       safety.websockets.length = 0;
+      timingRequests = 0;
     },
     setVisualChanged: (changed) => {
       visualChanged = changed;

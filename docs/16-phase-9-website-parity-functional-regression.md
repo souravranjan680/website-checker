@@ -1015,7 +1015,7 @@ Chromium, Firefox and WebKit, test database only): 25 tests pass, and the 5 skip
 ### 8.7 Limitations
 
 - **No comparison or findings yet.** The stage only records; Checkpoint 2 compares and
-  reports.
+  reports (done: section 9).
 - **WebRTC in WebKit** cannot be switched off by a setting. Its traffic cannot leave the
   internal network, and the WebRTC/STUN attempt in the security test reached nothing.
   UDP itself is not observable from the test.
@@ -1026,11 +1026,180 @@ Chromium, Firefox and WebKit, test database only): 25 tests pass, and the 5 skip
 - **Local development:** Firefox and WebKit are not installed on the development PC, so
   their tests run in the Docker test image (or are skipped locally, with a visible marker).
 
-## 9. Remaining milestones
+## 9. Milestone 3, Checkpoint 2: comparison and classification (complete)
+
+Firefox and WebKit results are now **compared** with Chromium, and differences are saved as
+`COMPATIBILITY` issues. They are never scored. They are tracked, reviewed, exported and
+turned into bug reports like every other issue. The settings form, per-browser progress
+and the Browsers report are Checkpoint 3.
+
+### 9.1 Decisions and refinements applied
+
+| Decision or refinement | How it is applied |
+|---|---|
+| Matching verifies uniqueness at every level; ambiguous → `INCONCLUSIVE` | Each reported element gets an identity in its own page at three levels: a stable attribute (`id`, `data-testid`, `data-test`, `name`, `aria-label`, `for`, or a normalized `href`/`src`), a DOM path (tag and stable class names up to `<body>`, plus the element's text), and the generated selector. **A level is kept only if exactly one element in that page has it.** A finding is matched only if all its levels point to one single Chromium finding. Several candidates, an element with no unique level, or a Chromium finding of the same check that cannot itself be identified → `INCONCLUSIVE`. Nothing is ever picked arbitrarily. |
+| URL normalization keeps meaningful query parameters | Only the fragment and a fixed list of tracking parameters are removed (`utm_*`, `gclid`, `gbraid`, `wbraid`, `dclid`, `fbclid`, `msclkid`, `yclid`, `twclid`, `ttclid`, `igshid`, `li_fat_id`, `mc_cid`, `mc_eid`, `_ga`, `_gl`, `_hsenc`, `_hsmi`, `mkt_tok`). Every other parameter and the order are kept: `?format=avif` and `?format=jxl` are different resources. |
+| CSSOM never proves a property unsupported | Unsupported CSS is reported only when the engine's **own** `CSS.supports(property, value)` answers `false` for a declaration that Chromium applies to a visible element. Declarations are read as written: shorthands stay shorthands, so `font` never becomes a claim about longhands the page never wrote. Custom properties, vendor-prefixed properties and rules inside `@supports` are left out. The result is always an `OBSERVATION` ("a feature gap, not that anything looks wrong"). An error or an unreadable stylesheet means nothing is claimed. |
+| Integrated with the existing issue system | `COMPATIBILITY` is a new `IssueCategory` value with a `CompatibilityIssue` detail row (like `FunctionalIssue`). The rows are saved by the same `saveIssues` transaction. They use the same fingerprints (website, rule, page, size, and browser plus difference key as the target), `TrackedIssue`, review history, exports and bug reports. No existing issue behaviour changed. |
+| Resource failures (Checkpoint 1 refinement) | Never a browser defect: proxy refusals, aborted requests and network failures (no HTTP status), or a URL that also failed in Chromium. Temporary errors (5xx, 408, 429) → `INCONCLUSIVE`. URL, browser, status and reason are recorded. |
+| Never scored, never changes the scan | No score reads `COMPATIBILITY`. A test compares issues, scores and outcome with and without the stage. |
+
+### 9.2 How a page is compared
+
+For each page and size an engine checks (section 8.2):
+
+1. **First load.** Chromium (the scan's own browser, a new context) captures the page; then
+   the other engine does. Chromium also lists the CSS it applies, and the other engine
+   gives its support verdict on that list.
+2. **Compare** (`apps/scanner/src/pipeline/compat-diff.ts`, pure). Only what the other
+   engine has and Chromium does not (table below). Never compared: pixels, sizes, text
+   widths, line breaks, console wording.
+3. **Confirmation.** If anything differs, both browsers load the page again, in the other
+   order. A difference seen again keeps the weaker of its two classifications. One not
+   seen again (or with no second load) becomes `INCONCLUSIVE`, with the reason.
+4. **Saved.** At most 30 differences per page, size and engine. The comparison is recorded
+   in `ScanPage.compatibility[engine][].comparison`: whether it was compared, the
+   Chromium version, the counts of differences and confirmed differences, and how many
+   things only Chromium had. Chromium's own issues already cover those, so they are not
+   reported.
+
+| What | Matched by | Classification |
+|---|---|---|
+| Uncaught exception | Script URL (without query) and line, never the wording (it differs per engine) | The site's own script → `DETECTED`; another site's → `OBSERVATION`; no script location → `INCONCLUSIVE` |
+| Web font that fails | Family, weight and style | `DETECTED` (its file is not reported again as a resource) |
+| Failed request | Normalized URL | Same-site 4xx → `DETECTED`; another site's → `OBSERVATION`; 5xx, 408, 429 → `INCONCLUSIVE`; left out as described in 9.1 |
+| Layout and UI finding | Element identity (9.1) | Objective (horizontal scroll, broken image, broken icon) → `DETECTED`; a judgement (clipping, overlap…) → `POTENTIAL_DEFECT`; missing icon → `OBSERVATION`; ambiguous → `INCONCLUSIVE` |
+| axe violation | Element identity | `OBSERVATION` (often rendering, e.g. measured contrast); ambiguous → `INCONCLUSIVE` |
+| Unsupported CSS | Property and value | `OBSERVATION` (one per page and size) |
+
+**Tracking.** A `COMPATIBILITY` issue is resolved only where **the same browser** compared
+that page again, at every size it was checked. Turning the stage off, or checking only the
+other browser, never resolves it.
+
+### 9.3 Storage, API and UI (all additive)
+
+- **Migration** `20261103153135_phase9_m3_cp2_compatibility`:
+  - `IssueCategory.COMPATIBILITY`;
+  - enum `CompatibilityCheckType`;
+  - table `CompatibilityIssue`: browser, browser version, Chromium version, check type,
+    match method and evidence.
+- **API** ([04-api.md](04-api.md)):
+  - category filters and exports accept `COMPATIBILITY`;
+  - issue DTOs have `compatibility`, and the JSON export has a `compatibility` field;
+  - bug-report drafts use the other browser's version and add a step to compare in the
+    recorded Chromium version.
+- **UI:** only the category label ("Browsers") in issue lists and charts. The settings
+  form and the Browsers report are Checkpoint 3.
+
+### 9.4 Fixtures and results
+
+The fixture `tests/fixtures/sites/compat/` has a corrected twin (`/compat/fixed.html`).
+Every seeded difference depends on **feature detection** of something one pinned engine
+really lacks, as a site's own code would do it; the user agent is never used:
+- Firefox lacks `scrollIntoViewIfNeeded` and `corner-shape`;
+- WebKit lacks `requestIdleCallback`;
+- both lack `interpolate-size`.
+
+| Browser | Seeded difference | Expected |
+|---|---|---|
+| Firefox | Unguarded `scrollIntoViewIfNeeded()` call | `browser-only-error` `DETECTED` |
+| Firefox | Fallback widget from another site that throws | `browser-only-error` `OBSERVATION` |
+| Firefox | Fallback web font whose file is missing | `browser-only-font-failure` `DETECTED` (its 404 not reported twice) |
+| Firefox | `corner-shape`, `interpolate-size` | `unsupported-css` `OBSERVATION` |
+| WebKit (1920×1080 and 390×844) | Polyfill script never deployed (404) | `browser-only-resource-failure` `DETECTED` |
+| WebKit (both sizes) | Promo text clipped by a fallback style | `browser-only-layout` `POTENTIAL_DEFECT` |
+| WebKit (both sizes) | `interpolate-size` | `unsupported-css` `OBSERVATION` |
+
+**Negative controls** (must stay silent):
+- an error thrown in every browser at the same place;
+- an image missing in every browser;
+- a Firefox-only request to a private address, refused by the proxy;
+- native controls (select, date, range, checkbox, textarea), a scroll region, `<details>`
+  and a table, which all render differently in each engine.
+
+**Timing control:** `/compat/timing.html` loads a script that throws on one load only. It
+must come out `INCONCLUSIVE` ("not seen again when both browsers loaded the page a second
+time").
+
+**Results with real Firefox 157 and WebKit 27.2** (Docker test image): `compat` and
+`compat-fixed` pass. The compatibility detector found **10 of 10** seeded differences
+with the expected classification, **0 false positives** (strict: observations count too),
+no negative-control hits, the twin silent, and 0 server writes. These targets apply to
+these deterministic fixtures only.
+
+### 9.5 Verification
+
+- **Local** (Windows, Chromium only):
+  - `npm run check` passes.
+  - New `compat-diff.test.ts` (22 tests): matching levels and ambiguity, URL
+    normalization, every classification rule, the exclusions, confirmation, drafts and
+    fingerprints, and in a real browser: identities, CSS as written, and support verdicts.
+  - New `compat-compare.test.ts` (7 tests), with Chromium standing in for the other
+    engines:
+    - Chromium against Chromium gives **no differences** on `/ui/` and `/compat/`;
+    - with the APIs removed that Firefox and WebKit lack, every seeded difference except
+      the CSS ones is found and confirmed, with issues, scores and outcome otherwise
+      unchanged;
+    - issue tracking resolves only where that browser compared again;
+    - the timing control comes out `INCONCLUSIVE`.
+  - Fixtures needing real engines are skipped locally with a visible marker.
+- **Docker test image** (real Chromium, Firefox and WebKit):
+  - security, stage, comparison and launch suites: 54 passed (5 skips are the "not
+    installed here" markers);
+  - acceptance `compat` and `compat-fixed`: 8 of 8 tests pass.
+- **Full acceptance suite in Docker:** the `magazine` and `studio` fixtures fail there.
+  The **same 9 tests fail identically on the committed Checkpoint 1 code** (`9454d0d`),
+  so they are not a regression. The cause is the test image:
+  - the Geist font package is a web-app dependency the image does not install, so
+    `/vendor-fonts/text.woff2` returns 404;
+  - the magazine overlap depends on Windows system-font metrics.
+
+  Locally, all fixtures pass.
+
+**Real site (W3C BAD demo, 6 pages, Docker stack)**, kept separate from the fixture results:
+
+| Run | Result | Browser runs | Time |
+|---|---|---|---|
+| Cross-browser **off** | Identical to Checkpoint 1 (pages, 23 rule groups, 378 issues, 62/91, links) | none | 64 s |
+| Cross-browser **on** | Same 378 issues and scores, plus **4** `COMPATIBILITY` issues | Firefox 157.0 COMPLETED 3/3 (13 s); WebKit 27.2 COMPLETED 3/3 (16 s) | 103 s |
+
+The 4 findings were reviewed by hand. On `annotated/home.html` at 1920×1080, Firefox and
+WebKit each report overlap (`TEXT_OVERLAP` and `OVERLAPPING_ELEMENTS`) for the annotation
+badges `05` and `06`. Both are confirmed on the second load and classified
+`POTENTIAL_DEFECT`.
+- In Chromium the badges sit one above the other, at y=574 and y=591.
+- In Firefox and WebKit they are at y=595 and y=601/596, so badge **06 is hidden behind
+  05**: `elementFromPoint` hits `05` at every sampled point, and the screenshots show it.
+- This is a real visible difference, correctly not claimed as certain.
+
+A first run also gave a WebKit `OBSERVATION` "does not support `font-language-override`".
+The page never wrote that property: Chromium's CSSOM expands the page's `font`
+shorthand into longhands. CSS is now read as written (section 9.1), and that observation
+is gone.
+
+### 9.6 Limitations
+
+- **Cost:** each compared page is loaded by Chromium too, and both load it again when
+  anything differs. This is about 13–16 s per browser for 3 pages on the W3C demo.
+- **Matching** relies on unique attributes, paths with text, or selectors. On pages where
+  repeated elements have no unique identity, differences are `INCONCLUSIVE` rather than
+  claimed.
+- **What is compared** is the passive capture only (section 8). Interactions,
+  screenshots and pixel differences are never compared. Console wording is not compared.
+- **Unsupported CSS** covers only stylesheets Chromium can read (not cross-origin sheets
+  without CORS) and only what the engine itself reports.
+- **Accessibility differences** are observations only: they often come from rendering,
+  such as measured contrast.
+- **Fixture targets** (100% recall, 0 false positives) apply to the deterministic
+  fixtures only, not to arbitrary websites.
+- **Real engines locally:** Firefox and WebKit are not installed on the development PC.
+  Their fixtures run in the Docker test image. The full acceptance suite in that image
+  has the 2 environment-dependent fixtures described in 9.5.
+
+## 10. Remaining milestones
 
 | M | Scope |
 |---|---|
-| 3 (Checkpoint 2) | Compare Firefox/WebKit with a fresh Chromium capture; confirm on reload; `COMPATIBILITY` findings (unscored) |
 | 3 (Checkpoint 3) | Cross-browser settings form, per-browser progress, Browsers report with side-by-side screenshots |
 | 4 | Mode 2: comparisons, routes, discovery and mapping, run job |
 | 5 | Mode 2: element, visual, style and open-state differences |
@@ -1038,7 +1207,7 @@ Chromium, Firefox and WebKit, test database only): 25 tests pass, and the 5 skip
 | 7 | Comparison tracking, AI for both modes, QA-style reports and exports |
 | 8 | Dashboards, hardening, Docker end to end, final documentation |
 
-## 10. Known limitations (so far)
+## 11. Known limitations (so far)
 
 - Classification of older issues uses the data they stored. Older resource failures were
   not re-checked, so they are `POTENTIAL_DEFECT`, not `DETECTED`.

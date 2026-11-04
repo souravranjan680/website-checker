@@ -79,6 +79,7 @@ enum IssueCategory {
   SEO
   SECURITY
   FUNCTIONAL // interaction and navigation checks (Phase 9)
+  COMPATIBILITY // differences between Chromium and Firefox/WebKit (Phase 9, Milestone 3); never scored
 }
 
 enum Severity {
@@ -146,6 +147,16 @@ enum BrowserEngine {
   CHROMIUM
   FIREFOX
   WEBKIT
+}
+
+/// Kinds of cross-browser difference (Phase 9, Milestone 3, Checkpoint 2).
+enum CompatibilityCheckType {
+  BROWSER_ONLY_ERROR // an uncaught exception in that browser only
+  BROWSER_ONLY_RESOURCE_FAILURE // a resource that fails in that browser only
+  BROWSER_ONLY_FONT_FAILURE // a web font that fails in that browser only
+  BROWSER_ONLY_LAYOUT // a layout or UI check that fires in that browser only
+  BROWSER_ONLY_ACCESSIBILITY // an accessibility rule result in that browser only
+  UNSUPPORTED_CSS // CSS the page uses that the browser reports it does not support
 }
 
 /// What happened to one other browser in one scan. Never changes the scan's own outcome.
@@ -641,6 +652,7 @@ model Issue {
   seo           SEOIssue?
   security      SecurityIssue?
   functional    FunctionalIssue?
+  compatibility CompatibilityIssue?
   bugReports    BugReport[]
   aiInsights    AiInsight[]
 
@@ -702,6 +714,24 @@ model FunctionalIssue {
   issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
 
   @@index([checkType])
+}
+
+/// A difference between Chromium and another engine on the same page (Phase 9, Milestone 3).
+/// An ordinary Issue (lifecycle, tracking, review history, exports) plus this detail row.
+model CompatibilityIssue {
+  issueId         String                 @id
+  browser         BrowserEngine
+  browserVersion  String
+  baselineVersion String // the Chromium version it was compared with
+  checkType       CompatibilityCheckType
+  /// How the element was matched between the browsers: attribute, path, selector (or null).
+  matchMethod     String?
+  /// Both browsers' facts, both loads (first and confirmation), and why it is classified so.
+  evidence        Json
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([browser, checkType])
 }
 
 model SecurityIssue {
