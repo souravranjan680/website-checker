@@ -40,7 +40,12 @@ export function ComparisonsTable({ comparisons }: { comparisons: WebsiteComparis
         {comparisons.map((c) => (
           <TableRow key={c.id}>
             <TableCell className="max-w-56 align-top">
-              <span className="block truncate font-medium">{c.name}</span>
+              <Link
+                to={`/website-comparisons/${c.id}`}
+                className="block truncate font-medium hover:underline"
+              >
+                {c.name}
+              </Link>
               {/* Small screens: the project is shown here instead of in its own column. */}
               <span className="block truncate text-xs text-muted-foreground md:hidden">
                 {c.projectName}

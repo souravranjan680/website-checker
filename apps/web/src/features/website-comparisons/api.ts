@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import type {
   CreateWebsiteComparisonInput,
   Paginated,
+  UpdateWebsiteComparisonInput,
   WebsiteComparisonDto,
   WebsiteComparisonListItemDto,
   WebsiteDto,
@@ -15,6 +16,7 @@ import { api, apiData, toQueryString } from '@/lib/api-client';
 export const websiteComparisonKeys = {
   all: ['website-comparisons'] as const,
   list: (params: object) => ['website-comparisons', 'list', params] as const,
+  detail: (id: string) => ['website-comparisons', 'detail', id] as const,
   pickerWebsites: (params: object) => ['website-comparisons', 'picker-websites', params] as const,
 };
 
@@ -66,6 +68,41 @@ export function useCreateWebsiteComparison() {
     mutationFn: (input: CreateWebsiteComparisonInput) =>
       apiData<WebsiteComparisonDto>('/api/website-comparisons', { method: 'POST', body: input }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: websiteComparisonKeys.all });
+    },
+  });
+}
+
+export function useWebsiteComparison(id: string) {
+  return useQuery({
+    queryKey: websiteComparisonKeys.detail(id),
+    queryFn: () => apiData<WebsiteComparisonDto>(`/api/website-comparisons/${id}`),
+  });
+}
+
+/** PUT (partial): name, settings, or archived (true archives, false restores). */
+export function useUpdateWebsiteComparison(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateWebsiteComparisonInput) =>
+      apiData<WebsiteComparisonDto>(`/api/website-comparisons/${id}`, {
+        method: 'PUT',
+        body: input,
+      }),
+    onSuccess: (updated) => {
+      // Show the API's answer at once, then refresh every list (state and dates changed).
+      queryClient.setQueryData(websiteComparisonKeys.detail(id), updated);
+      void queryClient.invalidateQueries({ queryKey: websiteComparisonKeys.all });
+    },
+  });
+}
+
+export function useDeleteWebsiteComparison(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api(`/api/website-comparisons/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: websiteComparisonKeys.detail(id) });
       void queryClient.invalidateQueries({ queryKey: websiteComparisonKeys.all });
     },
   });

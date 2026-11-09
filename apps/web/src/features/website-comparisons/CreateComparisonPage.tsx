@@ -180,8 +180,7 @@ function CreateComparisonForm({ projects }: { projects: ProjectSummaryDto[] }) {
       });
       const created = await create.mutateAsync(input);
       toast.success(`Comparison "${created.name}" created. It has not been run.`);
-      // The details page arrives in Checkpoint 2.3; until then, back to the list.
-      navigate('/website-comparisons');
+      navigate(`/website-comparisons/${created.id}`);
     } catch (error) {
       // Back to the form with everything the user entered; the API's messages on the fields.
       setReviewing(false);

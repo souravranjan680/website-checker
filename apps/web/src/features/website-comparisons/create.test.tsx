@@ -266,7 +266,7 @@ describe('validation and review', () => {
 });
 
 describe('creating through the API', () => {
-  it('sends exactly the API fields once, then returns to the list with a message', async () => {
+  it('sends exactly the API fields once, then opens the new comparison with a message', async () => {
     const calls = setup({
       status: 201,
       body: { data: { id: 'c9', name: 'Redesign vs live' } },
@@ -277,7 +277,7 @@ describe('creating through the API', () => {
     const create = await screen.findByRole('button', { name: 'Create comparison' });
     fireEvent.click(create);
     fireEvent.click(create); // a double click sends one request
-    await waitFor(() => expect(router.state.location.pathname).toBe('/website-comparisons'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/website-comparisons/c9'));
     const posts = calls.filter((c) => c.method === 'POST');
     expect(posts).toHaveLength(1);
     expect(posts[0]!.body).toEqual({
@@ -358,7 +358,7 @@ describe('creating through the API', () => {
     status = 201; // e.g. the role was granted meanwhile
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create comparison' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/website-comparisons'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/website-comparisons/c9'));
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2);
   });
 });

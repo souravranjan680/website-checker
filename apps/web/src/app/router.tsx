@@ -43,7 +43,9 @@ import { VisualPage } from '@/features/visual/VisualPage';
 import { VisualReport } from '@/features/visual/VisualReport';
 import { WebsitesPage } from '@/features/websites/WebsitesPage';
 import { ComparisonsPage } from '@/features/website-comparisons/ComparisonsPage';
+import { ComparisonDetailsPage } from '@/features/website-comparisons/ComparisonDetailsPage';
 import { CreateComparisonPage } from '@/features/website-comparisons/CreateComparisonPage';
+import { EditComparisonPage } from '@/features/website-comparisons/EditComparisonPage';
 import { AppLayout } from './layouts/AppLayout';
 
 /**
@@ -85,6 +87,8 @@ export const routes: RouteObject[] = [
               { path: 'websites/:websiteId/edit', element: <EditWebsitePage /> },
               { path: 'website-comparisons', element: <ComparisonsPage /> },
               { path: 'website-comparisons/new', element: <CreateComparisonPage /> },
+              { path: 'website-comparisons/:comparisonId', element: <ComparisonDetailsPage /> },
+              { path: 'website-comparisons/:comparisonId/edit', element: <EditComparisonPage /> },
               { path: 'scans', element: <ScanCenterPage /> },
               { path: 'scans/:scanId', element: <ScanPage /> },
               {
