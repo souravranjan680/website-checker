@@ -171,6 +171,31 @@ enum BrowserRunStatus {
   CANCELLED
 }
 
+/// One execution of a website comparison (Phase 9, Milestone 4, Mode 2).
+enum WebsiteComparisonRunStatus {
+  QUEUED
+  RUNNING
+  CANCELLING
+  COMPLETED
+  PARTIAL // finished, but a side, some pages or a stage failed
+  FAILED
+  CANCELLED
+}
+
+/// Which of the two compared websites a page belongs to.
+enum WebsiteComparisonSide {
+  REFERENCE // "Website A", e.g. the live site
+  TARGET // "Website B", e.g. the redesign or staging site
+}
+
+/// A page of one side of a comparison run. Separate from PageStatus (Mode 1).
+enum WebsiteComparisonPageStatus {
+  DISCOVERED // found by discovery; not captured yet
+  CAPTURED // captured for comparison
+  FAILED // could not be loaded
+  SKIPPED // not comparable (not HTML, off-site redirect, excluded...)
+}
+
 /// How far the form probe goes (Phase 9, Milestone 2). Forms are never submitted.
 enum FormProbeMode {
   OFF // no form checks
@@ -330,20 +355,22 @@ model User {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  apiTokens           ApiToken[]
-  memberships         ProjectMember[]
-  createdProjects     Project[]            @relation("ProjectCreatedBy")
-  createdWebsites     Website[]            @relation("WebsiteCreatedBy")
-  triggeredScans      Scan[]               @relation("ScanTriggeredBy")
-  visualBaselines     VisualBaseline[]
-  bugReports          BugReport[]
-  aiInsights          AiInsight[]
-  notifications       Notification[]
-  activityLogs        ActivityLog[]
-  issueReviews        IssueReview[]
-  reviewedIssues      TrackedIssue[]       @relation("TrackedIssueReviewedBy")
+  refreshTokens                  RefreshToken[]
+  passwordResetTokens            PasswordResetToken[]
+  apiTokens                      ApiToken[]
+  memberships                    ProjectMember[]
+  createdProjects                Project[]              @relation("ProjectCreatedBy")
+  createdWebsites                Website[]              @relation("WebsiteCreatedBy")
+  triggeredScans                 Scan[]                 @relation("ScanTriggeredBy")
+  visualBaselines                VisualBaseline[]
+  bugReports                     BugReport[]
+  aiInsights                     AiInsight[]
+  notifications                  Notification[]
+  activityLogs                   ActivityLog[]
+  issueReviews                   IssueReview[]
+  reviewedIssues                 TrackedIssue[]         @relation("TrackedIssueReviewedBy")
+  createdWebsiteComparisons      WebsiteComparison[]    @relation("WebsiteComparisonCreatedBy")
+  triggeredWebsiteComparisonRuns WebsiteComparisonRun[] @relation("WebsiteComparisonRunTriggeredBy")
 }
 
 /// One row per login session. Only a SHA-256 hash of the token is stored.
@@ -406,11 +433,12 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  createdBy    User?           @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  members      ProjectMember[]
-  websites     Website[]
-  bugReports   BugReport[]
-  activityLogs ActivityLog[]
+  createdBy          User?               @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  members            ProjectMember[]
+  websites           Website[]
+  bugReports         BugReport[]
+  activityLogs       ActivityLog[]
+  websiteComparisons WebsiteComparison[]
 
   @@index([createdById])
 }
@@ -465,15 +493,19 @@ model Website {
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt
 
-  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy       User?            @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  schedule        ScanSchedule?
-  scans           Scan[]
-  trackedIssues   TrackedIssue[]
-  visualBaselines VisualBaseline[]
-  bugReports      BugReport[]
+  project                Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy              User?               @relation("WebsiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  schedule               ScanSchedule?
+  scans                  Scan[]
+  trackedIssues          TrackedIssue[]
+  visualBaselines        VisualBaseline[]
+  bugReports             BugReport[]
+  comparisonsAsReference WebsiteComparison[] @relation("WebsiteComparisonReference")
+  comparisonsAsTarget    WebsiteComparison[] @relation("WebsiteComparisonTarget")
 
   @@unique([projectId, baseUrl])
+  /// Target of the website comparisons' composite foreign keys (same project, enforced by PostgreSQL).
+  @@unique([id, projectId])
   @@index([hostname])
 }
 
@@ -1014,4 +1046,99 @@ model ActivityLog {
 
   @@index([projectId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
+}
+
+// ----------------------------------------------------------------------------
+// Website comparison (Phase 9, Milestone 4: Mode 2). Separate from Scan / Issue.
+// ----------------------------------------------------------------------------
+
+/// Two authorized websites of the same project compared with each other. Its state is
+/// derived, not stored: ARCHIVED (archivedAt set), DRAFT (no runs) or IN_USE (has runs).
+model WebsiteComparison {
+  id                 String    @id @default(cuid())
+  projectId          String
+  name               String
+  referenceWebsiteId String
+  targetWebsiteId    String
+  maxPages           Int       @default(10) // per side
+  maxDepth           Int       @default(1)
+  includePatterns    String[]  @default([])
+  excludePatterns    String[]  @default([])
+  viewports          String[]  @default(["1920x1080"]) // SCAN_VIEWPORTS labels
+  createdById        String?
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  project   Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Composite keys: both websites must be in this project. NO ACTION: a referenced website
+  // cannot be deleted or moved, but deleting the whole project still removes everything.
+  reference Website                @relation("WebsiteComparisonReference", fields: [referenceWebsiteId, projectId], references: [id, projectId], onDelete: NoAction, onUpdate: NoAction)
+  target    Website                @relation("WebsiteComparisonTarget", fields: [targetWebsiteId, projectId], references: [id, projectId], onDelete: NoAction, onUpdate: NoAction)
+  createdBy User?                  @relation("WebsiteComparisonCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  runs      WebsiteComparisonRun[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([referenceWebsiteId])
+  @@index([targetWebsiteId])
+}
+
+/// One execution of a comparison (written from Checkpoint 3).
+model WebsiteComparisonRun {
+  id             String                     @id @default(cuid())
+  comparisonId   String
+  triggeredById  String?
+  status         WebsiteComparisonRunStatus @default(QUEUED)
+  /// true while QUEUED/RUNNING/CANCELLING, null once finished: with the unique index
+  /// below, at most one active run per comparison (NULLs never conflict).
+  activeLock     Boolean?                   @default(true)
+  config         Json // snapshot of the settings and both websites when the run started
+  jobId          String?
+  progress       Int                        @default(0)
+  currentStep    String?
+  referencePages Int                        @default(0)
+  targetPages    Int                        @default(0)
+  pagesFailed    Int                        @default(0)
+  errorMessage   String?
+  failureCode    String?
+  browserVersion String?
+  queuedAt       DateTime                   @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  durationMs     Int?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  comparison  WebsiteComparison       @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  triggeredBy User?                   @relation("WebsiteComparisonRunTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  pages       WebsiteComparisonPage[]
+
+  @@unique([comparisonId, activeLock])
+  @@index([comparisonId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([triggeredById])
+}
+
+/// The page inventory of one side of one run (written from Checkpoint 3).
+model WebsiteComparisonPage {
+  id            String                      @id @default(cuid())
+  runId         String
+  side          WebsiteComparisonSide
+  url           String
+  normalizedUrl String
+  path          String // normalized path + query, used to match pages between the sides
+  depth         Int                         @default(0)
+  status        WebsiteComparisonPageStatus @default(DISCOVERED)
+  httpStatus    Int?
+  title         String?
+  loadTimeMs    Int?
+  errorMessage  String?
+  facts         Json?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  run WebsiteComparisonRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, side, normalizedUrl])
+  @@index([runId, side, path])
 }

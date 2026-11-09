@@ -28,6 +28,14 @@ export function forbidden(message: string): AppError {
   return new AppError(403, 'FORBIDDEN', message);
 }
 
+/**
+ * True when Prisma rejected a write because of a foreign key, e.g. deleting a website
+ * that a website comparison still references.
+ */
+export function isForeignKeyViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2003';
+}
+
 /** True when Prisma rejected a write because of a unique constraint. */
 export function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';

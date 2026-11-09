@@ -403,3 +403,19 @@ Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website
 | `GET /api/websites/:id/issues` | Also accepts `browser=FIREFOX|WEBKIT` |
 | `POST /api/scans` | The scan's settings snapshot (`Scan.config`) also records `crossBrowserEnabled` and `crossBrowserTargets` |
 | `GET /api/reports/:scanId/export` | JSON: a top-level `browsers` block (`chromiumVersion`, the browser runs) **only** for scans that checked other browsers; otherwise the export is unchanged. CSV: unchanged. PDF: a "Browsers" section only for such scans, and the browser and both versions on each cross-browser issue |
+
+## Phase 9, Milestone 4 (Checkpoint 1) changes (implemented)
+
+Website comparison (Mode 2), definitions only. Details: [16-phase-9-website-parity-functional-regression.md](16-phase-9-website-parity-functional-regression.md#11-milestone-4-checkpoint-1-website-comparison-data-foundation-complete).
+
+| Method & path | Role | Change |
+|---|---|---|
+| `POST /api/website-comparisons` | EDITOR | **New.** Body: `projectId`, `name` (2–80), `referenceWebsiteId`, `targetWebsiteId`, optional `maxPages` (1–50, default 10), `maxDepth` (0–3, default 1), `includePatterns`/`excludePatterns` (≤ 20 each, start with `/`), `viewports` (scan sizes, e.g. `1920x1080`; default `["1920x1080"]`). Unknown fields → 400. Both websites must be in the project (otherwise 404 `NOT_FOUND`, path `referenceWebsiteId`/`targetWebsiteId`; also when a website is moved or deleted while the comparison is being created) and different (400). Returns 201 with the comparison |
+| `GET /api/website-comparisons?projectId=&q=&archived=false\|true\|all&page=&pageSize=` | VIEWER | **New.** Comparisons of visible projects; `q` searches the comparison's and both websites' names; not archived by default |
+| `GET /api/website-comparisons/:id` | VIEWER | **New.** `{ id, projectId, projectName, name, state, reference, target, settings, latestRun, runCount, archivedAt, createdBy, myRole, createdAt, updatedAt }` |
+| `PUT /api/website-comparisons/:id` | EDITOR | **New.** Partial: `name`, settings, `archived` (`true` archives, `false` restores). The websites cannot be changed. 409 `WEBSITE_COMPARISON_RUN_ACTIVE` while a run is active (runs exist from Checkpoint 3) |
+| `DELETE /api/website-comparisons/:id` | EDITOR | **New.** 204; also deletes its runs. 409 `WEBSITE_COMPARISON_RUN_ACTIVE` while a run is active |
+| `DELETE /api/websites/:id` | EDITOR | **409 `WEBSITE_IN_COMPARISON`** when a website comparison uses the website; `details: { count, comparisons: [{ id, name }] }` (up to 20). Unchanged otherwise |
+| `PUT /api/websites/:id` with another `projectId` | EDITOR | Same 409 when moving a website that a comparison uses. Other edits unchanged |
+
+`state` is derived, never stored: `ARCHIVED` (archived), `DRAFT` (no runs yet), `IN_USE` (has runs). It is not a run status; `latestRun.status` is (`QUEUED`, `RUNNING`, `CANCELLING`, `COMPLETED`, `PARTIAL`, `FAILED`, `CANCELLED`). Non-members get 404, too-low roles 403, signed-out 401, writes without `X-Requested-With: whc-web` 403 (as everywhere). Run endpoints arrive in Checkpoint 3.

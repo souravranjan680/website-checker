@@ -12,7 +12,7 @@ export const websiteUrlSchema = z
   });
 
 /** "/blog/*" style path patterns for include/exclude rules. */
-const pathPatternSchema = z
+export const pathPatternSchema = z
   .string()
   .trim()
   .min(1)

@@ -36,6 +36,8 @@ import { createReportsService } from './modules/reports/reports.service';
 import { createVisualRouter } from './modules/visual/visual.routes';
 import { createVisualService } from './modules/visual/visual.service';
 import { createWebsitesRouter } from './modules/websites/websites.routes';
+import { createWebsiteComparisonsRouter } from './modules/website-comparisons/website-comparisons.routes';
+import { createWebsiteComparisonsService } from './modules/website-comparisons/website-comparisons.service';
 import { createWebsitesService } from './modules/websites/websites.service';
 import type { AiProvider } from './lib/ai-provider';
 import type { ExportJobs } from './lib/export-jobs';
@@ -131,6 +133,7 @@ export function createApp(deps: AppDependencies): Express {
   const auth = createAuthService({ prisma, jwt, mailer: deps.mailer, config, logger });
   const projects = createProjectsService({ prisma });
   const websites = createWebsitesService({ prisma, resolveHostname: deps.resolveHostname });
+  const comparisons = createWebsiteComparisonsService({ prisma });
   const scans = createScansService({
     prisma,
     queue: deps.scanQueue,
@@ -162,6 +165,7 @@ export function createApp(deps: AppDependencies): Express {
   app.use('/api/auth', createAuthRouter({ auth, config, requireAuth, rateLimit }));
   app.use('/api/projects', requireAuth, createProjectsRouter({ projects }));
   app.use('/api/websites', requireAuth, createWebsitesRouter({ websites }));
+  app.use('/api/website-comparisons', requireAuth, createWebsiteComparisonsRouter({ comparisons }));
   app.use('/api/activity', requireAuth, createActivityRouter({ prisma }));
   app.use('/api/admin', requireAuth, requireAdmin, createAdminRouter({ prisma }));
   app.use(

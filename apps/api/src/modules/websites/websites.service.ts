@@ -19,6 +19,10 @@ import { assertPublicHostname, type ResolveHostname } from '../../lib/hostname-g
 import { pageMeta, toSkipTake } from '../../lib/pagination';
 import type { AuthUser } from '../../types/express';
 import { hasRole, requireProjectRole, visibleProjectsWhere } from '../projects/project-access';
+import {
+  asWebsiteInComparison,
+  websiteInComparisonError,
+} from '../website-comparisons/website-comparisons.service';
 
 const SCAN_SUMMARY_SELECT = {
   id: true,
@@ -229,6 +233,9 @@ export function createWebsitesService(deps: {
           'add websites',
         );
         if (!hasRole(target.role, 'EDITOR')) throw notFound('Project');
+        // A website used by website comparisons stays in their project (Milestone 4).
+        const inUse = await websiteInComparisonError(prisma, websiteId);
+        if (inUse) throw inUse;
         data.projectId = input.projectId;
       }
 
@@ -299,13 +306,21 @@ export function createWebsitesService(deps: {
         return toWebsiteDto(updated, user);
       } catch (error) {
         if (isUniqueViolation(error)) throw duplicateWebsite();
-        throw error;
+        throw await asWebsiteInComparison(prisma, websiteId, error);
       }
     },
 
     async remove(user: AuthUser, websiteId: string): Promise<void> {
       const website = await loadWebsite(user, websiteId, 'EDITOR', 'delete websites');
-      await prisma.website.delete({ where: { id: websiteId } });
+      // Website comparisons keep their history, so a website they use cannot be deleted
+      // (Milestone 4). The database refuses it too (NO ACTION foreign keys).
+      const inUse = await websiteInComparisonError(prisma, websiteId);
+      if (inUse) throw inUse;
+      try {
+        await prisma.website.delete({ where: { id: websiteId } });
+      } catch (error) {
+        throw await asWebsiteInComparison(prisma, websiteId, error);
+      }
       await logActivity(prisma, {
         userId: user.id,
         projectId: website.projectId,
