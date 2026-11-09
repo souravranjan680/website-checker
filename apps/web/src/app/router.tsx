@@ -42,6 +42,7 @@ import { WebsiteDetailsPage } from '@/features/websites/WebsiteDetailsPage';
 import { VisualPage } from '@/features/visual/VisualPage';
 import { VisualReport } from '@/features/visual/VisualReport';
 import { WebsitesPage } from '@/features/websites/WebsitesPage';
+import { ComparisonsPage } from '@/features/website-comparisons/ComparisonsPage';
 import { AppLayout } from './layouts/AppLayout';
 
 /**
@@ -81,6 +82,7 @@ export const routes: RouteObject[] = [
               { path: 'websites/new', element: <AddWebsitePage /> },
               { path: 'websites/:websiteId', element: <WebsiteDetailsPage /> },
               { path: 'websites/:websiteId/edit', element: <EditWebsitePage /> },
+              { path: 'website-comparisons', element: <ComparisonsPage /> },
               { path: 'scans', element: <ScanCenterPage /> },
               { path: 'scans/:scanId', element: <ScanPage /> },
               {
