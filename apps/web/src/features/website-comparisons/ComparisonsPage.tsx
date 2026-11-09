@@ -1,5 +1,6 @@
 import { GitCompareArrows, Plus, Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
+import { Link } from 'react-router';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -39,10 +40,11 @@ export function ComparisonsPage() {
   const canCreate = projects.data?.data.some((p) => canEdit(p.myRole)) ?? false;
   const filtering = Boolean(q || projectId);
 
-  // Creating a comparison arrives in the next update (its page does not exist yet).
   const newButton = canCreate ? (
-    <Button disabled title="Available in the next update">
-      <Plus aria-hidden="true" /> New comparison
+    <Button asChild>
+      <Link to="/website-comparisons/new">
+        <Plus aria-hidden="true" /> New comparison
+      </Link>
     </Button>
   ) : null;
 
@@ -126,9 +128,10 @@ export function ComparisonsPage() {
           <EmptyState
             icon={GitCompareArrows}
             title="No website comparisons yet"
+            action={newButton}
             description={
               canCreate
-                ? 'A comparison pairs a reference website with a target website of the same project. Creating comparisons is available in the next update.'
+                ? 'A comparison pairs a reference website with a target website of the same project.'
                 : 'A comparison pairs a reference website with a target website of the same project. An owner or editor of a project can create one.'
             }
           />

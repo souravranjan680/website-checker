@@ -148,7 +148,7 @@ describe('Website comparison list', () => {
     expect(await screen.findByText('No matching comparisons')).toBeInTheDocument();
   });
 
-  it('New comparison only for project editors, and not yet usable (creation is the next update)', async () => {
+  it('New comparison only for project editors; no per-row actions', async () => {
     mockApi({
       ...signedIn,
       'GET /api/projects': page([project('p1', 'Retail', 'VIEWER')]),
@@ -156,12 +156,12 @@ describe('Website comparison list', () => {
     });
     renderApp('/website-comparisons');
     await screen.findByText('Redesign vs live');
-    expect(screen.queryByRole('button', { name: /New comparison/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /New comparison/ })).toBeNull();
     // No per-row actions: the list does not say what the user may do with each one.
     expect(screen.queryByRole('button', { name: /Edit|Archive|Delete/ })).toBeNull();
   });
 
-  it('an editor sees New comparison (disabled until creation is available)', async () => {
+  it('an editor sees New comparison, linking to the create page (also in the empty state)', async () => {
     mockApi({
       ...signedIn,
       'GET /api/projects': page([
@@ -171,11 +171,10 @@ describe('Website comparison list', () => {
       [`GET ${LIST}`]: page([]),
     });
     renderApp('/website-comparisons');
-    const button = await screen.findByRole('button', { name: /New comparison/ });
-    expect(button).toBeDisabled();
-    expect(
-      screen.getByText(/Creating comparisons is available in the next update/),
-    ).toBeInTheDocument();
+    await screen.findByText('No website comparisons yet');
+    const links = screen.getAllByRole('link', { name: /New comparison/ });
+    expect(links).toHaveLength(2); // header and empty state
+    for (const link of links) expect(link).toHaveAttribute('href', '/website-comparisons/new');
   });
 });
 
