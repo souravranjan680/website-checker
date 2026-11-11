@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ErrorState } from '@/components/common/ErrorState';
@@ -8,6 +9,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProjects } from '@/features/projects/api';
 import { useUpdateWebsite, useWebsite } from './api';
+import {
+  WebsiteInComparisonNotice,
+  websiteInComparisonInfo,
+  type WebsiteInComparisonInfo,
+} from '@/features/website-comparisons/WebsiteInComparisonNotice';
 import { WebsiteForm } from './WebsiteForm';
 
 export function EditWebsitePage() {
@@ -16,6 +22,8 @@ export function EditWebsitePage() {
   const website = useWebsite(websiteId);
   const projects = useProjects({ pageSize: 100 });
   const update = useUpdateWebsite(websiteId);
+  // Moving a website that website comparisons use is refused (409): say which ones.
+  const [inUse, setInUse] = useState<WebsiteInComparisonInfo | null>(null);
 
   if (website.isPending || projects.isPending)
     return <Skeleton className="mx-auto h-96 w-full max-w-3xl rounded-xl" />;
@@ -46,6 +54,7 @@ export function EditWebsitePage() {
         back={{ to: `/websites/${websiteId}`, label: website.data.name }}
         title="Edit website"
       />
+      {inUse ? <WebsiteInComparisonNotice info={inUse} action="moved to another project" /> : null}
       <Card>
         <CardContent>
           <WebsiteForm
@@ -54,10 +63,16 @@ export function EditWebsitePage() {
             submitLabel="Save changes"
             onCancel={() => navigate(`/websites/${websiteId}`)}
             onSubmit={async ({ urlChanged, authorizationConfirmed, ...values }) => {
-              await update.mutateAsync({
-                ...values,
-                ...(urlChanged ? { authorizationConfirmed } : {}),
-              });
+              setInUse(null);
+              try {
+                await update.mutateAsync({
+                  ...values,
+                  ...(urlChanged ? { authorizationConfirmed } : {}),
+                });
+              } catch (error) {
+                setInUse(websiteInComparisonInfo(error));
+                throw error; // the form still shows its own message and keeps the input
+              }
               toast.success('Website updated.');
               navigate(`/websites/${websiteId}`);
             }}

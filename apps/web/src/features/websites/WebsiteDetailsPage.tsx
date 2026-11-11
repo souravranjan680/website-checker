@@ -34,6 +34,12 @@ import { ScanStatusBadge } from '@/components/common/StatusBadges';
 import { useStartScan } from '@/features/scans/api';
 import { useDeleteWebsite, useWebsite, useWebsiteScans } from './api';
 import { BaselinesCard } from '@/features/visual/BaselinesCard';
+import { WebsiteComparisonsCard } from '@/features/website-comparisons/ComparisonEntryCards';
+import {
+  WebsiteInComparisonNotice,
+  websiteInComparisonInfo,
+  type WebsiteInComparisonInfo,
+} from '@/features/website-comparisons/WebsiteInComparisonNotice';
 import { VerificationBadge } from './VerificationBadge';
 import { TrackedIssuesCard, WebsiteActivityCard, WebsiteStatsRow } from './WebsiteInsights';
 
@@ -156,6 +162,7 @@ export function WebsiteDetailsPage() {
         </Card>
       </div>
 
+      <WebsiteComparisonsCard websiteId={data.id} projectId={data.projectId} editable={editable} />
       <ScanHistory website={data} />
       <TrackedIssuesCard website={data} />
       <BaselinesCard websiteId={data.id} />
@@ -218,7 +225,9 @@ function ScanHistory({ website }: { website: WebsiteDto }) {
       navigate(`/scans/${scan.id}`);
     } catch (error) {
       if (error instanceof ApiError && error.code === 'SCAN_ALREADY_RUNNING') {
-        const runningId = (error.details as unknown as { scanId?: string } | undefined)?.scanId;
+        // The API sends { scanId } as details; the client keeps non-field details in `info`.
+        const info = error.info as { scanId?: unknown } | null;
+        const runningId = typeof info?.scanId === 'string' ? info.scanId : undefined;
         toast.info('A scan of this website is already running.');
         if (runningId) navigate(`/scans/${runningId}`);
         return;
@@ -327,6 +336,8 @@ function DeleteWebsiteDialog({
 }) {
   const remove = useDeleteWebsite(website.id);
   const navigate = useNavigate();
+  // A website that website comparisons use cannot be deleted (409): say which ones.
+  const [inUse, setInUse] = useState<WebsiteInComparisonInfo | null>(null);
   const onDelete = async () => {
     try {
       await remove.mutateAsync();
@@ -334,11 +345,19 @@ function DeleteWebsiteDialog({
       onOpenChange(false);
       navigate(`/projects/${website.projectId}`, { replace: true });
     } catch (error) {
-      toast.error(errorMessage(error));
+      const info = websiteInComparisonInfo(error);
+      if (info) setInUse(info);
+      else toast.error(errorMessage(error));
     }
   };
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setInUse(null);
+        onOpenChange(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {website.name}?</AlertDialogTitle>
@@ -346,9 +365,14 @@ function DeleteWebsiteDialog({
             The website, its settings and all of its scans will be permanently deleted.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {inUse ? <WebsiteInComparisonNotice info={inUse} action="deleted" /> : null}
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <Button variant="destructive" disabled={remove.isPending} onClick={() => void onDelete()}>
+          <AlertDialogCancel>{inUse ? 'Close' : 'Cancel'}</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            disabled={remove.isPending || inUse !== null}
+            onClick={() => void onDelete()}
+          >
             {remove.isPending ? 'Deleting…' : 'Delete website'}
           </Button>
         </AlertDialogFooter>

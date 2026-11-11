@@ -1,6 +1,6 @@
 import { GitCompareArrows, Plus, Search } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -25,7 +25,9 @@ type Archived = NonNullable<WebsiteComparisonListParams['archived']>;
 export function ComparisonsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [projectId, setProjectId] = useState('');
+  const [params] = useSearchParams();
+  // ?projectId= (from a project's page) starts the list filtered to that project.
+  const [projectId, setProjectId] = useState(() => params.get('projectId') ?? '');
   const [archived, setArchived] = useState<Archived>('false');
   const q = useDeferredValue(search.trim());
   const comparisons = useWebsiteComparisons({

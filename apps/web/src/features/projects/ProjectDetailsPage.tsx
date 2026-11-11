@@ -22,6 +22,7 @@ import { WebsitesTable } from '@/features/websites/WebsitesTable';
 import { useWebsites } from '@/features/websites/api';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/format';
+import { ProjectComparisonsCard } from '@/features/website-comparisons/ComparisonEntryCards';
 import { ActivityCard } from './ActivityCard';
 import { useProject } from './api';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -98,8 +99,9 @@ export function ProjectDetailsPage() {
       <StatsRow stats={data.stats} />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="flex flex-col gap-6 lg:col-span-2">
           <ProjectWebsites projectId={data.id} editable={editable} />
+          <ProjectComparisonsCard projectId={data.id} editable={editable} />
         </div>
         <div className="flex flex-col gap-6">
           <MembersCard projectId={data.id} myRole={data.myRole} />

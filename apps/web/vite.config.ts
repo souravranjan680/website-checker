@@ -22,5 +22,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Every test file renders the whole app; one worker per CPU made waits time out under load.
+    maxWorkers: '50%',
   },
 });

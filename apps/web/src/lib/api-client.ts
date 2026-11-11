@@ -14,13 +14,25 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details: FieldErrorDetail[];
+  /**
+   * Structured details that are not a field list, e.g. { count, comparisons } of a 409
+   * WEBSITE_IN_COMPARISON. Read them defensively: they come from the server as-is.
+   */
+  readonly info: unknown;
 
-  constructor(status: number, code: string, message: string, details: FieldErrorDetail[] = []) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details: FieldErrorDetail[] = [],
+    info: unknown = null,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.info = info;
   }
 }
 
@@ -43,11 +55,14 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 /** Turns a non-2xx response into an ApiError using the API's { error: {...} } body. */
 export async function toApiError(response: Response): Promise<ApiError> {
   const body = (await response.json().catch(() => null)) as Partial<ApiErrorBody> | null;
+  const details: unknown = body?.error?.details;
   return new ApiError(
     response.status,
     body?.error?.code ?? 'HTTP_ERROR',
     body?.error?.message ?? `Request failed with status ${response.status}`,
-    body?.error?.details ?? [],
+    // Only a list of field messages goes to the forms; anything else is kept in `info`.
+    Array.isArray(details) ? (details as FieldErrorDetail[]) : [],
+    Array.isArray(details) ? null : (details ?? null),
   );
 }
 

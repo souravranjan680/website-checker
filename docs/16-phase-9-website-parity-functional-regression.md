@@ -1478,17 +1478,71 @@ the approved protection of websites that comparisons use (11.4).
 - **Server cap:** `maxPages` is capped at 50 by the API. The scanner's own page limit
   will also apply at run time (Checkpoint 3).
 
-## 12. Remaining milestones
+## 12. Milestone 4, Checkpoint 2: Website comparison UI (complete)
+
+The web app for Mode 2 definitions, built on the Checkpoint 1 API with no API or database
+change. Comparisons cannot run yet (Checkpoint 3), and no screen pretends they can.
+
+### 12.1 Pages (`apps/web/src/features/website-comparisons/`)
+
+| Route | What it does |
+|---|---|
+| Navigation | "Website comparison", after Websites, in the sidebar and the mobile menu |
+| `/website-comparisons` | **List** (2.1): name, project, Reference → Target (names, addresses, links), state badge (Draft, In use, Archived), last updated. Search, project filter (also from `?projectId=`), Active / Archived / Both, pagination; only parameters the API accepts are sent. Loading, error with retry, and three empty states. "New comparison" only for project editors; rows have no actions (the list has no per-row role) |
+| `/website-comparisons/new` | **Create** (2.2): editable projects only (`?projectId=` preselects); two website pickers, Reference (A) and Target (B), searching and paging the project's websites on the server (no first-100 limit), the same website never on both sides, Swap; name; settings with the API's limits; a review step stating that creating does not scan or run anything; created through `POST /api/website-comparisons`, then its details page |
+| `/website-comparisons/:id` | **Details** (2.3): project, both websites, state, settings, creator and dates; runs only as the API reports them ("not run" and "running is not available yet" otherwise). Editors: Edit, Archive or Restore (confirmed; archiving deletes nothing), Delete (confirmed; permanent) |
+| `/website-comparisons/:id/edit` | **Edit** (2.3): name and settings only; project and websites shown read-only. Viewers get "Read-only access" |
+
+Errors keep what the user entered. API field errors appear on the matching fields, and
+other errors (403, 409 "run in progress", network) appear as a message. Double clicks never
+send twice. A comparison the user cannot see shows "not found" (the API's 404).
+
+### 12.2 Entry points and refused website changes (2.4)
+
+- **Project page:** a "Website comparisons" card with the project's active comparisons, "New
+  comparison" for editors (project preselected), and "View all", which opens the list
+  filtered to the project.
+- **Website page:** a card listing the comparisons that use the website (reference or
+  target, archived ones included, since they also keep it from being deleted).
+  - The API filters comparisons by project, not by website, so the card checks the
+    project's first 100 and says so when there are more.
+- **Refused delete or move:** deleting a website (dialog) or moving it to another project
+  (edit page) that comparisons use is refused by the API (409 `WEBSITE_IN_COMPARISON`). The
+  page now names those comparisons, with links, and explains that they must be deleted
+  first (archiving is not enough).
+- **Fixed with it:** a 409 like this carries structured details (`{ count, comparisons }`)
+  instead of a field list. The web client now keeps a field list in `details` and anything
+  else in `info`. Before, the website edit form failed on such an error ("error.details is
+  not iterable") instead of showing a message. The one existing reader of object details,
+  "a scan is already running" (409 `SCAN_ALREADY_RUNNING`, `{ scanId }`), now reads `info`
+  and still opens the running scan.
+
+### 12.3 Verification and limitations
+
+- **Tests:** web tests with the mocked API, all passing. The comparison tests cover the
+  list, creating, details and lifecycle, and the entry points and refused changes,
+  including the client fix (shown to fail without it).
+- **Web test setup:** Testing Library waits up to 5 s in the web test setup
+  (`apps/web/src/test/setup.ts`). Test files render the whole app in parallel, and the
+  default 1 s was exceeded under load. For the same reason the web tests run on half the
+  CPUs (`maxWorkers: '50%'` in `apps/web/vite.config.ts`).
+- **Not yet verified live:** the pages have not been run against the stack. That needs
+  the Checkpoint 1 API build, which migrates the development database through the stack's
+  `migrate` service, and that has not been approved.
+- **List filters:** the list's search and filters are page state (only `?projectId=` is
+  read from the address).
+
+## 13. Remaining milestones
 
 | M | Scope |
 |---|---|
-| 4 (Checkpoints 2–4) | Mode 2: comparison UI (CP2); run endpoints, comparison worker, discovery and capture (CP3); integration and verification (CP4) |
+| 4 (Checkpoints 3–4) | Mode 2: run endpoints, comparison worker, discovery and capture (CP3); integration and verification (CP4) |
 | 5 | Mode 2: element, visual, style and open-state differences |
 | 6 | Scenarios (both modes), loading-state checks, QA case import and traceability |
 | 7 | Comparison tracking, AI for both modes, QA-style reports and exports |
 | 8 | Dashboards, hardening, Docker end to end, final documentation |
 
-## 13. Known limitations (so far)
+## 14. Known limitations (so far)
 
 - Classification of older issues uses the data they stored. Older resource failures were
   not re-checked, so they are `POTENTIAL_DEFECT`, not `DETECTED`.

@@ -150,6 +150,34 @@ describe('starting a scan', () => {
     expect(await screen.findByText('Waiting for a scanner…')).toBeInTheDocument();
   });
 
+  it('opens the scan that is already running when the API refuses a second one (409)', async () => {
+    const calls = mockApi({
+      ...signedIn,
+      'GET /api/websites/w1': { status: 200, body: { data: website } },
+      'GET /api/websites/w1/scans': page([]),
+      'POST /api/scans': {
+        status: 409,
+        body: {
+          error: {
+            code: 'SCAN_ALREADY_RUNNING',
+            message: 'A scan of this website is already queued or running.',
+            details: { scanId: 's7' },
+          },
+        },
+      },
+      'GET /api/scans/s7': { status: 200, body: { data: scan({ id: 's7', status: 'QUEUED' }) } },
+      'GET /api/scans/s7/pages': { status: 200, body: { data: [] } },
+    });
+    const { router } = renderApp('/websites/w1');
+    fireEvent.click(await screen.findByRole('button', { name: /Start scan/ }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/scans/s7'));
+    expect(await screen.findByText('A scan of this website is already running.')).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+    // The scan page loads the running scan the API named.
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/scans/s7')).toBe(true));
+  });
+
   it('does not offer Start scan to viewers', async () => {
     mockApi({
       ...signedIn,
